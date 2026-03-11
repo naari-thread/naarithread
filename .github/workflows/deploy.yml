@@ -1,0 +1,15 @@
+name: Deploy to Vercel
+
+on:
+  push:
+    branches: [main]      # fires only when you push to 'main'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest  # GitHub spins up a free Linux VM
+
+    steps:
+      - name: Trigger Vercel Deployment
+        run: curl -X POST "$VERCEL_DEPLOY_HOOK_URL"
+        env:
+          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
