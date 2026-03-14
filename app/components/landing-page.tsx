@@ -23,7 +23,7 @@ type CategorySection = {
   subCategories: SubCategory[];
 };
 
-const heroImage = "/images/pomelli-image-2.png";
+const heroImage = "/images/2.png";
 const storyImage = "/images/pomelli-image-4%20(4).png";
 
 const mostLovedSlides: SkiperImage[] = [
@@ -35,7 +35,7 @@ const mostLovedSlides: SkiperImage[] = [
   {
     title: "Everyday Premium Line",
     alt: "Indian woman in premium daily wear ethnic set",
-    src: "/images/pomelli-image-2%20(2).png",
+    src: "/images/3.png",
   },
   {
     title: "Wedding Guest Edit",
@@ -45,7 +45,7 @@ const mostLovedSlides: SkiperImage[] = [
   {
     title: "Statement Embroidery",
     alt: "Indian woman in embroidered maroon kurta and palazzo",
-    src: "/images/pomelli-image-4%20(2).png",
+    src: "/images/1.png",
   },
   {
     title: "Occasion Saree Edit",
@@ -216,22 +216,9 @@ export function LandingPage() {
             viewport={{ once: true, amount: 0.3 }}
             className="space-y-7"
           >
-            <motion.div variants={revealItem} className="inline-flex items-center gap-3">
-              <Image
-                src="/logo.png"
-                alt="NaariThread logo"
-                width={44}
-                height={44}
-                priority
-                className="h-11 w-11 rounded-full border border-primary/30 object-cover"
-              />
-              <span className="text-xs font-semibold uppercase tracking-[0.34em] text-primary">
-                NaariThread
-              </span>
-            </motion.div>
             <motion.h1
               variants={revealItem}
-              className="max-w-xl text-5xl font-semibold leading-tight text-primary sm:text-6xl lg:text-7xl"
+              className="font-display max-w-xl text-5xl font-semibold leading-tight text-primary sm:text-6xl lg:text-7xl"
             >
               Wear Your Story.
             </motion.h1>
@@ -242,20 +229,13 @@ export function LandingPage() {
               From the heritage of the Saree to the edge of Western wear, discover
               fashion that speaks your language.
             </motion.p>
-            <motion.div variants={revealItem} className="flex flex-wrap items-center gap-4">
+            <motion.div variants={revealItem}>
               <Link
                 href="/products"
                 aria-label="Shop the NaariThread collection"
-                className="cta-thread"
+                className="cta-thread-hero"
               >
-                Shop the Collection
-              </Link>
-              <Link
-                href="#story"
-                aria-label="Read the NaariThread brand story"
-                className="thread-underline text-sm font-semibold uppercase tracking-[0.2em] text-primary"
-              >
-                Why NaariThread
+                <span>Shop the Collection</span>
               </Link>
             </motion.div>
           </motion.div>
@@ -295,7 +275,7 @@ export function LandingPage() {
           >
             <motion.div variants={revealItem}>
               <p className="text-xs uppercase tracking-[0.34em] text-secondary/80">Most Loved</p>
-              <h2 className="mt-3 text-3xl font-semibold sm:text-4xl lg:text-5xl">
+              <h2 className="font-display mt-3 text-3xl font-semibold sm:text-4xl lg:text-5xl">
                 Best Seller Spotlight
               </h2>
             </motion.div>
@@ -315,7 +295,7 @@ export function LandingPage() {
             whileInView={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.3 }}
             transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
-            className="overflow-hidden rounded-3xl border border-secondary/25 bg-secondary/10 p-4 md:p-6"
+            className="py-1"
           >
             <Skiper54
               images={mostLovedSlides}
@@ -354,7 +334,7 @@ export function LandingPage() {
                   >
                     {category.eyebrow}
                   </p>
-                  <h2 className="mt-3 text-4xl font-semibold sm:text-5xl lg:text-6xl">{category.title}</h2>
+                  <h2 className="font-display mt-3 text-4xl font-semibold sm:text-5xl lg:text-6xl">{category.title}</h2>
                   <p className={`mt-4 text-lg ${isMaroon ? "text-secondary/85" : "text-primary/80"}`}>
                     {category.body}
                   </p>
@@ -406,6 +386,11 @@ export function LandingPage() {
                           sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 25vw"
                           className="image-fade-enter object-cover object-top transition duration-700 group-hover:scale-[1.04]"
                         />
+                        <div className="absolute inset-0 flex items-center justify-center bg-primary/55 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                          <span className="rounded-full border border-secondary/80 bg-primary/30 px-6 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-secondary">
+                            Shop {sub.name}
+                          </span>
+                        </div>
                       </div>
                       <div
                         className={`border-t px-5 py-4 ${
@@ -466,7 +451,7 @@ export function LandingPage() {
               The Story
             </motion.p>
             <motion.h2 variants={revealItem} className="text-4xl font-semibold text-primary sm:text-5xl">
-              The Unbroken Thread
+              <span className="font-display">The Unbroken Thread</span>
             </motion.h2>
             <motion.p variants={revealItem} className="text-lg leading-relaxed text-primary/85">
               At NaariThread, we believe a woman&apos;s wardrobe is more than fabric;
@@ -519,34 +504,63 @@ export function LandingPage() {
                 height={40}
                 className="h-10 w-10 rounded-full border border-secondary/30 object-cover"
               />
-              <p className="text-lg font-semibold tracking-wide">NaariThread</p>
+              <p className="font-display text-lg tracking-wide">NaariThread</p>
             </div>
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-secondary/80">
-              Premium women clothing from heritage drapes to modern silhouettes, now
-              online for India and beyond.
+              Premium women clothing from heritage drapes to modern silhouettes, crafted
+              for the modern Indian woman.
             </p>
-            <Link
-              href="https://instagram.com"
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Visit NaariThread Instagram page"
-              className="thread-underline mt-5 inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-secondary"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                className="h-4 w-4"
-                aria-hidden="true"
+
+            <div className="mt-5 space-y-2.5">
+              <a
+                href="tel:+918487849852"
+                aria-label="Call NaariThread on +91 84878 49852"
+                className="inline-flex items-center gap-2.5 text-sm text-secondary/80 transition hover:text-secondary"
               >
-                <rect x="3" y="3" width="18" height="18" rx="5" />
-                <circle cx="12" cy="12" r="4" />
-                <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
-              </svg>
-              Instagram
-            </Link>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0" aria-hidden="true">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.6 19.79 19.79 0 0 1 1.62 5c-.09-1.17.8-2 1.97-2H6.5a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 10.5a16 16 0 0 0 5.59 5.59l1.86-1.84a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                </svg>
+                +91 84878 49852
+              </a>
+              <a
+                href="mailto:naarithread@gmail.com"
+                aria-label="Email NaariThread at naarithread@gmail.com"
+                className="inline-flex items-center gap-2.5 text-sm text-secondary/80 transition hover:text-secondary"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0" aria-hidden="true">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                  <polyline points="22,6 12,13 2,6" />
+                </svg>
+                naarithread@gmail.com
+              </a>
+            </div>
+
+            <div className="mt-5 flex items-center gap-3">
+              <a
+                href="https://instagram.com"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Visit NaariThread on Instagram"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-secondary/25 text-secondary/80 transition hover:border-secondary/60 hover:text-secondary"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                  <rect x="2" y="2" width="20" height="20" rx="5" />
+                  <circle cx="12" cy="12" r="4" />
+                  <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+                </svg>
+              </a>
+              <a
+                href="https://wa.me/918487849852"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Chat with NaariThread on WhatsApp"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-secondary/25 text-secondary/80 transition hover:border-secondary/60 hover:text-secondary"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                </svg>
+              </a>
+            </div>
           </div>
 
           <FooterLinks
@@ -571,19 +585,17 @@ export function LandingPage() {
             title="Company"
             links={[
               { label: "Our Story", href: "/#story" },
-              { label: "Why NaariThread", href: "/#story" },
               { label: "Shop Collection", href: "/products" },
-              { label: "Category Highlights", href: "/#ethnic" },
+              { label: "Ethnic Wear", href: "/#ethnic" },
             ]}
           />
           <FooterLinks
             title="Policies"
             links={[
               { label: "Shipping Policy", href: "/policies/shipping" },
-              { label: "Return Policy", href: "/policies/returns" },
+              { label: "Return & Refund", href: "/policies/returns" },
               { label: "Terms & Conditions", href: "/policies/terms-and-conditions" },
-              { label: "Privacy Policy", href: "/policies/privacy" },
-              { label: "Cancellation & Refund", href: "/policies/cancellation-and-refund" },
+              { label: "Cancellation Policy", href: "/policies/cancellation-and-refund" },
             ]}
           />
         </div>

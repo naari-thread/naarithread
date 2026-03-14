@@ -43,9 +43,9 @@ function visibleSlides(images: SkiperImage[], current: number) {
 }
 
 const slotClasses: Record<number, string> = {
-  [-1]: "left-[4%] w-[42%] md:left-[3%] md:w-[33%] lg:left-[6%] lg:w-[28%]",
-  0: "left-1/2 w-[56%] -translate-x-1/2 md:w-[42%] lg:w-[34%]",
-  1: "right-[4%] w-[42%] md:right-[3%] md:w-[33%] lg:right-[6%] lg:w-[28%]",
+  [-1]: "left-[1%] w-[38%] md:left-[2%] md:w-[30%] lg:left-[3%] lg:w-[26%]",
+  0: "left-1/2 w-[58%] -translate-x-1/2 md:w-[46%] lg:w-[42%]",
+  1: "right-[1%] w-[38%] md:right-[2%] md:w-[30%] lg:right-[3%] lg:w-[26%]",
 };
 
 const scaleBySlot: Record<number, number> = {
@@ -119,7 +119,7 @@ const Skiper54 = ({
 
   return (
     <div className={`w-full ${className}`}>
-      <div className="relative h-[56vh] min-h-[420px] w-full overflow-hidden rounded-3xl border border-secondary/20 bg-primary/20">
+      <div className="relative h-[72vh] min-h-[560px] w-full overflow-hidden">
         <AnimatePresence mode="popLayout" initial={false}>
           {slides.map((slide) => (
             <motion.div
@@ -132,7 +132,7 @@ const Skiper54 = ({
               }}
               exit={{ opacity: 0, scale: 0.9, y: 18 }}
               transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-              className={`absolute top-1/2 h-[88%] -translate-y-1/2 overflow-hidden rounded-2xl border border-secondary/30 ${slotClasses[slide.slot]} ${zClassBySlot[slide.slot]}`}
+              className={`absolute top-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-secondary/30 ${slide.slot === 0 ? "h-[94%]" : "h-[82%]"} ${slotClasses[slide.slot]} ${zClassBySlot[slide.slot]}`}
             >
               <Image
                 src={slide.image.src}
@@ -142,9 +142,9 @@ const Skiper54 = ({
                 sizes="(max-width: 768px) 56vw, (max-width: 1200px) 42vw, 34vw"
                 className="object-cover object-top"
               />
-              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-primary/80 to-transparent p-4 text-center">
-                <p className="text-xs uppercase tracking-[0.2em] text-secondary/80">Most Loved</p>
-                <p className="mt-1 text-sm font-semibold text-secondary md:text-base">{slide.image.title}</p>
+              <div className="absolute inset-x-0 bottom-0 p-4 text-center">
+                <p className="text-xs uppercase tracking-[0.2em] text-secondary/85 [text-shadow:0_2px_10px_rgba(0,0,0,0.6)]">Most Loved</p>
+                <p className="mt-1 text-sm font-semibold text-secondary [text-shadow:0_2px_10px_rgba(0,0,0,0.68)] md:text-base">{slide.image.title}</p>
               </div>
             </motion.div>
           ))}

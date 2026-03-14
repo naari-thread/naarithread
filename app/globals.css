@@ -15,7 +15,7 @@
   --color-primary: var(--brand-primary);
   --color-secondary: var(--brand-secondary);
   --color-paper: var(--brand-paper);
-  --font-sans: var(--font-brand);
+  --font-sans: var(--font-body);
 }
 
 @layer base {
@@ -29,7 +29,7 @@
   }
 
   body {
-    font-family: var(--font-brand), sans-serif;
+    font-family: var(--font-body), "Open Sans", sans-serif;
   }
 }
 
@@ -82,6 +82,15 @@
     @apply scale-x-100;
   }
 
+  .font-display {
+    font-family: var(--font-display), "Times New Roman", serif;
+    letter-spacing: 0.02em;
+  }
+
+  .font-body {
+    font-family: var(--font-body), "Open Sans", sans-serif;
+  }
+
   .cta-thread {
     @apply relative inline-flex items-center justify-center overflow-hidden rounded-full border border-primary bg-primary px-7 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-secondary transition-all duration-300 hover:-translate-y-0.5 hover:bg-secondary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary;
   }
@@ -94,5 +103,33 @@
   .cta-thread:hover::before,
   .cta-thread:focus-visible::before {
     @apply scale-x-100;
+  }
+
+  .cta-thread-hero {
+    @apply relative inline-flex items-center justify-center overflow-hidden rounded-full border border-primary bg-primary px-8 py-3.5 text-sm font-semibold uppercase tracking-[0.2em] text-secondary transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-[0_12px_32px_rgba(120,0,0,0.30)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary;
+  }
+
+  .cta-thread-hero::before {
+    content: "";
+    @apply absolute inset-0 -translate-x-full skew-x-[-20deg] bg-gradient-to-r from-transparent via-secondary/25 to-transparent transition-transform duration-700 ease-out;
+  }
+
+  .cta-thread-hero::after {
+    content: "";
+    @apply absolute bottom-2.5 left-7 right-7 h-px origin-left scale-x-0 bg-secondary/55 transition-transform delay-100 duration-500 ease-out;
+  }
+
+  .cta-thread-hero:hover::before,
+  .cta-thread-hero:focus-visible::before {
+    @apply translate-x-full;
+  }
+
+  .cta-thread-hero:hover::after,
+  .cta-thread-hero:focus-visible::after {
+    @apply scale-x-100;
+  }
+
+  .cta-thread-hero span {
+    @apply relative z-10;
   }
 }

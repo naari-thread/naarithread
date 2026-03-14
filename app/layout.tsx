@@ -1,11 +1,20 @@
 import type { Metadata } from "next";
-import { Playfair_Display } from "next/font/google";
+import localFont from "next/font/local";
+import { Open_Sans } from "next/font/google";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { SmoothScrollProvider } from "@/app/components/smooth-scroll-provider";
+import { Navbar } from "@/app/components/navbar";
+import { AiChat } from "@/app/components/ai-chat";
 import "./globals.css";
 
-const playfairDisplay = Playfair_Display({
-  variable: "--font-brand",
+const samarkanDisplay = localFont({
+  src: "../public/font/samarkan/samarn.ttf",
+  variable: "--font-display",
+  display: "swap",
+});
+
+const openSans = Open_Sans({
+  variable: "--font-body",
   subsets: ["latin"],
   display: "swap",
   weight: ["400", "500", "600", "700"],
@@ -68,8 +77,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${playfairDisplay.variable} bg-paper text-primary antialiased`}>
+      <body className={`${samarkanDisplay.variable} ${openSans.variable} bg-paper text-primary antialiased`}>
+        <Navbar />
         <SmoothScrollProvider>{children}</SmoothScrollProvider>
+        <AiChat />
         <SpeedInsights />
       </body>
     </html>
