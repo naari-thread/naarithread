@@ -4,6 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 
+import { Skiper54, type SkiperImage } from "@/app/components/skiper54";
+
 type SubCategory = {
   name: string;
   slug: string;
@@ -21,30 +23,39 @@ type CategorySection = {
   subCategories: SubCategory[];
 };
 
-const bestSellers = [
+const heroImage = "/images/pomelli-image-2.png";
+const storyImage = "/images/pomelli-image-4%20(4).png";
+
+const mostLovedSlides: SkiperImage[] = [
   {
-    title: "Carmine Saree Drape",
-    subtitle: "Limited festive edit",
-    image:
-      "https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?auto=format&fit=crop&w=1400&q=80",
-    alt: "Woman in a flowing red saree in motion",
-    href: "/products?tag=bestseller",
+    title: "Signature Festive Kurta",
+    alt: "Indian woman in maroon and cream festive kurta set",
+    src: "/images/pomelli-image-1.png",
   },
   {
-    title: "Urban Kurti Line",
-    subtitle: "Daily comfort. Premium finish.",
-    image:
-      "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=1400&q=80",
-    alt: "Woman walking in a modern kurti",
-    href: "/products?tag=trending",
+    title: "Everyday Premium Line",
+    alt: "Indian woman in premium daily wear ethnic set",
+    src: "/images/pomelli-image-2%20(2).png",
   },
   {
-    title: "Evening Fusion Set",
-    subtitle: "Indo-western signature",
-    image:
-      "https://images.unsplash.com/photo-1464863979621-258859e62245?auto=format&fit=crop&w=1400&q=80",
-    alt: "Woman in elegant fusion attire outdoors",
-    href: "/products?tag=editor-pick",
+    title: "Wedding Guest Edit",
+    alt: "Indian woman in elegant maroon occasion wear",
+    src: "/images/pomelli-image-3.png",
+  },
+  {
+    title: "Statement Embroidery",
+    alt: "Indian woman in embroidered maroon kurta and palazzo",
+    src: "/images/pomelli-image-4%20(2).png",
+  },
+  {
+    title: "Occasion Saree Edit",
+    alt: "Woman in premium saree styling for festive event",
+    src: "/images/pomelli-image-3%20(3).png",
+  },
+  {
+    title: "Contemporary Fusion",
+    alt: "Woman in indo-western contemporary silhouette",
+    src: "/images/pomelli-image-1%20(4).png",
   },
 ];
 
@@ -60,23 +71,20 @@ const categories: CategorySection[] = [
       {
         name: "Saree",
         slug: "saree",
-        image:
-          "https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&w=1200&q=80",
-        alt: "Model wearing an embroidered saree",
+        image: "/images/pomelli-image-3%20(3).png",
+        alt: "Model wearing an embroidered maroon saree",
       },
       {
         name: "Lehenga",
         slug: "lehenga",
-        image:
-          "https://images.unsplash.com/photo-1623609163859-ca93c959b98a?auto=format&fit=crop&w=1200&q=80",
-        alt: "Woman in a festive lehenga twirl",
+        image: "/images/pomelli-image-1%20(2).png",
+        alt: "Woman in lehenga-inspired festive silhouette",
       },
       {
         name: "Anarkali",
         slug: "anarkali",
-        image:
-          "https://images.unsplash.com/photo-1583391733956-6c77a3d0d415?auto=format&fit=crop&w=1200&q=80",
-        alt: "Woman wearing an anarkali suit in a courtyard",
+        image: "/images/pomelli-image-4.png",
+        alt: "Woman in flowy anarkali-style festive wear",
       },
     ],
   },
@@ -91,23 +99,20 @@ const categories: CategorySection[] = [
       {
         name: "Dresses",
         slug: "dresses",
-        image:
-          "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=1200&q=80",
-        alt: "Woman in a flowing contemporary dress",
+        image: "/images/pomelli-image-2%20(3).png",
+        alt: "Woman in contemporary maroon dress-inspired look",
       },
       {
         name: "Tops",
         slug: "tops",
-        image:
-          "https://images.unsplash.com/photo-1512436991641-6745cdb1723f?auto=format&fit=crop&w=1200&q=80",
-        alt: "Woman styling a modern top and layered jewelry",
+        image: "/images/pomelli-image-3%20(2).png",
+        alt: "Woman styling a premium embroidered top",
       },
       {
         name: "Skirts",
         slug: "skirts",
-        image:
-          "https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&w=1200&q=80",
-        alt: "Woman walking in a pleated skirt",
+        image: "/images/pomelli-image-1%20(3).png",
+        alt: "Woman in skirt-led modern fusion styling",
       },
     ],
   },
@@ -122,23 +127,20 @@ const categories: CategorySection[] = [
       {
         name: "Jeans",
         slug: "jeans",
-        image:
-          "https://images.unsplash.com/photo-1541099649105-f69ad21f3246?auto=format&fit=crop&w=1200&q=80",
-        alt: "Woman wearing relaxed denim jeans",
+        image: "/images/pomelli-image-4%20(3).png",
+        alt: "Woman styled in clean premium bottom-focused silhouette",
       },
       {
         name: "Trousers",
         slug: "trousers-pants",
-        image:
-          "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=1200&q=80",
-        alt: "Model wearing tailored high-waist trousers",
+        image: "/images/pomelli-image-2%20(4).png",
+        alt: "Model wearing tailored cream trousers",
       },
       {
         name: "Palazzo",
         slug: "palazzo",
-        image:
-          "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=1200&q=80",
-        alt: "Woman in flowing palazzo pants",
+        image: "/images/pomelli-image-3%20(4).png",
+        alt: "Woman in wide-leg palazzo styling",
       },
     ],
   },
@@ -153,23 +155,20 @@ const categories: CategorySection[] = [
       {
         name: "Indo-Western Dresses",
         slug: "indo-western-dresses",
-        image:
-          "https://images.unsplash.com/photo-1521577352947-9bb58764b69a?auto=format&fit=crop&w=1200&q=80",
-        alt: "Woman in indo-western evening attire",
+        image: "/images/pomelli-image-1%20(4).png",
+        alt: "Woman in premium indo-western dress styling",
       },
       {
         name: "Crop Top + Skirt",
         slug: "crop-top-skirt",
-        image:
-          "https://images.unsplash.com/photo-1465146344425-f00d5f5c8f07?auto=format&fit=crop&w=1200&q=80",
-        alt: "Woman in crop top and skirt set",
+        image: "/images/pomelli-image-2.png",
+        alt: "Woman in crop top and skirt-inspired fusion set",
       },
       {
         name: "Kurti + Jeans",
         slug: "kurti-jeans",
-        image:
-          "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=1200&q=80",
-        alt: "Woman wearing kurti styled with denim",
+        image: "/images/pomelli-image-3.png",
+        alt: "Woman styling kurti with contemporary bottom wear",
       },
     ],
   },
@@ -180,18 +179,18 @@ const revealContainer = {
   show: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.12,
-      delayChildren: 0.12,
+      staggerChildren: 0.1,
+      delayChildren: 0.1,
     },
   },
 };
 
 const revealItem = {
-  hidden: { opacity: 0, y: 24 },
+  hidden: { opacity: 0, y: 28 },
   show: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.65, ease: [0.22, 1, 0.36, 1] as const },
+    transition: { duration: 0.7, ease: [0.22, 1, 0.36, 1] as const },
   },
 };
 
@@ -215,16 +214,16 @@ export function LandingPage() {
             initial="hidden"
             whileInView="show"
             viewport={{ once: true, amount: 0.3 }}
-            className="space-y-6"
+            className="space-y-7"
           >
             <motion.div variants={revealItem} className="inline-flex items-center gap-3">
               <Image
                 src="/logo.png"
                 alt="NaariThread logo"
-                width={42}
-                height={42}
+                width={44}
+                height={44}
                 priority
-                className="h-10 w-10 rounded-full border border-primary/30 object-cover"
+                className="h-11 w-11 rounded-full border border-primary/30 object-cover"
               />
               <span className="text-xs font-semibold uppercase tracking-[0.34em] text-primary">
                 NaariThread
@@ -232,13 +231,13 @@ export function LandingPage() {
             </motion.div>
             <motion.h1
               variants={revealItem}
-              className="max-w-xl text-4xl font-semibold leading-tight text-primary sm:text-5xl lg:text-6xl"
+              className="max-w-xl text-5xl font-semibold leading-tight text-primary sm:text-6xl lg:text-7xl"
             >
               Wear Your Story.
             </motion.h1>
             <motion.p
               variants={revealItem}
-              className="max-w-xl text-base leading-relaxed text-primary/85 sm:text-lg"
+              className="max-w-xl text-lg leading-relaxed text-primary/85 sm:text-xl"
             >
               From the heritage of the Saree to the edge of Western wear, discover
               fashion that speaks your language.
@@ -262,24 +261,24 @@ export function LandingPage() {
           </motion.div>
 
           <motion.div
-            initial={prefersReducedMotion ? undefined : { opacity: 0, scale: 0.96 }}
-            whileInView={prefersReducedMotion ? undefined : { opacity: 1, scale: 1 }}
-            viewport={{ once: true, amount: 0.3 }}
+            initial={prefersReducedMotion ? undefined : { opacity: 0, scale: 0.96, y: 24 }}
+            whileInView={prefersReducedMotion ? undefined : { opacity: 1, scale: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.25 }}
             transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-            className="relative isolate mx-auto h-[68vh] w-full max-w-xl overflow-hidden rounded-[2rem] border border-primary/20 bg-primary/5"
+            className="relative isolate mx-auto h-[74vh] w-full max-w-2xl overflow-hidden rounded-[2rem] border border-primary/20 bg-primary/5"
           >
-            <div className="absolute inset-0 bg-gradient-to-tr from-primary/20 via-transparent to-secondary/60" />
+            <div className="absolute inset-0 bg-gradient-to-tr from-primary/20 via-transparent to-secondary/50" />
             <Image
-              src="https://images.unsplash.com/photo-1496747611176-843222e1e57c?auto=format&fit=crop&w=1600&q=80"
-              alt="Woman in motion wearing premium contemporary Indian attire"
+              src={heroImage}
+              alt="NaariThread hero model in premium maroon and cream outfit"
               fill
               priority
-              sizes="(max-width: 1024px) 100vw, 45vw"
-              className="object-cover"
+              sizes="(max-width: 1024px) 100vw, 50vw"
+              className="image-fade-enter object-cover object-top"
             />
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-primary/70 to-transparent p-5 text-secondary">
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-primary/70 to-transparent p-6 text-secondary">
               <p className="text-xs uppercase tracking-[0.24em]">Signature Edit</p>
-              <p className="mt-2 text-xl font-semibold">Grace in Every Thread</p>
+              <p className="mt-2 text-2xl font-semibold">Grace in Every Thread</p>
             </div>
           </motion.div>
         </div>
@@ -296,8 +295,8 @@ export function LandingPage() {
           >
             <motion.div variants={revealItem}>
               <p className="text-xs uppercase tracking-[0.34em] text-secondary/80">Most Loved</p>
-              <h2 className="mt-3 text-3xl font-semibold sm:text-4xl">
-                Best Selling Moving Looks
+              <h2 className="mt-3 text-3xl font-semibold sm:text-4xl lg:text-5xl">
+                Best Seller Spotlight
               </h2>
             </motion.div>
             <motion.div variants={revealItem}>
@@ -310,36 +309,22 @@ export function LandingPage() {
               </Link>
             </motion.div>
           </motion.div>
+
           <motion.div
-            variants={revealContainer}
-            initial="hidden"
-            whileInView="show"
-            viewport={{ once: true, amount: 0.15 }}
-            className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3"
+            initial={prefersReducedMotion ? undefined : { opacity: 0, y: 30 }}
+            whileInView={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.3 }}
+            transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden rounded-3xl border border-secondary/25 bg-secondary/10 p-4 md:p-6"
           >
-            {bestSellers.map((card) => (
-              <motion.article
-                key={card.title}
-                variants={revealItem}
-                className="group overflow-hidden rounded-3xl border border-secondary/30 bg-secondary/10 backdrop-blur"
-              >
-                <Link href={card.href} aria-label={`Open ${card.title} collection`} className="block">
-                  <div className="relative h-72 w-full overflow-hidden">
-                    <Image
-                      src={card.image}
-                      alt={card.alt}
-                      fill
-                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                      className="object-cover transition duration-700 group-hover:scale-105"
-                    />
-                  </div>
-                  <div className="space-y-1 p-5">
-                    <h3 className="text-xl font-semibold">{card.title}</h3>
-                    <p className="text-sm text-secondary/85">{card.subtitle}</p>
-                  </div>
-                </Link>
-              </motion.article>
-            ))}
+            <Skiper54
+              images={mostLovedSlides}
+              className="mx-auto"
+              autoplay={true}
+              loop={true}
+              showNavigation={true}
+              showPagination={true}
+            />
           </motion.div>
         </div>
       </section>
@@ -361,7 +346,7 @@ export function LandingPage() {
                 viewport={{ once: true, amount: 0.15 }}
                 className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between"
               >
-                <motion.div variants={revealItem} className="max-w-2xl">
+                <motion.div variants={revealItem} className="max-w-3xl">
                   <p
                     className={`text-xs uppercase tracking-[0.3em] ${
                       isMaroon ? "text-secondary/80" : "text-primary/70"
@@ -369,10 +354,8 @@ export function LandingPage() {
                   >
                     {category.eyebrow}
                   </p>
-                  <h2 className="mt-3 text-3xl font-semibold sm:text-4xl">
-                    {category.title}
-                  </h2>
-                  <p className={`mt-4 text-base ${isMaroon ? "text-secondary/85" : "text-primary/80"}`}>
+                  <h2 className="mt-3 text-4xl font-semibold sm:text-5xl lg:text-6xl">{category.title}</h2>
+                  <p className={`mt-4 text-lg ${isMaroon ? "text-secondary/85" : "text-primary/80"}`}>
                     {category.body}
                   </p>
                 </motion.div>
@@ -393,14 +376,17 @@ export function LandingPage() {
                 variants={revealContainer}
                 initial="hidden"
                 whileInView="show"
-                viewport={{ once: true, amount: 0.15 }}
-                className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
+                viewport={{ once: true, amount: 0.2 }}
+                className={`grid grid-cols-1 gap-6 md:grid-cols-2 ${
+                  category.subCategories.length === 4 ? "xl:grid-cols-4" : "xl:grid-cols-3"
+                }`}
               >
-                {category.subCategories.map((sub) => (
+                {category.subCategories.map((sub, subIndex) => (
                   <motion.article
                     key={sub.slug}
                     variants={revealItem}
-                    className={`group overflow-hidden rounded-3xl border ${
+                    transition={{ duration: 0.65, delay: subIndex * 0.06, ease: [0.22, 1, 0.36, 1] }}
+                    className={`group overflow-hidden rounded-2xl border ${
                       isMaroon
                         ? "border-secondary/35 bg-secondary/10"
                         : "border-primary/20 bg-primary/5"
@@ -411,24 +397,26 @@ export function LandingPage() {
                       aria-label={`Browse ${sub.name} in ${category.title}`}
                       className="block"
                     >
-                      <div className="relative h-72 w-full overflow-hidden bg-fixed">
+                      <div className="relative h-[68vh] min-h-[460px] w-full overflow-hidden">
                         <Image
                           src={sub.image}
                           alt={sub.alt}
                           fill
                           loading="lazy"
-                          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                          className={`object-cover transition duration-700 group-hover:scale-105 ${
-                            prefersReducedMotion ? "" : "group-hover:-translate-y-1"
-                          }`}
+                          sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 25vw"
+                          className="image-fade-enter object-cover object-top transition duration-700 group-hover:scale-[1.04]"
                         />
                       </div>
-                      <div className="space-y-2 p-5">
-                        <h3 className="text-xl font-semibold">
-                          <span className="thread-underline">{sub.name}</span>
-                        </h3>
-                        <p className={`text-sm ${isMaroon ? "text-secondary/85" : "text-primary/75"}`}>
-                          Move through your day in signature NaariThread confidence.
+                      <div
+                        className={`border-t px-5 py-4 ${
+                          isMaroon
+                            ? "border-secondary/25 bg-primary/50"
+                            : "border-primary/15 bg-secondary/70"
+                        }`}
+                      >
+                        <h3 className="text-xl font-semibold tracking-wide">{sub.name}</h3>
+                        <p className={`mt-1 text-xs uppercase tracking-[0.2em] ${isMaroon ? "text-secondary/75" : "text-primary/70"}`}>
+                          Curated in the {category.title} edit
                         </p>
                       </div>
                     </Link>
@@ -477,16 +465,16 @@ export function LandingPage() {
             >
               The Story
             </motion.p>
-            <motion.h2 variants={revealItem} className="text-3xl font-semibold text-primary sm:text-4xl">
+            <motion.h2 variants={revealItem} className="text-4xl font-semibold text-primary sm:text-5xl">
               The Unbroken Thread
             </motion.h2>
-            <motion.p variants={revealItem} className="text-base leading-relaxed text-primary/85">
+            <motion.p variants={revealItem} className="text-lg leading-relaxed text-primary/85">
               At NaariThread, we believe a woman&apos;s wardrobe is more than fabric;
               it is a story of where she comes from and where she is going. We
               started with a simple vision: create a space where the timeless grace
               of the Saree meets the effortless cool of the Jumpsuit.
             </motion.p>
-            <motion.p variants={revealItem} className="text-base leading-relaxed text-primary/85">
+            <motion.p variants={revealItem} className="text-lg leading-relaxed text-primary/85">
               Our name represents the thread that connects generations, from the
               artisan&apos;s hand to the modern woman&apos;s hustle. Whether you are draped
               in six yards of tradition or stepping out in fusion wear,
@@ -501,19 +489,19 @@ export function LandingPage() {
           </motion.div>
 
           <motion.div
-            initial={prefersReducedMotion ? undefined : { opacity: 0, y: 32 }}
-            whileInView={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
+            initial={prefersReducedMotion ? undefined : { opacity: 0, y: 32, scale: 0.98 }}
+            whileInView={prefersReducedMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
             viewport={{ once: true, amount: 0.3 }}
             transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
-            className="relative h-[58vh] min-h-[420px] overflow-hidden rounded-[2rem] border border-primary/20"
+            className="relative h-[68vh] min-h-[460px] overflow-hidden rounded-[2rem] border border-primary/20"
           >
             <Image
-              src="https://images.unsplash.com/photo-1485462537746-965f33f7f6a7?auto=format&fit=crop&w=1400&q=80"
-              alt="Indian woman in motion symbolizing tradition and modern ambition"
+              src={storyImage}
+              alt="Indian woman symbolizing tradition and modern ambition"
               fill
               loading="lazy"
-              sizes="(max-width: 1024px) 100vw, 45vw"
-              className="object-cover"
+              sizes="(max-width: 1024px) 100vw, 50vw"
+              className="image-fade-enter object-cover object-top"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-primary/60 to-transparent" />
           </motion.div>

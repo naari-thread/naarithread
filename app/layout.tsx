@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { Comfortaa } from "next/font/google";
+import { Playfair_Display } from "next/font/google";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { SmoothScrollProvider } from "@/app/components/smooth-scroll-provider";
 import "./globals.css";
 
-const comfortaa = Comfortaa({
+const playfairDisplay = Playfair_Display({
   variable: "--font-brand",
   subsets: ["latin"],
   display: "swap",
@@ -68,7 +68,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${comfortaa.variable} bg-paper text-primary antialiased`}>
+      <body className={`${playfairDisplay.variable} bg-paper text-primary antialiased`}>
         <SmoothScrollProvider>{children}</SmoothScrollProvider>
         <SpeedInsights />
       </body>
