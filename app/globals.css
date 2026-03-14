@@ -1,26 +1,68 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --brand-primary: #780000;
+  --brand-secondary: #fdf0d5;
+  --brand-paper: #f7f2e8;
+  --brand-foreground: #2b0f0f;
+  --background: var(--brand-paper);
+  --foreground: var(--brand-foreground);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-primary: var(--brand-primary);
+  --color-secondary: var(--brand-secondary);
+  --color-paper: var(--brand-paper);
+  --font-sans: var(--font-brand);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  * {
+    @apply border-primary/10;
+  }
+
+  html,
+  body {
+    @apply bg-paper text-foreground;
+  }
+
+  body {
+    font-family: var(--font-brand), sans-serif;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer utilities {
+  .section-shell {
+    @apply relative flex min-h-screen w-full items-center overflow-hidden;
+  }
+
+  .thread-underline {
+    @apply relative inline-block pb-1;
+  }
+
+  .thread-underline::after {
+    content: "";
+    @apply absolute left-0 bottom-0 h-px w-full origin-left scale-x-0 bg-current transition-transform duration-500 ease-out;
+  }
+
+  .thread-underline:hover::after,
+  .thread-underline:focus-visible::after {
+    @apply scale-x-100;
+  }
+
+  .cta-thread {
+    @apply relative inline-flex items-center justify-center overflow-hidden rounded-full border border-primary bg-primary px-7 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-secondary transition-all duration-300 hover:-translate-y-0.5 hover:bg-secondary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary;
+  }
+
+  .cta-thread::before {
+    content: "";
+    @apply absolute left-4 right-4 bottom-2 h-px origin-left scale-x-0 bg-current transition-transform duration-500 ease-out;
+  }
+
+  .cta-thread:hover::before,
+  .cta-thread:focus-visible::before {
+    @apply scale-x-100;
+  }
 }
