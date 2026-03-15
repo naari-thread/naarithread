@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
+
 type PolicyPageProps = {
   params: Promise<{ slug: string }>;
 };
@@ -241,38 +243,28 @@ export default async function PolicyPage({ params }: PolicyPageProps) {
             aria-label="Return to NaariThread homepage"
             className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-secondary/70 transition hover:text-secondary"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-3.5 w-3.5"
-              aria-hidden="true"
-            >
-              <path d="M19 12H5M12 5l-7 7 7 7" />
-            </svg>
+            <DynamicHugeIcon name="ArrowLeft01Icon" className="h-3.5 w-3.5" iconStrokeWidth={1.9} />
             Back to Home
           </Link>
-          <p className="mt-8 text-xs font-semibold uppercase tracking-[0.34em] text-secondary/70">
-            {policy.eyebrow}
-          </p>
-          <h1 className="font-display mt-4 text-4xl sm:text-5xl lg:text-6xl">
-            {policy.title}
-          </h1>
-          <p className="mt-5 max-w-2xl text-base leading-relaxed text-secondary/80">
-            {policy.intro}
-          </p>
-          <p className="mt-4 text-xs text-secondary/50">Last updated: January 2025</p>
+          <div className="mx-auto mt-8 max-w-4xl text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.34em] text-secondary/70">
+              {policy.eyebrow}
+            </p>
+            <h1 className="font-display mt-4 text-4xl sm:text-5xl lg:text-6xl">
+              {policy.title}
+            </h1>
+            <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-secondary/80">
+              {policy.intro}
+            </p>
+            <p className="mt-4 text-xs text-secondary/50">Last updated: January 2025</p>
+          </div>
         </div>
       </section>
 
       {/* Policy content */}
       <section className="px-5 py-16 md:px-8 lg:px-12">
-        <div className="mx-auto w-full max-w-7xl">
-          <div className="grid grid-cols-1 gap-10 lg:grid-cols-3">
+        <div className="mx-auto w-full max-w-6xl">
+          <div className="grid grid-cols-1 gap-10 lg:grid-cols-4">
             {/* Sticky section nav on large screens */}
             <aside className="hidden lg:block">
               <div className="sticky top-24 rounded-2xl border border-primary/15 bg-secondary p-6">
@@ -296,7 +288,7 @@ export default async function PolicyPage({ params }: PolicyPageProps) {
             </aside>
 
             {/* Section content */}
-            <div className="space-y-12 lg:col-span-2">
+            <div className="space-y-12 lg:col-span-3">
               {policy.sections.map((section) => (
                 <div
                   key={section.heading}
@@ -340,10 +332,7 @@ export default async function PolicyPage({ params }: PolicyPageProps) {
                     aria-label="Email NaariThread support"
                     className="inline-flex items-center gap-2 text-sm font-semibold text-secondary transition hover:text-secondary/80"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
-                      <rect x="2" y="4" width="20" height="16" rx="2" />
-                      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-                    </svg>
+                    <DynamicHugeIcon name="Mail01Icon" className="h-4 w-4" iconStrokeWidth={1.8} />
                     naarithread@gmail.com
                   </a>
                   <a
@@ -351,9 +340,7 @@ export default async function PolicyPage({ params }: PolicyPageProps) {
                     aria-label="Call NaariThread support"
                     className="inline-flex items-center gap-2 text-sm font-semibold text-secondary transition hover:text-secondary/80"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
-                      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.6 19.79 19.79 0 0 1 1.62 5c-.09-1.17.8-2 1.97-2H6.5a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 10.5a16 16 0 0 0 5.59 5.59l1.86-1.84a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-                    </svg>
+                    <DynamicHugeIcon name="CallIcon" className="h-4 w-4" iconStrokeWidth={1.8} />
                     +91 84878 49852
                   </a>
                 </div>

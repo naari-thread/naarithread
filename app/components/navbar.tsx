@@ -21,11 +21,11 @@ export function Navbar() {
       transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] as [number, number, number, number], delay: 0.1 }}
       className={`fixed inset-x-0 top-0 z-50 transition-all duration-500 ${
         scrolled
-          ? "border-b border-primary/10 bg-paper/92 shadow-[0_2px_24px_rgba(120,0,0,0.07)] backdrop-blur-md"
+          ? "border-b border-primary/10 bg-secondary/50 shadow-[0_2px_24px_rgba(120,0,0,0.07)] backdrop-blur-md"
           : ""
       }`}
     >
-      <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-2 md:px-8 lg:px-12">
+      <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-2.5 sm:px-5 sm:py-3 md:px-8 lg:px-12">
         <Link
           href="/"
           aria-label="NaariThread — return to homepage"
@@ -37,9 +37,9 @@ export function Navbar() {
             width={80}
             height={80}
             priority
-            className="h-12 w-12 rounded-full border border-primary/20 object-cover transition duration-300 group-hover:border-primary/50 group-hover:shadow-[0_0_0_3px_rgba(120,0,0,0.09)]"
+            className="h-10 w-10 rounded-full border border-primary/20 object-cover transition duration-300 group-hover:border-primary/50 group-hover:shadow-[0_0_0_3px_rgba(120,0,0,0.09)] sm:h-12 sm:w-12"
           />
-          <span className="font-display text-2xl tracking-wide text-primary">
+          <span className="font-display max-w-[9.5rem] truncate text-xl tracking-wide text-primary sm:max-w-none sm:text-2xl">
             NaariThread
           </span>
         </Link>
@@ -47,7 +47,7 @@ export function Navbar() {
         <Link
           href="/products"
           aria-label="Shop the NaariThread collection"
-          className="cta-thread py-2 text-xs"
+          className="cta-thread px-4 py-2 text-[10px] tracking-[0.16em] sm:px-6 sm:text-xs sm:tracking-[0.2em]"
         >
           Shop Now
         </Link>

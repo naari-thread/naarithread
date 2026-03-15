@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 
+import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
 import { Skiper54, type SkiperImage } from "@/app/components/skiper54";
 
 type SubCategory = {
@@ -219,23 +220,23 @@ export function LandingPage() {
   return (
     <main className="w-full">
       <section className="section-shell bg-secondary">
-        <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-8 px-5 py-20 md:px-8 lg:grid-cols-2 lg:items-center lg:gap-14 lg:px-12">
+        <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-8 px-4 py-14 sm:px-5 sm:py-16 md:px-8 lg:grid-cols-2 lg:items-center lg:gap-14 lg:px-12">
           <motion.div
             variants={revealContainer}
             initial="hidden"
             whileInView="show"
             viewport={{ once: true, amount: 0.3 }}
-            className="space-y-7"
+            className="space-y-6 sm:space-y-7"
           >
             <motion.h1
               variants={revealItem}
-              className="font-display max-w-xl text-5xl font-semibold leading-tight text-primary sm:text-6xl lg:text-7xl"
+              className="font-display max-w-xl text-[2.6rem] font-semibold leading-[0.92] text-primary sm:text-6xl lg:text-7xl"
             >
               Wear Your Story.
             </motion.h1>
             <motion.p
               variants={revealItem}
-              className="max-w-xl text-lg leading-relaxed text-primary/85 sm:text-xl"
+              className="max-w-xl text-base leading-relaxed text-primary/85 sm:text-lg md:text-xl"
             >
               From the heritage of the Saree to the edge of Western wear, discover
               fashion that speaks your language.
@@ -244,7 +245,7 @@ export function LandingPage() {
               <Link
                 href="/products"
                 aria-label="Shop the NaariThread collection"
-                className="cta-thread-hero"
+                className="cta-thread-hero w-full justify-center sm:w-auto"
               >
                 <span>Shop the Collection</span>
               </Link>
@@ -256,7 +257,7 @@ export function LandingPage() {
             whileInView={prefersReducedMotion ? undefined : { opacity: 1, scale: 1, y: 0 }}
             viewport={{ once: true, amount: 0.25 }}
             transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-            className="relative isolate mx-auto h-[74vh] w-full max-w-2xl overflow-hidden rounded-[2rem] border border-primary/20 bg-primary/5"
+            className="relative isolate mx-auto h-[52vh] min-h-[340px] w-full max-w-2xl overflow-hidden rounded-[1.7rem] border border-primary/20 bg-primary/5 sm:h-[66vh] sm:min-h-[430px] sm:rounded-[2rem]"
           >
             <div className="absolute inset-0 bg-gradient-to-tr from-primary/20 via-transparent to-secondary/50" />
             <Image
@@ -267,9 +268,9 @@ export function LandingPage() {
               sizes="(max-width: 1024px) 100vw, 50vw"
               className="image-fade-enter object-cover object-top"
             />
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-primary/70 to-transparent p-6 text-secondary">
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-primary/70 to-transparent p-4 text-secondary sm:p-6">
               <p className="text-xs uppercase tracking-[0.24em]">Signature Edit</p>
-              <p className="mt-2 text-2xl font-semibold">Grace in Every Thread</p>
+              <p className="mt-2 text-xl font-semibold sm:text-2xl">Grace in Every Thread</p>
             </div>
           </motion.div>
         </div>
@@ -329,7 +330,7 @@ export function LandingPage() {
             id={category.id}
             className={`section-shell ${isMaroon ? "bg-primary text-secondary" : "bg-secondary text-primary"}`}
           >
-            <div className="mx-auto w-full max-w-7xl px-5 py-16 md:px-8 lg:px-12">
+            <div className="mx-auto w-full max-w-7xl px-4 py-14 sm:px-5 sm:py-16 md:px-8 lg:px-12">
               <motion.div
                 variants={revealContainer}
                 initial="hidden"
@@ -388,7 +389,7 @@ export function LandingPage() {
                       aria-label={`Browse ${sub.name} in ${category.title}`}
                       className="block"
                     >
-                      <div className="relative h-[68vh] min-h-[460px] w-full overflow-hidden">
+                      <div className="relative h-[56vh] min-h-[320px] w-full overflow-hidden sm:h-[62vh] sm:min-h-[420px] lg:h-[68vh] lg:min-h-[460px]">
                         <Image
                           src={sub.image}
                           alt={sub.alt}
@@ -447,13 +448,13 @@ export function LandingPage() {
       })}
 
       <section id="story" className="section-shell bg-secondary">
-        <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-8 px-5 py-20 md:px-8 lg:grid-cols-2 lg:gap-12 lg:px-12">
+        <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-8 px-4 py-14 sm:px-5 sm:py-16 md:px-8 lg:grid-cols-2 lg:gap-12 lg:px-12">
           <motion.div
             variants={revealContainer}
             initial="hidden"
             whileInView="show"
             viewport={{ once: true, amount: 0.2 }}
-            className="space-y-4"
+            className="space-y-3 sm:space-y-4"
           >
             <motion.p
               variants={revealItem}
@@ -461,16 +462,16 @@ export function LandingPage() {
             >
               The Story
             </motion.p>
-            <motion.h2 variants={revealItem} className="text-4xl font-semibold text-primary sm:text-5xl">
+            <motion.h2 variants={revealItem} className="text-3xl font-semibold text-primary sm:text-5xl">
               <span className="font-display">The Unbroken Thread</span>
             </motion.h2>
-            <motion.p variants={revealItem} className="text-lg leading-relaxed text-primary/85">
+            <motion.p variants={revealItem} className="text-base leading-relaxed text-primary/85 sm:text-lg">
               At NaariThread, we believe a woman&apos;s wardrobe is more than fabric;
               it is a story of where she comes from and where she is going. We
               started with a simple vision: create a space where the timeless grace
               of the Saree meets the effortless cool of the Jumpsuit.
             </motion.p>
-            <motion.p variants={revealItem} className="text-lg leading-relaxed text-primary/85">
+            <motion.p variants={revealItem} className="text-base leading-relaxed text-primary/85 sm:text-lg">
               Our name represents the thread that connects generations, from the
               artisan&apos;s hand to the modern woman&apos;s hustle. Whether you are draped
               in six yards of tradition or stepping out in fusion wear,
@@ -489,7 +490,7 @@ export function LandingPage() {
             whileInView={prefersReducedMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
             viewport={{ once: true, amount: 0.3 }}
             transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
-            className="relative h-[68vh] min-h-[460px] overflow-hidden rounded-[2rem] border border-primary/20"
+            className="relative h-[56vh] min-h-[320px] overflow-hidden rounded-[1.7rem] border border-primary/20 sm:h-[62vh] sm:min-h-[420px] sm:rounded-[2rem] lg:h-[68vh] lg:min-h-[460px]"
           >
             <Image
               src={storyImage}
@@ -505,7 +506,7 @@ export function LandingPage() {
       </section>
 
       <footer className="bg-primary text-secondary">
-        <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-8 px-5 py-14 md:grid-cols-2 md:px-8 lg:grid-cols-6 lg:px-12">
+        <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-9 px-4 py-12 sm:px-5 sm:py-14 md:grid-cols-2 md:px-8 lg:grid-cols-5 lg:px-12">
           <div className="lg:col-span-2">
             <div className="flex items-center gap-3">
               <Image
@@ -522,26 +523,21 @@ export function LandingPage() {
               for the modern Indian woman.
             </p>
 
-            <div className="mt-5 space-y-2.5">
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-4">
               <a
                 href="tel:+918487849852"
                 aria-label="Call NaariThread on +91 84878 49852"
-                className="inline-flex items-center gap-2.5 text-sm text-secondary/80 transition hover:text-secondary"
+                className="inline-flex w-fit items-center gap-2.5 text-sm text-secondary/80 transition hover:text-secondary"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0" aria-hidden="true">
-                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.6 19.79 19.79 0 0 1 1.62 5c-.09-1.17.8-2 1.97-2H6.5a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 10.5a16 16 0 0 0 5.59 5.59l1.86-1.84a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-                </svg>
+                <DynamicHugeIcon name="CallIcon" className="h-4 w-4 shrink-0" iconStrokeWidth={1.8} />
                 +91 84878 49852
               </a>
               <a
                 href="mailto:naarithread@gmail.com"
                 aria-label="Email NaariThread at naarithread@gmail.com"
-                className="inline-flex items-center gap-2.5 text-sm text-secondary/80 transition hover:text-secondary"
+                className="inline-flex w-fit items-center gap-2.5 break-all text-sm text-secondary/80 transition hover:text-secondary sm:break-normal"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0" aria-hidden="true">
-                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                  <polyline points="22,6 12,13 2,6" />
-                </svg>
+                <DynamicHugeIcon name="Mail01Icon" className="h-4 w-4 shrink-0" iconStrokeWidth={1.8} />
                 naarithread@gmail.com
               </a>
             </div>
@@ -554,11 +550,7 @@ export function LandingPage() {
                 aria-label="Visit NaariThread on Instagram"
                 className="flex h-9 w-9 items-center justify-center rounded-full border border-secondary/25 text-secondary/80 transition hover:border-secondary/60 hover:text-secondary"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
-                  <rect x="2" y="2" width="20" height="20" rx="5" />
-                  <circle cx="12" cy="12" r="4" />
-                  <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
-                </svg>
+                <DynamicHugeIcon name="InstagramIcon" className="h-4.5 w-4.5" iconStrokeWidth={1.8} />
               </a>
               <a
                 href="https://wa.me/918487849852"
@@ -567,9 +559,7 @@ export function LandingPage() {
                 aria-label="Chat with NaariThread on WhatsApp"
                 className="flex h-9 w-9 items-center justify-center rounded-full border border-secondary/25 text-secondary/80 transition hover:border-secondary/60 hover:text-secondary"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
-                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-                </svg>
+                <DynamicHugeIcon name="WhatsappIcon" className="h-4.5 w-4.5" iconStrokeWidth={1.8} />
               </a>
             </div>
           </div>
@@ -592,14 +582,14 @@ export function LandingPage() {
               { label: "Fusion Wear", href: categoryHref("fusion-wear") },
             ]}
           />
-          <FooterLinks
+          {/* <FooterLinks
             title="Company"
             links={[
               { label: "Our Story", href: "/#story" },
               { label: "Shop Collection", href: "/products" },
               { label: "Ethnic Wear", href: "/#ethnic" },
             ]}
-          />
+          /> */}
           <FooterLinks
             title="Policies"
             links={[
@@ -610,7 +600,7 @@ export function LandingPage() {
             ]}
           />
         </div>
-        <div className="border-t border-secondary/20 px-5 py-5 text-center text-xs text-secondary/70 md:px-8 lg:px-12">
+        <div className="border-t border-secondary/20 px-4 py-5 text-left text-xs text-secondary/70 sm:px-5 md:px-8 md:text-center lg:px-12">
           Copyright {new Date().getFullYear()} NaariThread. All rights reserved.
         </div>
       </footer>
@@ -630,15 +620,15 @@ type FooterLinksProps = {
 
 function FooterLinks({ title, links }: FooterLinksProps) {
   return (
-    <nav aria-label={`${title} links`}>
+    <nav aria-label={`${title} links`} className="space-y-3">
       <p className="text-sm font-semibold uppercase tracking-[0.2em] text-secondary/90">{title}</p>
-      <ul className="mt-4 space-y-2 text-sm text-secondary/80">
+      <ul className="space-y-2.5 text-sm text-secondary/80">
         {links.map((link) => (
           <li key={link.label}>
             <Link
               href={link.href}
               aria-label={link.label}
-              className="thread-underline inline-flex items-center"
+              className="thread-underline inline-flex items-center leading-relaxed"
             >
               {link.label}
             </Link>

@@ -4,6 +4,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
 import React, { useEffect, useMemo, useState } from "react";
 
+import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
+
 export type SkiperImage = {
   src: string;
   alt: string;
@@ -153,14 +155,14 @@ const Skiper54 = ({
         </AnimatePresence>
 
         {showNavigation ? (
-          <div className="pointer-events-none absolute inset-x-0 top-1/2 flex -translate-y-1/2 items-center justify-between px-3 md:px-5">
+          <div className="pointer-events-none absolute inset-x-0 top-1/2 flex -translate-y-1/2 items-center justify-between px-3 md:px-1">
             <button
               type="button"
               aria-label="Previous slide"
               onClick={prev}
               className="pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-full border border-secondary/30 bg-primary/65 text-lg text-secondary transition hover:bg-primary"
             >
-              <span aria-hidden="true">&#8249;</span>
+              <DynamicHugeIcon name="PreviousIcon" className="h-4.5 w-4.5" iconStrokeWidth={2} />
             </button>
             <button
               type="button"
@@ -168,7 +170,7 @@ const Skiper54 = ({
               onClick={next}
               className="pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-full border border-secondary/30 bg-primary/65 text-lg text-secondary transition hover:bg-primary"
             >
-              <span aria-hidden="true">&#8250;</span>
+              <DynamicHugeIcon name="NextIcon" className="h-4.5 w-4.5" iconStrokeWidth={2} />
             </button>
           </div>
         ) : null}

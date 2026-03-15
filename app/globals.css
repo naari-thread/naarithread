@@ -29,7 +29,7 @@
   }
 
   body {
-    font-family: var(--font-body), "Open Sans", sans-serif;
+    font-family: var(--font-body), "Plus Jakarta Sans", sans-serif;
   }
 }
 
@@ -88,7 +88,7 @@
   }
 
   .font-body {
-    font-family: var(--font-body), "Open Sans", sans-serif;
+    font-family: var(--font-body), "Plus Jakarta Sans", sans-serif;
   }
 
   .cta-thread {

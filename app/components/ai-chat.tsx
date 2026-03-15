@@ -4,6 +4,8 @@ import { useState, useRef, useEffect, useCallback, useId } from "react";
 // useCallback and useId are used for stable send function and unique IDs
 import { motion, AnimatePresence } from "framer-motion";
 
+import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
+
 type Message = {
   id: string;
   role: "user" | "bot";
@@ -90,45 +92,25 @@ export function AiChat() {
       >
         <AnimatePresence mode="wait" initial={false}>
           {open ? (
-            <motion.svg
+            <motion.div
               key="close"
               initial={{ rotate: -90, opacity: 0, scale: 0.7 }}
               animate={{ rotate: 0, opacity: 1, scale: 1 }}
               exit={{ rotate: 90, opacity: 0, scale: 0.7 }}
               transition={{ duration: 0.2 }}
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              className="h-5 w-5"
-              aria-hidden="true"
             >
-              <path d="M18 6 6 18M6 6l12 12" />
-            </motion.svg>
+              <DynamicHugeIcon name="Cancel01Icon" className="h-5 w-5" iconStrokeWidth={2} />
+            </motion.div>
           ) : (
-            <motion.svg
+            <motion.div
               key="chat"
               initial={{ scale: 0.7, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.7, opacity: 0 }}
               transition={{ duration: 0.2 }}
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-5 w-5"
-              aria-hidden="true"
             >
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-              <circle cx="9" cy="10" r="0.5" fill="currentColor" />
-              <circle cx="12" cy="10" r="0.5" fill="currentColor" />
-              <circle cx="15" cy="10" r="0.5" fill="currentColor" />
-            </motion.svg>
+              <DynamicHugeIcon name="AiChat01Icon" className="h-5 w-5" iconStrokeWidth={1.8} />
+            </motion.div>
           )}
         </AnimatePresence>
       </motion.button>
@@ -146,19 +128,7 @@ export function AiChat() {
             {/* Header */}
             <div className="flex items-center gap-3 bg-primary px-5 py-4">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-secondary/20">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  className="h-4 w-4 text-secondary"
-                  aria-hidden="true"
-                >
-                  <circle cx="12" cy="8" r="4" />
-                  <path d="M20 21a8 8 0 1 0-16 0" />
-                </svg>
+                <DynamicHugeIcon name="UserIcon" className="h-4.5 w-4.5 text-secondary" iconStrokeWidth={1.8} />
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-semibold tracking-wide text-secondary">Saathi</p>
@@ -239,19 +209,7 @@ export function AiChat() {
                 aria-label="Send message"
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-secondary transition hover:bg-primary/80 disabled:opacity-40"
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="h-3.5 w-3.5"
-                  aria-hidden="true"
-                >
-                  <path d="M22 2 11 13M22 2 15 22 11 13 2 9l20-7z" />
-                </svg>
+                <DynamicHugeIcon name="MailSend01Icon" className="h-4 w-4" iconStrokeWidth={2} />
               </button>
             </form>
           </motion.div>
