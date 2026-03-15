@@ -143,8 +143,10 @@ const Skiper54 = ({
                 className="object-cover object-top"
               />
               <div className="absolute inset-x-0 bottom-0 p-4 text-center">
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-secondary/70 to-transparent p-8 text-secondary">
                 <p className="text-xs uppercase tracking-[0.2em] text-secondary/85 [text-shadow:0_2px_10px_rgba(0,0,0,0.6)]">Most Loved</p>
                 <p className="mt-1 text-sm font-semibold text-secondary [text-shadow:0_2px_10px_rgba(0,0,0,0.68)] md:text-base">{slide.image.title}</p>
+                </div>
               </div>
             </motion.div>
           ))}

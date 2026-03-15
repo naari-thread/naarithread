@@ -5,11 +5,11 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "images.unsplash.com",
+        hostname: "sgp.cloud.appwrite.io",
       },
       {
         protocol: "https",
-        hostname: "plus.unsplash.com",
+        hostname: "cloudinary.com",
       },
     ],
   },

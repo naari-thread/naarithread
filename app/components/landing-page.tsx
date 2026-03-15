@@ -23,39 +23,50 @@ type CategorySection = {
   subCategories: SubCategory[];
 };
 
-const heroImage = "/images/2.png";
-const storyImage = "/images/pomelli-image-4%20(4).png";
+const heroImage = "https://sgp.cloud.appwrite.io/v1/storage/buckets/69b62102002adbcc6ea5/files/69b6221f000dc6e5e5c4/view?project=69b157b700001de139fe&mode=admin";
+const storyImage = "/images/story/1.png";
 
 const mostLovedSlides: SkiperImage[] = [
   {
+    title: "Signature Bridal Lehenga",
+    alt: "Indian woman in a red and navy embroidered bridal lehenga",
+    src: "/images/bestseller/1.png",
+  },
+  {
     title: "Signature Festive Kurta",
     alt: "Indian woman in maroon and cream festive kurta set",
-    src: "/images/pomelli-image-1.png",
-  },
-  {
-    title: "Everyday Premium Line",
-    alt: "Indian woman in premium daily wear ethnic set",
-    src: "/images/3.png",
-  },
-  {
-    title: "Wedding Guest Edit",
-    alt: "Indian woman in elegant maroon occasion wear",
-    src: "/images/pomelli-image-3.png",
-  },
-  {
-    title: "Statement Embroidery",
-    alt: "Indian woman in embroidered maroon kurta and palazzo",
-    src: "/images/1.png",
+    src: "/images/bestseller/2.png",
   },
   {
     title: "Occasion Saree Edit",
     alt: "Woman in premium saree styling for festive event",
-    src: "/images/pomelli-image-3%20(3).png",
+    src: "/images/bestseller/4.png",
+  },
+  {
+    title: "Wedding Guest Edit",
+    alt: "Indian woman in elegant maroon occasion wear",
+    src: "/images/bestseller/5.png",
+  },
+  {
+    title: "Signature Veil Lehenga",
+    alt: "Indian woman in a purple embroidered lehenga with a sheer embellished veil",
+    src: "/images/bestseller/3.png",
+  },
+  {
+    title: "Everyday Premium Line",
+    alt: "Indian woman in premium daily wear ethnic set",
+    src: "/images/bestseller/7.png",
+  },
+  
+  {
+    title: "Statement Embroidery",
+    alt: "Indian woman in embroidered maroon kurta and palazzo",
+    src: "/images/bestseller/6.png",
   },
   {
     title: "Contemporary Fusion",
     alt: "Woman in indo-western contemporary silhouette",
-    src: "/images/pomelli-image-1%20(4).png",
+    src: "/images/pomelli-image-3%20(3).png",
   },
 ];
 
@@ -71,19 +82,19 @@ const categories: CategorySection[] = [
       {
         name: "Saree",
         slug: "saree",
-        image: "/images/pomelli-image-3%20(3).png",
+        image: "/images/saree/1.png",
         alt: "Model wearing an embroidered maroon saree",
       },
       {
         name: "Lehenga",
         slug: "lehenga",
-        image: "/images/pomelli-image-1%20(2).png",
+        image: "/images/lehnga/1.png",
         alt: "Woman in lehenga-inspired festive silhouette",
       },
       {
         name: "Anarkali",
         slug: "anarkali",
-        image: "/images/pomelli-image-4.png",
+        image: "/images/anarkali/1.png",
         alt: "Woman in flowy anarkali-style festive wear",
       },
     ],
@@ -99,19 +110,19 @@ const categories: CategorySection[] = [
       {
         name: "Dresses",
         slug: "dresses",
-        image: "/images/pomelli-image-2%20(3).png",
+        image: "/images/dresses/1.png",
         alt: "Woman in contemporary maroon dress-inspired look",
       },
       {
         name: "Tops",
         slug: "tops",
-        image: "/images/pomelli-image-3%20(2).png",
+        image: "/images/tops/1.png",
         alt: "Woman styling a premium embroidered top",
       },
       {
         name: "Skirts",
         slug: "skirts",
-        image: "/images/pomelli-image-1%20(3).png",
+        image: "/images/skirts/1.png",
         alt: "Woman in skirt-led modern fusion styling",
       },
     ],
@@ -127,19 +138,19 @@ const categories: CategorySection[] = [
       {
         name: "Jeans",
         slug: "jeans",
-        image: "/images/pomelli-image-4%20(3).png",
+        image: "/images/jeans/1.png",
         alt: "Woman styled in clean premium bottom-focused silhouette",
       },
       {
         name: "Trousers",
         slug: "trousers-pants",
-        image: "/images/pomelli-image-2%20(4).png",
+        image: "/images/trousers/1.png",
         alt: "Model wearing tailored cream trousers",
       },
       {
         name: "Palazzo",
         slug: "palazzo",
-        image: "/images/pomelli-image-3%20(4).png",
+        image: "/images/palazzo/1.png",
         alt: "Woman in wide-leg palazzo styling",
       },
     ],
@@ -155,19 +166,19 @@ const categories: CategorySection[] = [
       {
         name: "Indo-Western Dresses",
         slug: "indo-western-dresses",
-        image: "/images/pomelli-image-1%20(4).png",
+        image: "/images/fusion-indowestern/1.png",
         alt: "Woman in premium indo-western dress styling",
       },
       {
         name: "Crop Top + Skirt",
         slug: "crop-top-skirt",
-        image: "/images/pomelli-image-2.png",
+        image: "/images/fusion-croptopskirt/1.png",
         alt: "Woman in crop top and skirt-inspired fusion set",
       },
       {
         name: "Kurti + Jeans",
         slug: "kurti-jeans",
-        image: "/images/pomelli-image-3.png",
+        image: "/images/fusion-kurtijeans/1.png",
         alt: "Woman styling kurti with contemporary bottom wear",
       },
     ],

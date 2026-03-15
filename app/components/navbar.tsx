@@ -25,21 +25,21 @@ export function Navbar() {
           : ""
       }`}
     >
-      <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-4 md:px-8 lg:px-12">
+      <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-2 md:px-8 lg:px-12">
         <Link
           href="/"
           aria-label="NaariThread — return to homepage"
           className="group flex items-center gap-3"
         >
           <Image
-            src="/logo.png"
+            src="/logo2.png"
             alt="NaariThread logo mark"
-            width={40}
-            height={40}
+            width={80}
+            height={80}
             priority
-            className="h-10 w-10 rounded-full border border-primary/20 object-cover transition duration-300 group-hover:border-primary/50 group-hover:shadow-[0_0_0_3px_rgba(120,0,0,0.09)]"
+            className="h-12 w-12 rounded-full border border-primary/20 object-cover transition duration-300 group-hover:border-primary/50 group-hover:shadow-[0_0_0_3px_rgba(120,0,0,0.09)]"
           />
-          <span className="font-display text-lg tracking-wide text-primary">
+          <span className="font-display text-2xl tracking-wide text-primary">
             NaariThread
           </span>
         </Link>
@@ -47,7 +47,7 @@ export function Navbar() {
         <Link
           href="/products"
           aria-label="Shop the NaariThread collection"
-          className="cta-thread py-2.5 text-xs"
+          className="cta-thread py-2 text-xs"
         >
           Shop Now
         </Link>
