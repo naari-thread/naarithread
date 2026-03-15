@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Analytics } from "@vercel/analytics/react";
 import { SmoothScrollProvider } from "@/app/components/smooth-scroll-provider";
 import { Navbar } from "@/app/components/navbar";
 import { AiChat } from "@/app/components/ai-chat";
@@ -82,6 +83,7 @@ export default function RootLayout({
         <SmoothScrollProvider>{children}</SmoothScrollProvider>
         <AiChat />
         <SpeedInsights />
+        <Analytics />
       </body>
     </html>
   );
