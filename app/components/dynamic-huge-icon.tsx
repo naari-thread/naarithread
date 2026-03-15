@@ -5,8 +5,10 @@ import { createElement, useEffect, useState, type SVGProps } from "react";
 type HugeIconName =
   | "AiChat01Icon"
   | "ArrowLeft01Icon"
+  | "ArrowRight01Icon"
   | "Cancel01Icon"
   | "CallIcon"
+  | "Facebook01Icon"
   | "InstagramIcon"
   | "MailSend01Icon"
   | "Mail01Icon"
@@ -19,10 +21,12 @@ type HugeIconNode = [tagName: string, attrs: Record<string, string | number>];
 type HugeIconData = HugeIconNode[];
 
 const iconLoaders: Record<HugeIconName, () => Promise<{ default: HugeIconData }>> = {
-  AiChat01Icon: () => import("@hugeicons/core-free-icons/AiChat01Icon"),
+  AiChat01Icon: () => import("@hugeicons/core-free-icons/ChatBotIcon"),
   ArrowLeft01Icon: () => import("@hugeicons/core-free-icons/ArrowLeft01Icon"),
+  ArrowRight01Icon: () => import("@hugeicons/core-free-icons/ArrowRight01Icon"),
   Cancel01Icon: () => import("@hugeicons/core-free-icons/Cancel01Icon"),
   CallIcon: () => import("@hugeicons/core-free-icons/CallIcon"),
+  Facebook01Icon: () => import("@hugeicons/core-free-icons/Facebook01Icon"),
   InstagramIcon: () => import("@hugeicons/core-free-icons/InstagramIcon"),
   MailSend01Icon: () => import("@hugeicons/core-free-icons/MailSend01Icon"),
   Mail01Icon: () => import("@hugeicons/core-free-icons/Mail01Icon"),

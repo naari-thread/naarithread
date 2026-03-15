@@ -25,7 +25,7 @@
 
   html,
   body {
-    @apply bg-paper text-foreground;
+    @apply overflow-x-clip bg-paper text-foreground;
   }
 
   body {
@@ -92,7 +92,7 @@
   }
 
   .cta-thread {
-    @apply relative inline-flex items-center justify-center overflow-hidden rounded-full border border-primary bg-primary px-7 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-secondary transition-all duration-300 hover:-translate-y-0.5 hover:bg-secondary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary;
+    @apply relative inline-flex items-center justify-center overflow-hidden rounded-full border border-primary bg-primary px-4 py-2.5 text-sm font-semibold uppercase tracking-[0.2em] text-secondary transition-all duration-300 hover:-translate-y-0.5 hover:bg-secondary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary;
   }
 
   .cta-thread::before {

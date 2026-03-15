@@ -247,13 +247,13 @@ export default async function PolicyPage({ params }: PolicyPageProps) {
             Back to Home
           </Link>
           <div className="mx-auto mt-8 max-w-4xl text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.34em] text-secondary/70">
+            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-secondary/70 sm:text-xs sm:tracking-[0.34em]">
               {policy.eyebrow}
             </p>
-            <h1 className="font-display mt-4 text-4xl sm:text-5xl lg:text-6xl">
+            <h1 className="font-display mt-4 text-[2rem] leading-[1.02] sm:text-5xl lg:text-6xl">
               {policy.title}
             </h1>
-            <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-secondary/80">
+            <p className="mx-auto mt-5 max-w-2xl text-[0.96rem] leading-relaxed text-secondary/80 sm:text-base">
               {policy.intro}
             </p>
             <p className="mt-4 text-xs text-secondary/50">Last updated: January 2025</p>
@@ -295,14 +295,14 @@ export default async function PolicyPage({ params }: PolicyPageProps) {
                   id={section.heading.toLowerCase().replace(/[^a-z0-9]+/g, "-")}
                   className="scroll-mt-24 rounded-2xl border border-primary/10 bg-secondary p-6 sm:p-8"
                 >
-                  <h2 className="font-display text-2xl text-primary sm:text-3xl">
+                  <h2 className="text-[1.5rem] leading-tight text-primary sm:text-3xl">
                     {section.heading}
                   </h2>
-                  <ul className="mt-5 space-y-3">
+                  <ul className="mt-5 space-y-3 sm:space-y-3.5">
                     {section.items.map((item, idx) => (
                       <li
                         key={idx}
-                        className="flex items-start gap-3 text-sm leading-relaxed text-primary/85 md:text-base"
+                        className="flex items-start gap-3 text-[0.9rem] leading-relaxed text-primary/85 sm:text-[0.95rem] md:text-base"
                       >
                         <span
                           className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/50"
