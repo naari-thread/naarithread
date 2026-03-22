@@ -5,6 +5,7 @@ import { Analytics } from "@vercel/analytics/react";
 import { SmoothScrollProvider } from "@/app/components/smooth-scroll-provider";
 import { Navbar } from "@/app/components/navbar";
 import { AiChat } from "@/app/components/ai-chat";
+import { MobileProductsBottomBar } from "@/app/components/mobile-products-bottom-bar";
 import "./globals.css";
 
 const loraDisplay = Lora({
@@ -82,6 +83,7 @@ export default function RootLayout({
       <body className={`${loraDisplay.variable} ${plusJakartaSans.variable} bg-paper text-primary antialiased`}>
         <Navbar />
         <SmoothScrollProvider>{children}</SmoothScrollProvider>
+        <MobileProductsBottomBar />
         <AiChat />
         <SpeedInsights />
         <Analytics />

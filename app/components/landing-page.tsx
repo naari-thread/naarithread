@@ -35,6 +35,11 @@ type MobileBestSellerProduct = {
   alt: string;
 };
 
+type AnnouncementItem = {
+  id: string;
+  text: string;
+};
+
 const heroImage = "https://res.cloudinary.com/dueruzfoq/image/upload/v1774145271/heroimage_eirhec.png";
 const storyImage = "https://res.cloudinary.com/dueruzfoq/image/upload/v1774145316/1_x6veq2.png";
 
@@ -111,6 +116,12 @@ const mobileBestSellerProducts: MobileBestSellerProduct[] = [
     image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146266/pomelli-image-1_3_rf3glc.png",
     alt: "Woman in indo-western contemporary silhouette",
   },
+];
+
+const topAnnouncements: AnnouncementItem[] = [
+  { id: "offer-1", text: "Flat 20% OFF on Festive Styles | Code: NAARI20" },
+  { id: "offer-2", text: "Free Shipping on orders above Rs. 1,499" },
+  { id: "offer-3", text: "New Arrival Drop every Friday at 7 PM" },
 ];
 
 const categories: CategorySection[] = [
@@ -259,6 +270,7 @@ function categoryHref(category: string, subcategory?: string) {
 export function LandingPage() {
   const prefersReducedMotion = useReducedMotion();
   const [showBackToTop, setShowBackToTop] = useState(false);
+  const [activeAnnouncementIndex, setActiveAnnouncementIndex] = useState(0);
   const [mobileCarouselInteracted, setMobileCarouselInteracted] = useState(false);
   const mobileCarouselRef = useRef<HTMLDivElement | null>(null);
   const mobileTouchStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -273,6 +285,18 @@ export function LandingPage() {
 
     return () => {
       window.removeEventListener("scroll", onScroll);
+    };
+  }, []);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setActiveAnnouncementIndex((previousIndex) =>
+        previousIndex === topAnnouncements.length - 1 ? 0 : previousIndex + 1,
+      );
+    }, 4500);
+
+    return () => {
+      window.clearInterval(intervalId);
     };
   }, []);
 
@@ -348,15 +372,60 @@ export function LandingPage() {
   }, [mobileCarouselInteracted, prefersReducedMotion]);
 
   return (
-    <main className="w-full">
-      <section id="hero" className="section-shell bg-secondary">
-        <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-8 px-4 py-14 sm:px-5 sm:py-16 md:px-8 lg:grid-cols-2 lg:items-center lg:gap-14 lg:px-12 mt-6 sm:mt-0">
+    <main className="w-full pt-14 md:pt-0">
+      <section className="w-full border-b border-secondary/25 bg-gradient-to-r from-primary via-primary/95 to-primary text-secondary md:hidden">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-center px-4 py-3 sm:px-5 md:px-8 lg:px-12">
+          <div
+            aria-live="polite"
+            aria-atomic={true}
+            className="relative w-full overflow-hidden text-center pt-1 sm:pt-0"
+          >
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.p
+                key={topAnnouncements[activeAnnouncementIndex]?.id}
+                initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 8 }}
+                animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+                transition={{ duration: prefersReducedMotion ? 0 : 0.35, ease: [0.22, 1, 0.36, 1] }}
+                className="text-[0.64rem] font-semibold uppercase tracking-[0.16em] text-secondary sm:text-[0.72rem] sm:tracking-[0.22em]"
+              >
+                {topAnnouncements[activeAnnouncementIndex]?.text}
+              </motion.p>
+            </AnimatePresence>
+          </div>
+        </div>
+      </section>
+
+      <section id="hero" className="section-shell bg-secondary md:min-h-[calc(100vh-4.5rem)]">
+        <div
+          aria-live="polite"
+          aria-atomic={true}
+          className="pointer-events-none absolute inset-x-0 top-[4.5rem] z-10 hidden border-b border-secondary/25 bg-primary text-secondary md:block"
+        >
+          <div className="mx-auto flex w-full max-w-7xl items-center justify-center px-4 py-2 md:px-8 lg:px-12">
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.p
+                key={`desktop-${topAnnouncements[activeAnnouncementIndex]?.id}`}
+                initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 6 }}
+                animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -6 }}
+                transition={{ duration: prefersReducedMotion ? 0 : 0.3, ease: [0.22, 1, 0.36, 1] }}
+                className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-secondary"
+              >
+                {topAnnouncements[activeAnnouncementIndex]?.text}
+              </motion.p>
+            </AnimatePresence>
+          </div>
+        </div>
+
+        <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-2 px-4 py-10 sm:px-5 md:px-8 md:py-14 lg:grid-cols-2 lg:items-center lg:gap-14 lg:px-12">
+           
           <motion.div
             variants={revealContainer}
             initial="hidden"
             whileInView="show"
             viewport={{ once: true, amount: 0.3 }}
-            className="space-y-6 sm:space-y-7"
+            className="space-y-4 sm:space-y-7"
           >
             <motion.h1
               variants={revealItem}
@@ -371,11 +440,11 @@ export function LandingPage() {
               From the heritage of the Saree to the edge of Western wear, discover
               fashion that speaks your language.
             </motion.p>
-            <motion.div variants={revealItem}>
+            <motion.div variants={revealItem} className="hidden sm:block">
               <Link
                 href="/products"
                 aria-label="Shop the NaariThread collection"
-                className="cta-thread-hero w-full justify-center sm:w-auto"
+                className="cta-thread-hero w-auto justify-center sm:w-auto mx-auto"
               >
                 <span>Shop the Collection</span>
               </Link>
@@ -387,7 +456,7 @@ export function LandingPage() {
             whileInView={prefersReducedMotion ? undefined : { opacity: 1, scale: 1, y: 0 }}
             viewport={{ once: true, amount: 0.25 }}
             transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-            className="relative isolate mx-auto h-[52vh] min-h-[340px] w-full max-w-2xl overflow-hidden rounded-t-[6.5rem] rounded-b-[1.7rem] border border-primary/20 bg-primary/5 sm:h-[66vh] sm:min-h-[430px] sm:rounded-t-[6.5rem] sm:rounded-b-[2rem]"
+            className="relative isolate mx-auto h-[50vh] min-h-[340px] w-full max-w-2xl overflow-hidden rounded-t-[6.5rem] rounded-b-[1.7rem] border border-primary/20 bg-primary/5 sm:h-[66vh] sm:min-h-[430px] sm:rounded-t-[6.5rem] sm:rounded-b-[2rem]"
           >
             <div className="absolute inset-0 bg-gradient-to-tr from-primary/20 via-transparent to-secondary/50" />
             <CloudinaryImage
@@ -403,6 +472,15 @@ export function LandingPage() {
               <p className="mt-2 text-lg font-semibold sm:text-2xl">Grace in Every Thread</p>
             </div>
           </motion.div>
+          <motion.div variants={revealItem} className="sm:hidden flex items-center justify-center w-full mx-auto mt-4">
+              <Link
+                href="/products"
+                aria-label="Shop the NaariThread collection"
+                className="cta-thread-hero w-auto justify-center sm:w-auto mx-auto"
+              >
+                <span>Shop the Collection</span>
+              </Link>
+            </motion.div>
         </div>
       </section>
 
@@ -471,9 +549,19 @@ export function LandingPage() {
                     </div>
                     <div className="border-t border-secondary/25 bg-primary/45 px-4 py-3.5 text-left">
                       <p className="text-[1rem] font-semibold leading-tight text-secondary">{product.name}</p>
-                      <p className="mt-1 text-[0.7rem] leading-relaxed text-secondary/80">{product.description}</p>
-                      <div className="mt-2.5 inline-flex items-center rounded-full border border-secondary/45 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-secondary">
-                        {product.price}
+                      <p className="mt-1 truncate text-[0.7rem] leading-relaxed text-secondary/80">{product.description}</p>
+                      <div className="mt-2.5 flex items-center justify-between gap-2">
+                        <div className="inline-flex items-center rounded-full border border-secondary/45 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-secondary">
+                          {product.price}
+                        </div>
+                        <span className="inline-flex items-center text-secondary/90" aria-hidden={true}>
+                          <DynamicHugeIcon
+                            name="ArrowUpRight01Icon"
+                            className="h-3.5 w-3.5"
+                            iconStrokeWidth={2}
+                            aria-hidden={true}
+                          />
+                        </span>
                       </div>
                     </div>
                   </Link>

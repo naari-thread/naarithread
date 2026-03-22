@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback, useId } from "react";
 // useCallback and useId are used for stable send function and unique IDs
 import { motion, AnimatePresence } from "framer-motion";
+import { usePathname } from "next/navigation";
 
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
 import Image from "next/image";
@@ -45,6 +46,7 @@ function getBotReply(input: string): string {
 }
 
 export function AiChat() {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [showNudge, setShowNudge] = useState(false);
   const baseId = useId();
@@ -108,6 +110,10 @@ export function AiChat() {
       setTyping(false);
     }, 900);
   }, [baseId]);
+
+  if (pathname !== "/") {
+    return null;
+  }
 
   return (
     <>

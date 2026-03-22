@@ -101,6 +101,7 @@ const menuItem = {
 export function Navbar() {
   const pathname = usePathname();
   const prefersReducedMotion = useReducedMotion();
+  const hideOnMobile = pathname !== "/";
   const [scrolled, setScrolled] = useState(false);
   const [isHeroInView, setIsHeroInView] = useState(pathname === "/");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -182,7 +183,7 @@ export function Navbar() {
   return (
     <>
       <header
-        className={`fixed inset-x-0 top-0 z-[95] transition-all duration-500 border-b border-primary/40 ${
+        className={`fixed inset-x-0 top-0 z-[95] transition-all duration-500 border-b border-primary/40 ${hideOnMobile ? "hidden md:block" : ""} ${
           scrolled || isMobileMenuOpen
             ? "border-b border-primary/10 bg-secondary/90 shadow-[0_2px_24px_rgba(120,0,0,0.07)] backdrop-blur-md"
             : "bg-secondary/95 md:bg-transparent"
