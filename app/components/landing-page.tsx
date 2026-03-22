@@ -5,8 +5,10 @@ import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useState } from "react";
 
+import { CloudinaryImage } from "@/app/components/cloudinary-image";
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
 import { Skiper54, type SkiperImage } from "@/app/components/skiper54";
+import { CLOUDINARY_SIZES } from "@/lib/cloudinary";
 
 type SubCategory = {
   name: string;
@@ -25,50 +27,50 @@ type CategorySection = {
   subCategories: SubCategory[];
 };
 
-const heroImage = "https://sgp.cloud.appwrite.io/v1/storage/buckets/69b62102002adbcc6ea5/files/69b6221f000dc6e5e5c4/view?project=69b157b700001de139fe&mode=admin";
-const storyImage = "/images/story/1.png";
+const heroImage = "https://res.cloudinary.com/dueruzfoq/image/upload/v1774145271/heroimage_eirhec.png";
+const storyImage = "https://res.cloudinary.com/dueruzfoq/image/upload/v1774145316/1_x6veq2.png";
 
 const mostLovedSlides: SkiperImage[] = [
   {
     title: "Signature Bridal Lehenga",
     alt: "Indian woman in a red and navy embroidered bridal lehenga",
-    src: "/images/bestseller/1.png",
+    src: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146155/3_ktinir.png",
   },
   {
     title: "Signature Festive Kurta",
     alt: "Indian woman in maroon and cream festive kurta set",
-    src: "/images/bestseller/2.png",
+    src: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146139/2_qhkrc8.png",
   },
   {
     title: "Occasion Saree Edit",
     alt: "Woman in premium saree styling for festive event",
-    src: "/images/bestseller/4.png",
+    src: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146179/4_vfmdf4.png",
   },
   {
     title: "Wedding Guest Edit",
     alt: "Indian woman in elegant maroon occasion wear",
-    src: "/images/bestseller/5.png",
+    src: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146198/5_et1rmm.png",
   },
   {
     title: "Signature Veil Lehenga",
     alt: "Indian woman in a purple embroidered lehenga with a sheer embellished veil",
-    src: "/images/bestseller/3.png",
+    src: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146155/3_ktinir.png",
   },
   {
     title: "Everyday Premium Line",
     alt: "Indian woman in premium daily wear ethnic set",
-    src: "/images/bestseller/7.png",
+    src: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146223/6_euy4pm.png",
   },
   
   {
     title: "Statement Embroidery",
     alt: "Indian woman in embroidered maroon kurta and palazzo",
-    src: "/images/bestseller/6.png",
+    src: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146198/5_et1rmm.png",
   },
   {
     title: "Contemporary Fusion",
     alt: "Woman in indo-western contemporary silhouette",
-    src: "/images/pomelli-image-3%20(3).png",
+    src: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146266/pomelli-image-1_3_rf3glc.png",
   },
 ];
 
@@ -84,19 +86,19 @@ const categories: CategorySection[] = [
       {
         name: "Saree",
         slug: "saree",
-        image: "/images/saree/1.png",
+        image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146299/2_uecv6t.png",
         alt: "Model wearing an embroidered maroon saree",
       },
       {
         name: "Lehenga",
         slug: "lehenga",
-        image: "/images/lehnga/1.png",
+        image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146319/1_byc5lz.png",
         alt: "Woman in lehenga-inspired festive silhouette",
       },
       {
         name: "Anarkali",
         slug: "anarkali",
-        image: "/images/anarkali/1.png",
+        image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146333/1_pl4iyu.png",
         alt: "Woman in flowy anarkali-style festive wear",
       },
     ],
@@ -112,19 +114,19 @@ const categories: CategorySection[] = [
       {
         name: "Dresses",
         slug: "dresses",
-        image: "/images/dresses/1.png",
+        image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146385/1_ccdhb3.png",
         alt: "Woman in contemporary maroon dress-inspired look",
       },
       {
         name: "Tops",
         slug: "tops",
-        image: "/images/tops/1.png",
+        image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146393/1_upqovg.png",
         alt: "Woman styling a premium embroidered top",
       },
       {
         name: "Skirts",
         slug: "skirts",
-        image: "/images/skirts/1.png",
+        image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146400/1_vi5avd.png",
         alt: "Woman in skirt-led modern fusion styling",
       },
     ],
@@ -140,19 +142,19 @@ const categories: CategorySection[] = [
       {
         name: "Jeans",
         slug: "jeans",
-        image: "/images/jeans/1.png",
+        image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146443/1_agnfvy.png",
         alt: "Woman styled in clean premium bottom-focused silhouette",
       },
       {
         name: "Trousers",
         slug: "trousers-pants",
-        image: "/images/trousers/1.png",
+        image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146454/1_knncmz.png",
         alt: "Model wearing tailored cream trousers",
       },
       {
         name: "Palazzo",
         slug: "palazzo",
-        image: "/images/palazzo/1.png",
+        image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146467/1_j6sc3d.png",
         alt: "Woman in wide-leg palazzo styling",
       },
     ],
@@ -168,19 +170,19 @@ const categories: CategorySection[] = [
       {
         name: "Indo-Western Dresses",
         slug: "indo-western-dresses",
-        image: "/images/fusion-indowestern/1.png",
+        image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146500/1_ye6smw.png",
         alt: "Woman in premium indo-western dress styling",
       },
       {
         name: "Crop Top + Skirt",
         slug: "crop-top-skirt",
-        image: "/images/fusion-croptopskirt/1.png",
+        image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146509/1_vj7ms1.png",
         alt: "Woman in crop top and skirt-inspired fusion set",
       },
       {
         name: "Kurti + Jeans",
         slug: "kurti-jeans",
-        image: "/images/fusion-kurtijeans/1.png",
+        image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146521/1_hpruxs.png",
         alt: "Woman styling kurti with contemporary bottom wear",
       },
     ],
@@ -279,12 +281,12 @@ export function LandingPage() {
             className="relative isolate mx-auto h-[52vh] min-h-[340px] w-full max-w-2xl overflow-hidden rounded-t-[6.5rem] rounded-b-[1.7rem] border border-primary/20 bg-primary/5 sm:h-[66vh] sm:min-h-[430px] sm:rounded-t-[6.5rem] sm:rounded-b-[2rem]"
           >
             <div className="absolute inset-0 bg-gradient-to-tr from-primary/20 via-transparent to-secondary/50" />
-            <Image
+            <CloudinaryImage
               src={heroImage}
               alt="NaariThread hero model in premium maroon and cream outfit"
               fill
               priority
-              sizes="(max-width: 1024px) 100vw, 50vw"
+              sizes={CLOUDINARY_SIZES.hero}
               className="image-fade-enter object-cover object-top"
             />
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-primary/70 to-transparent p-4 text-secondary sm:p-6">
@@ -413,12 +415,12 @@ export function LandingPage() {
                       className="block"
                     >
                       <div className="relative h-[56vh] min-h-[320px] w-full overflow-hidden sm:h-[62vh] sm:min-h-[420px] lg:h-[68vh] lg:min-h-[460px]">
-                        <Image
+                        <CloudinaryImage
                           src={sub.image}
                           alt={sub.alt}
                           fill
                           loading="lazy"
-                          sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 25vw"
+                          sizes={CLOUDINARY_SIZES.card}
                           className="image-fade-enter object-cover object-top transition duration-700 group-hover:scale-[1.04]"
                         />
                         <div className="absolute inset-0 flex items-center justify-center bg-primary/55 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
@@ -515,12 +517,12 @@ export function LandingPage() {
             transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
             className="relative h-[56vh] min-h-[320px] overflow-hidden rounded-[1.7rem] border border-primary/20 sm:h-[62vh] sm:min-h-[420px] sm:rounded-[2rem] lg:h-[68vh] lg:min-h-[460px]"
           >
-            <Image
+            <CloudinaryImage
               src={storyImage}
               alt="Indian woman symbolizing tradition and modern ambition"
               fill
               loading="lazy"
-              sizes="(max-width: 1024px) 100vw, 50vw"
+              sizes={CLOUDINARY_SIZES.story}
               className="image-fade-enter object-cover object-top"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-primary/60 to-transparent" />

@@ -1,10 +1,11 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import Image from "next/image";
 import React, { useEffect, useMemo, useState } from "react";
 
+import { CloudinaryImage } from "@/app/components/cloudinary-image";
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
+import { CLOUDINARY_SIZES } from "@/lib/cloudinary";
 
 export type SkiperImage = {
   src: string;
@@ -136,12 +137,12 @@ const Skiper54 = ({
               transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
               className={`absolute top-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-secondary/30 ${slide.slot === 0 ? "h-[94%]" : "h-[82%]"} ${slotClasses[slide.slot]} ${zClassBySlot[slide.slot]}`}
             >
-              <Image
+              <CloudinaryImage
                 src={slide.image.src}
                 alt={slide.image.alt}
                 fill
                 priority={slide.slot === 0}
-                sizes="(max-width: 768px) 56vw, (max-width: 1200px) 42vw, 34vw"
+                sizes={CLOUDINARY_SIZES.carousel}
                 className="object-cover object-top"
               />
               <div className="absolute inset-x-0 bottom-0 p-4 text-center">

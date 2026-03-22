@@ -236,17 +236,17 @@ export default async function PolicyPage({ params }: PolicyPageProps) {
   return (
     <main className="min-h-screen bg-paper text-primary">
       {/* Hero band */}
-      <section className="bg-primary px-5 pb-14 pt-28 text-secondary md:px-8 lg:px-12">
-        <div className="mx-auto w-full max-w-7xl">
+      <section className="bg-primary px-5 pb-14 pt-14 text-secondary md:px-8 lg:px-12 mt-14 md:mt-18">
+        <div className="mx-auto w-full max-w-6xl flex items-start justify-start">
           <Link
             href="/"
             aria-label="Return to NaariThread homepage"
-            className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-secondary/70 transition hover:text-secondary"
+            className="hidden sm:inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-secondary/70 transition hover:text-secondary"
           >
             <DynamicHugeIcon name="ArrowLeft01Icon" className="h-3.5 w-3.5" iconStrokeWidth={1.9} />
             Back to Home
           </Link>
-          <div className="mx-auto mt-8 max-w-4xl text-center">
+          <div className="mx-auto max-w-4xl text-center">
             <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-secondary/70 sm:text-xs sm:tracking-[0.34em]">
               {policy.eyebrow}
             </p>
@@ -262,7 +262,7 @@ export default async function PolicyPage({ params }: PolicyPageProps) {
       </section>
 
       {/* Policy content */}
-      <section className="px-5 py-16 md:px-8 lg:px-12">
+      <section className="px-5 py-8 md:py-16 md:px-8 lg:px-12">
         <div className="mx-auto w-full max-w-6xl">
           <div className="grid grid-cols-1 gap-10 lg:grid-cols-4">
             {/* Sticky section nav on large screens */}
@@ -288,14 +288,14 @@ export default async function PolicyPage({ params }: PolicyPageProps) {
             </aside>
 
             {/* Section content */}
-            <div className="space-y-12 lg:col-span-3">
+            <div className="space-y-8 md:space-y-12 lg:col-span-3">
               {policy.sections.map((section) => (
                 <div
                   key={section.heading}
                   id={section.heading.toLowerCase().replace(/[^a-z0-9]+/g, "-")}
                   className="scroll-mt-24 rounded-2xl border border-primary/10 bg-secondary p-6 sm:p-8"
                 >
-                  <h2 className="text-[1.5rem] leading-tight text-primary sm:text-3xl">
+                  <h2 className="font-display text-[1.5rem] leading-tight text-primary sm:text-3xl">
                     {section.heading}
                   </h2>
                   <ul className="mt-5 space-y-3 sm:space-y-3.5">
