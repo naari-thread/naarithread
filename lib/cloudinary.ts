@@ -16,8 +16,8 @@ const CLOUDINARY_HOST = "res.cloudinary.com";
 export const CLOUDINARY_SIZES = {
   hero: "(max-width: 640px) 100vw, (max-width: 1024px) 94vw, 50vw",
   story: "(max-width: 1024px) 100vw, 50vw",
-  carousel: "(max-width: 768px) 56vw, (max-width: 1200px) 42vw, 34vw",
-  card: "(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 25vw",
+  carousel: "(max-width: 768px) 64vw, (max-width: 1200px) 42vw, 34vw",
+  card: "(max-width: 768px) 48vw, (max-width: 1280px) 50vw, 25vw",
 } as const;
 
 export function isCloudinaryUrl(src: string): boolean {

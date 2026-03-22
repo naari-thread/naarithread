@@ -8,7 +8,6 @@ import {
 
 type CloudinaryImageProps = ImageProps & {
   cloudinaryOptions?: Omit<CloudinaryTransformOptions, "width" | "quality">;
-  revealFromTop?: boolean;
 };
 
 function resolveImageSrc(src: ImageProps["src"]): string {
@@ -31,7 +30,6 @@ export function CloudinaryImage({
   src,
   alt,
   cloudinaryOptions,
-  revealFromTop = true,
   className,
   ...props
 }: CloudinaryImageProps) {
@@ -41,16 +39,12 @@ export function CloudinaryImage({
     return <Image src={src} alt={alt} className={className} {...props} />;
   }
 
-  const revealClassName = [className, revealFromTop ? "cloudinary-reveal-down" : ""]
-    .filter(Boolean)
-    .join(" ");
-
   return (
     <Image
       src={normalizedSrc}
       alt={alt}
       loader={createCloudinaryLoader(cloudinaryOptions)}
-      className={revealClassName}
+      className={className}
       {...props}
     />
   );

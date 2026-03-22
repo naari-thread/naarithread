@@ -52,19 +52,8 @@
     }
   }
 
-  @keyframes reveal-down {
-    from {
-      clip-path: inset(0 0 100% 0);
-      opacity: 0.2;
-    }
-    to {
-      clip-path: inset(0 0 0 0);
-      opacity: 1;
-    }
-  }
-
   .section-shell {
-    @apply relative flex min-h-screen w-full items-center overflow-hidden;
+    @apply relative flex min-h-0 w-full items-start overflow-hidden md:min-h-screen md:items-center;
   }
 
   .marquee-left {
@@ -77,19 +66,6 @@
 
   .image-fade-enter {
     @apply transition duration-700 ease-out;
-  }
-
-  .cloudinary-reveal-down {
-    animation: reveal-down 720ms cubic-bezier(0.22, 1, 0.36, 1) both;
-    will-change: clip-path, opacity;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .cloudinary-reveal-down {
-      animation: none;
-      clip-path: inset(0 0 0 0);
-      opacity: 1;
-    }
   }
 
   .thread-underline {
