@@ -108,7 +108,7 @@
 
   .font-display {
     font-family: var(--font-display), "Times New Roman", serif;
-    letter-spacing: 0.02em;
+    /* letter-spacing: 0.01em; */
   }
 
   .font-body {

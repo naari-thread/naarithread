@@ -251,7 +251,7 @@ export function LandingPage() {
           >
             <motion.h1
               variants={revealItem}
-              className="font-display max-w-xl text-[2.1rem] font-semibold leading-[0.94] text-primary sm:text-[3.5rem] sm:leading-[0.92] lg:text-[4.5rem]"
+              className="font-display max-w-xl text-[2.15rem] font-semibold leading-[0.94]  text-primary sm:text-[3.5rem] lg:text-[4rem]"
             >
               Wear Your Story.
             </motion.h1>

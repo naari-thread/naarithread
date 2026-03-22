@@ -36,6 +36,9 @@ const iconLoaders: Record<HugeIconName, () => Promise<{ default: HugeIconData }>
   WhatsappIcon: () => import("@hugeicons/core-free-icons/WhatsappIcon"),
 };
 
+const iconCache = new Map<HugeIconName, HugeIconData>();
+const iconPromiseCache = new Map<HugeIconName, Promise<HugeIconData>>();
+
 type DynamicHugeIconProps = Omit<SVGProps<SVGSVGElement>, "name"> & {
   name: HugeIconName;
   iconStrokeWidth?: number;
@@ -51,15 +54,38 @@ export function DynamicHugeIcon({
   "aria-hidden": ariaHidden = true,
   ...rest
 }: DynamicHugeIconProps) {
-  const [iconData, setIconData] = useState<HugeIconData | null>(null);
+  const [iconData, setIconData] = useState<HugeIconData | null>(() => iconCache.get(name) ?? null);
+  const resolvedIconData = iconCache.get(name) ?? iconData;
 
   useEffect(() => {
     let mounted = true;
 
-    iconLoaders[name]()
-      .then((module) => {
+    if (iconCache.has(name)) {
+      return () => {
+        mounted = false;
+      };
+    }
+
+    const existingPromise = iconPromiseCache.get(name);
+    const loadPromise =
+      existingPromise ??
+      iconLoaders[name]()
+        .then((module) => {
+          iconCache.set(name, module.default);
+          return module.default;
+        })
+        .finally(() => {
+          iconPromiseCache.delete(name);
+        });
+
+    if (!existingPromise) {
+      iconPromiseCache.set(name, loadPromise);
+    }
+
+    loadPromise
+      .then((data) => {
         if (mounted) {
-          setIconData(module.default);
+          setIconData(data);
         }
       })
       .catch(() => {
@@ -73,7 +99,7 @@ export function DynamicHugeIcon({
     };
   }, [name]);
 
-  if (!iconData) {
+  if (!resolvedIconData) {
     return <span className={className} aria-hidden={ariaHidden} />;
   }
 
@@ -86,7 +112,7 @@ export function DynamicHugeIcon({
       aria-hidden={ariaHidden}
       {...rest}
     >
-      {iconData.map(([tagName, attrs], index) => {
+      {resolvedIconData.map(([tagName, attrs], index) => {
         const iconKey = typeof attrs.key === "string" ? attrs.key : `${tagName}-${index}`;
         const mergedAttrs =
           iconStrokeWidth && Object.prototype.hasOwnProperty.call(attrs, "strokeWidth")

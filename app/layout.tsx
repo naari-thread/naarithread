@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import localFont from "next/font/local";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Lora, Plus_Jakarta_Sans } from "next/font/google";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/react";
 import { SmoothScrollProvider } from "@/app/components/smooth-scroll-provider";
@@ -8,10 +7,12 @@ import { Navbar } from "@/app/components/navbar";
 import { AiChat } from "@/app/components/ai-chat";
 import "./globals.css";
 
-const samarkanDisplay = localFont({
-  src: "../public/font/samarkan/samarn.ttf",
+const loraDisplay = Lora({
   variable: "--font-display",
+  subsets: ["latin"],
   display: "swap",
+  weight: ["400", "500", "600", "700"],
+  style: ["normal", "italic"],
 });
 
 const plusJakartaSans = Plus_Jakarta_Sans({
@@ -78,7 +79,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${samarkanDisplay.variable} ${plusJakartaSans.variable} bg-paper text-primary antialiased`}>
+      <body className={`${loraDisplay.variable} ${plusJakartaSans.variable} bg-paper text-primary antialiased`}>
         <Navbar />
         <SmoothScrollProvider>{children}</SmoothScrollProvider>
         <AiChat />
