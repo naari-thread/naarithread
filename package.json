@@ -6,15 +6,19 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "appwrite:setup-db": "node scripts/appwrite/setup-database.mjs"
   },
   "dependencies": {
     "@hugeicons/core-free-icons": "^4.0.0",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
+    "appwrite": "^23.0.0",
+    "dotenv": "^17.3.1",
     "framer-motion": "^12.36.0",
     "lenis": "^1.3.18",
     "next": "16.1.6",
+    "node-appwrite": "^22.1.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "sonner": "^2.0.7"

@@ -16,6 +16,7 @@ type HugeIconName =
   | "MailSend01Icon"
   | "Mail01Icon"
   | "Moon01Icon"
+  | "Notification01Icon"
   | "NextIcon"
   | "PreviousIcon"
   | "FilterHorizontalIcon"
@@ -44,6 +45,7 @@ const iconLoaders: Record<HugeIconName, () => Promise<{ default: HugeIconData }>
   MailSend01Icon: () => import("@hugeicons/core-free-icons/MailSend01Icon"),
   Mail01Icon: () => import("@hugeicons/core-free-icons/Mail01Icon"),
   Moon01Icon: () => import("@hugeicons/core-free-icons/Moon01Icon"),
+  Notification01Icon: () => import("@hugeicons/core-free-icons/Notification01Icon"),
   NextIcon: () => import("@hugeicons/core-free-icons/ArrowRight01Icon"),
   PreviousIcon: () => import("@hugeicons/core-free-icons/ArrowLeft01Icon"),
   Search01Icon: () => import("@hugeicons/core-free-icons/Search01Icon"),

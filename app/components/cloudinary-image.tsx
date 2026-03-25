@@ -10,6 +10,22 @@ type CloudinaryImageProps = ImageProps & {
   cloudinaryOptions?: Omit<CloudinaryTransformOptions, "width" | "quality">;
 };
 
+const FALLBACK_IMAGE_SRC = "/logo4.png";
+
+function isValidNextImageSrc(src: string) {
+  if (!src) {
+    return false;
+  }
+
+  return (
+    src.startsWith("/") ||
+    src.startsWith("http://") ||
+    src.startsWith("https://") ||
+    src.startsWith("data:image/") ||
+    src.startsWith("blob:")
+  );
+}
+
 function resolveImageSrc(src: ImageProps["src"]): string {
   if (typeof src === "string") {
     return src;
@@ -35,8 +51,12 @@ export function CloudinaryImage({
 }: CloudinaryImageProps) {
   const normalizedSrc = resolveImageSrc(src);
 
+  if (!isValidNextImageSrc(normalizedSrc)) {
+    return <Image src={FALLBACK_IMAGE_SRC} alt={alt} className={className} {...props} />;
+  }
+
   if (!isCloudinaryUrl(normalizedSrc)) {
-    return <Image src={src} alt={alt} className={className} {...props} />;
+    return <Image src={normalizedSrc} alt={alt} className={className} {...props} />;
   }
 
   return (

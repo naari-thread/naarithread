@@ -2,10 +2,12 @@ import type { Metadata } from "next";
 import { Lora, Plus_Jakarta_Sans } from "next/font/google";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/react";
+import { Toaster } from "sonner";
 import { SmoothScrollProvider } from "@/app/components/smooth-scroll-provider";
 import { Navbar } from "@/app/components/navbar";
 import { AiChat } from "@/app/components/ai-chat";
 import { MobileProductsBottomBar } from "@/app/components/mobile-products-bottom-bar";
+import { AuthProvider } from "@/app/components/auth-provider";
 import "./globals.css";
 
 const loraDisplay = Lora({
@@ -81,12 +83,28 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${loraDisplay.variable} ${plusJakartaSans.variable} bg-paper text-primary antialiased`}>
-        <Navbar />
-        <SmoothScrollProvider>{children}</SmoothScrollProvider>
-        <MobileProductsBottomBar />
-        <AiChat />
-        <SpeedInsights />
-        <Analytics />
+        <AuthProvider>
+          <Navbar />
+          <SmoothScrollProvider>{children}</SmoothScrollProvider>
+          <MobileProductsBottomBar />
+          <AiChat />
+          <Toaster
+            position="top-right"
+            richColors
+            toastOptions={{
+              classNames: {
+                toast:
+                  "border border-primary/20 !bg-primary !text-secondary shadow-[0_14px_35px_rgba(42,15,15,0.30)]",
+                title: "font-semibold text-secondary",
+                description: "text-secondary/85",
+                actionButton: "!bg-secondary !text-primary !border !border-secondary/30",
+                cancelButton: "!bg-secondary/20 !text-secondary",
+              },
+            }}
+          />
+          <SpeedInsights />
+          <Analytics />
+        </AuthProvider>
       </body>
     </html>
   );

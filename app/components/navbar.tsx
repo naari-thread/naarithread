@@ -101,6 +101,7 @@ const menuItem = {
 export function Navbar() {
   const pathname = usePathname();
   const prefersReducedMotion = useReducedMotion();
+  const isLandingPage = pathname === "/";
   const hideOnMobile = pathname !== "/";
   const [scrolled, setScrolled] = useState(false);
   const [isHeroInView, setIsHeroInView] = useState(pathname === "/");
@@ -213,105 +214,128 @@ export function Navbar() {
             />
           </Link>
 
-          <motion.nav
-            aria-label="Categories"
-            className="hidden items-center gap-6 md:flex lg:gap-8"
-            initial={false}
-            animate={prefersReducedMotion ? undefined : { x: showShopNow ? -22 : 0 }}
-            transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
-          >
-            {navCategories.map((category) => (
-              <div
-                key={category.id}
-                className="relative"
-                onMouseEnter={() => openDesktopDropdown(category.id)}
-                onMouseLeave={closeDesktopDropdown}
-                onFocus={() => openDesktopDropdown(category.id)}
-                onBlur={closeDesktopDropdown}
-              >
-                <button
-                  type="button"
-                  aria-label={`Open ${category.label} dropdown`}
-                  aria-expanded={activeDesktopCategory === category.id}
-                  aria-haspopup="menu"
-                  onClick={() =>
-                    setActiveDesktopCategory((current) => (current === category.id ? null : category.id))
-                  }
-                  className="inline-flex items-center gap-1.5 text-[0.66rem] font-semibold uppercase tracking-[0.24em] text-primary/85 transition hover:text-primary lg:text-[0.7rem]"
+          {isLandingPage ? (
+            <motion.nav
+              aria-label="Categories"
+              className="hidden items-center gap-6 md:flex lg:gap-8"
+              initial={false}
+              animate={prefersReducedMotion ? undefined : { x: showShopNow ? -22 : 0 }}
+              transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+            >
+              {navCategories.map((category) => (
+                <div
+                  key={category.id}
+                  className="relative"
+                  onMouseEnter={() => openDesktopDropdown(category.id)}
+                  onMouseLeave={closeDesktopDropdown}
+                  onFocus={() => openDesktopDropdown(category.id)}
+                  onBlur={closeDesktopDropdown}
                 >
-                  {category.label}
-                  <motion.span
-                    className="inline-flex h-3.5 w-3.5 items-center justify-center"
-                    initial={false}
-                    animate={
-                      prefersReducedMotion
-                        ? undefined
-                        : {
-                            rotate: activeDesktopCategory === category.id ? 180 : 0,
-                            y: activeDesktopCategory === category.id ? -0.2 : 0,
-                          }
+                  <button
+                    type="button"
+                    aria-label={`Open ${category.label} dropdown`}
+                    aria-expanded={activeDesktopCategory === category.id}
+                    aria-haspopup="menu"
+                    onClick={() =>
+                      setActiveDesktopCategory((current) => (current === category.id ? null : category.id))
                     }
-                    transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                    className="inline-flex items-center gap-1.5 text-[0.66rem] font-semibold uppercase tracking-[0.24em] text-primary/85 transition hover:text-primary lg:text-[0.7rem]"
                   >
-                    <DynamicHugeIcon
-                      name={activeDesktopCategory === category.id ? "PreviousIcon" : "ArrowRight01Icon"}
-                      className="h-3.5 w-3.5 rotate-90 text-primary/75"
-                      iconStrokeWidth={2}
-                    />
-                  </motion.span>
-                </button>
-
-                <AnimatePresence>
-                  {activeDesktopCategory === category.id ? (
-                    <motion.div
-                      initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 10, scale: 0.98 }}
-                      animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
-                      exit={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 6, scale: 0.98 }}
-                      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-                      className="absolute left-1/2 top-full z-[130] mt-3 w-[280px] -translate-x-1/2 rounded-2xl border border-primary/12 bg-secondary p-4 shadow-[0_20px_42px_rgba(120,0,0,0.14)]"
+                    {category.label}
+                    <motion.span
+                      className="inline-flex h-3.5 w-3.5 items-center justify-center"
+                      initial={false}
+                      animate={
+                        prefersReducedMotion
+                          ? undefined
+                          : {
+                              rotate: activeDesktopCategory === category.id ? 180 : 0,
+                              y: activeDesktopCategory === category.id ? -0.2 : 0,
+                            }
+                      }
+                      transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
                     >
-                      {/* <p className="text-[0.58rem] font-semibold uppercase tracking-[0.25em] text-primary/60">
-                        {category.label}
-                      </p> */}
-                      {/* <p className="mt-1.5 text-xs text-primary/75">{category.note}</p> */}
-                      <div className="mt-3 flex flex-col gap-2">
-                        {category.subCategories.map((subCategory) => (
+                      <DynamicHugeIcon
+                        name={activeDesktopCategory === category.id ? "PreviousIcon" : "ArrowRight01Icon"}
+                        className="h-3.5 w-3.5 rotate-90 text-primary/75"
+                        iconStrokeWidth={2}
+                      />
+                    </motion.span>
+                  </button>
+
+                  <AnimatePresence>
+                    {activeDesktopCategory === category.id ? (
+                      <motion.div
+                        initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 10, scale: 0.98 }}
+                        animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+                        exit={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 6, scale: 0.98 }}
+                        transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                        className="absolute left-1/2 top-full z-[130] mt-3 w-[280px] -translate-x-1/2 rounded-2xl border border-primary/12 bg-secondary p-4 shadow-[0_20px_42px_rgba(120,0,0,0.14)]"
+                      >
+                        <div className="mt-3 flex flex-col gap-2">
+                          {category.subCategories.map((subCategory) => (
+                            <Link
+                              key={`${category.id}-${subCategory.slug}`}
+                              href={categoryHref(category.slug, subCategory.slug)}
+                              aria-label={`Browse ${subCategory.label} in ${category.label}`}
+                              className="group inline-flex items-center justify-between rounded-xl px-2.5 py-2 text-sm text-primary/80 transition hover:bg-primary/[0.06] hover:text-primary"
+                              onClick={() => setActiveDesktopCategory(null)}
+                            >
+                              <span>{subCategory.label}</span>
+                              <DynamicHugeIcon
+                                name="ArrowRight01Icon"
+                                className="h-3.5 w-3.5 text-primary/45 transition group-hover:translate-x-0.5 group-hover:text-primary/75"
+                                iconStrokeWidth={2}
+                              />
+                            </Link>
+                          ))}
+
                           <Link
-                            key={`${category.id}-${subCategory.slug}`}
-                            href={categoryHref(category.slug, subCategory.slug)}
-                            aria-label={`Browse ${subCategory.label} in ${category.label}`}
-                            className="group inline-flex items-center justify-between rounded-xl px-2.5 py-2 text-sm text-primary/80 transition hover:bg-primary/[0.06] hover:text-primary"
+                            href={categoryHref(category.slug)}
+                            aria-label={`View all ${category.label}`}
+                            className="group mt-1 inline-flex items-center justify-between rounded-xl border border-primary/20 bg-primary px-3.5 py-2.5 text-[0.66rem] font-semibold uppercase tracking-[0.18em] text-secondary transition hover:-translate-y-0.5 hover:border-primary hover:bg-primary/90"
                             onClick={() => setActiveDesktopCategory(null)}
                           >
-                            <span>{subCategory.label}</span>
+                            <span>View All {category.label}</span>
                             <DynamicHugeIcon
                               name="ArrowRight01Icon"
-                              className="h-3.5 w-3.5 text-primary/45 transition group-hover:translate-x-0.5 group-hover:text-primary/75"
+                              className="h-3.5 w-3.5 transition group-hover:translate-x-0.5"
                               iconStrokeWidth={2}
                             />
                           </Link>
-                        ))}
-
-                        <Link
-                          href={categoryHref(category.slug)}
-                          aria-label={`View all ${category.label}`}
-                          className="group mt-1 inline-flex items-center justify-between rounded-xl border border-primary/20 bg-primary px-3.5 py-2.5 text-[0.66rem] font-semibold uppercase tracking-[0.18em] text-secondary transition hover:-translate-y-0.5 hover:border-primary hover:bg-primary/90"
-                          onClick={() => setActiveDesktopCategory(null)}
-                        >
-                          <span>View All {category.label}</span>
-                          <DynamicHugeIcon
-                            name="ArrowRight01Icon"
-                            className="h-3.5 w-3.5 transition group-hover:translate-x-0.5"
-                            iconStrokeWidth={2}
-                          />
-                        </Link>
-                      </div>
-                    </motion.div>
+                        </div>
+                      </motion.div>
+                    ) : null}
+                  </AnimatePresence>
+                </div>
+              ))}
+            </motion.nav>
+          ) : (
+            <nav aria-label="Quick links" className="hidden items-center gap-5 md:flex">
+              {[
+                { href: "/wishlist", label: "Wishlist", icon: "FavouriteIcon" as const },
+                { href: "/cart", label: "Cart", icon: "ShoppingCart01Icon" as const },
+                { href: "/account", label: "Notifications", icon: "Notification01Icon" as const },
+                { href: "/account", label: "Account", icon: "UserIcon" as const },
+              ].map((item) => (
+                <Link
+                  key={item.label}
+                  href={item.href}
+                  aria-label={`Open ${item.label}`}
+                  className="group relative inline-flex h-8 w-8 items-center justify-center text-primary/70 transition hover:text-primary"
+                >
+                  <DynamicHugeIcon
+                    name={item.icon}
+                    className="h-5 w-5 transition group-hover:scale-[1.06]"
+                    iconStrokeWidth={2}
+                  />
+                  {item.label === "Notifications" ? (
+                    <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-primary" aria-hidden={true} />
                   ) : null}
-                </AnimatePresence>
-              </div>
-            ))}
-          </motion.nav>
+                </Link>
+              ))}
+            </nav>
+          )}
 
           <button
             type="button"
@@ -342,7 +366,7 @@ export function Navbar() {
           </button>
 
           <AnimatePresence initial={false}>
-            {showShopNow ? (
+            {isLandingPage && showShopNow ? (
               <motion.div
                 className="hidden lg:block"
                 initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, x: 18 }}
