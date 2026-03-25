@@ -14,6 +14,7 @@ type EmailOtpAuthFormProps = {
 };
 
 type StepState = "email" | "otp";
+type OtpAction = "send" | "resend" | "verify" | null;
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -25,47 +26,65 @@ export function EmailOtpAuthForm({ title, description, onSuccess }: EmailOtpAuth
   const [userId, setUserId] = useState("");
   const [otp, setOtp] = useState("");
   const [errorText, setErrorText] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeAction, setActiveAction] = useState<OtpAction>(null);
 
   const canSendOtp = useMemo(() => emailPattern.test(email.trim().toLowerCase()), [email]);
   const canVerify = otp.length === 6 && /^\d{6}$/.test(otp);
+  const isSendingOtp = activeAction === "send";
+  const isResendingOtp = activeAction === "resend";
+  const isVerifyingOtp = activeAction === "verify";
+  const isSubmitting = activeAction !== null;
 
   const otpButtonClassName =
     "mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl border border-primary bg-primary px-4 text-xs font-semibold uppercase tracking-[0.2em] text-secondary transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60";
 
-  const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
+  const requestOtp = async (action: "send" | "resend") => {
     if (!canSendOtp) {
       setErrorText("Enter a valid email to continue.");
       return;
     }
 
     setErrorText("");
-    setIsSubmitting(true);
+    setActiveAction(action);
 
     try {
       const response = await sendEmailOtp(email);
       setUserId(response.userId);
       setEmail(response.email);
       setStep("otp");
-      toast.success("OTP sent", {
-        description: `Check inbox for ${response.email}.`,
-      });
+      setOtp("");
+
+      if (action === "send") {
+        toast.success("OTP sent", {
+          description: `Check inbox for ${response.email}.`,
+        });
+      } else {
+        toast.success("OTP resent", {
+          description: `A fresh code was sent to ${response.email}.`,
+        });
+      }
     } catch (error) {
       const message = normalizeError(error);
       if (message.toLowerCase().includes("failed to fetch")) {
-        const networkMessage =
-          "Could not reach Appwrite endpoint. Verify NEXT_PUBLIC_APPWRITE_ENDPOINT / PROJECT_ID, then restart the dev server.";
+        const networkMessage = "Could not reach authentication service from this device. Please check network and try again.";
         setErrorText(networkMessage);
         toast.error("Network error", { description: networkMessage });
+      } else if (message.toLowerCase().includes("not configured")) {
+        const configMessage = "Authentication is temporarily unavailable on this device. Refresh and try again.";
+        setErrorText(configMessage);
+        toast.error("Auth unavailable", { description: configMessage });
       } else {
         setErrorText(message);
-        toast.error("Could not send OTP", { description: message });
+        toast.error(action === "send" ? "Could not send OTP" : "Could not resend OTP", { description: message });
       }
     } finally {
-      setIsSubmitting(false);
+      setActiveAction(null);
     }
+  };
+
+  const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await requestOtp("send");
   };
 
   const handleOtpSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -77,7 +96,7 @@ export function EmailOtpAuthForm({ title, description, onSuccess }: EmailOtpAuth
     }
 
     setErrorText("");
-    setIsSubmitting(true);
+    setActiveAction("verify");
 
     try {
       await verifyEmailOtp(userId, otp);
@@ -91,40 +110,12 @@ export function EmailOtpAuthForm({ title, description, onSuccess }: EmailOtpAuth
       setErrorText(message);
       toast.error("OTP verification failed", { description: message });
     } finally {
-      setIsSubmitting(false);
+      setActiveAction(null);
     }
   };
 
   const handleResendOtp = async () => {
-    if (!emailPattern.test(email.trim().toLowerCase())) {
-      setErrorText("Enter a valid email to continue.");
-      return;
-    }
-
-    setErrorText("");
-    setIsSubmitting(true);
-
-    try {
-      const response = await sendEmailOtp(email);
-      setUserId(response.userId);
-      setOtp("");
-      toast.success("OTP resent", {
-        description: `A fresh code was sent to ${response.email}.`,
-      });
-    } catch (error) {
-      const message = normalizeError(error);
-      if (message.toLowerCase().includes("failed to fetch")) {
-        const networkMessage =
-          "Could not reach Appwrite endpoint. Verify NEXT_PUBLIC_APPWRITE_ENDPOINT / PROJECT_ID, then restart the dev server.";
-        setErrorText(networkMessage);
-        toast.error("Network error", { description: networkMessage });
-      } else {
-        setErrorText(message);
-        toast.error("Could not resend OTP", { description: message });
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
+    await requestOtp("resend");
   };
 
   if (!isConfigured) {
@@ -176,7 +167,17 @@ export function EmailOtpAuthForm({ title, description, onSuccess }: EmailOtpAuth
               disabled={!canSendOtp || isSubmitting}
               className={otpButtonClassName}
             >
-              {isSubmitting ? "Sending OTP..." : "Send OTP"}
+              {isSendingOtp ? "Sending OTP..." : "Send OTP"}
+            </button>
+
+            <button
+              type="button"
+              aria-label="Resend OTP email"
+              onClick={() => void handleResendOtp()}
+              disabled={!canSendOtp || isSubmitting}
+              className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-xl border border-primary/22 bg-secondary px-4 text-xs font-semibold uppercase tracking-[0.2em] text-primary transition hover:border-primary/40 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isResendingOtp ? "Resending..." : "Resend Email"}
             </button>
 
             <div className="mt-5 flex items-center gap-3">
@@ -209,7 +210,7 @@ export function EmailOtpAuthForm({ title, description, onSuccess }: EmailOtpAuth
             </p>
 
             <div className="mt-4">
-              <AnimatedOtpInput value={otp} onChange={setOtp} disabled={isSubmitting} />
+              <AnimatedOtpInput value={otp} onChange={setOtp} disabled={isSubmitting} autoFocus={true} />
             </div>
 
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -221,6 +222,7 @@ export function EmailOtpAuthForm({ title, description, onSuccess }: EmailOtpAuth
                   setOtp("");
                   setErrorText("");
                 }}
+                disabled={isSubmitting}
                 className="inline-flex h-11 items-center justify-center rounded-xl border border-primary/22 bg-secondary px-4 text-xs font-semibold uppercase tracking-[0.2em] text-primary transition hover:border-primary/40"
               >
                 Change Email
@@ -232,7 +234,7 @@ export function EmailOtpAuthForm({ title, description, onSuccess }: EmailOtpAuth
                 disabled={isSubmitting}
                 className="inline-flex h-11 items-center justify-center rounded-xl border border-primary/22 bg-secondary px-4 text-xs font-semibold uppercase tracking-[0.2em] text-primary transition hover:border-primary/40 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isSubmitting ? "Resending..." : "Resend Email"}
+                {isResendingOtp ? "Resending..." : "Resend Email"}
               </button>
               <button
                 type="submit"
@@ -240,7 +242,7 @@ export function EmailOtpAuthForm({ title, description, onSuccess }: EmailOtpAuth
                 disabled={!canVerify || isSubmitting}
                 className="inline-flex h-11 w-full items-center justify-center rounded-xl border border-primary bg-primary px-4 text-xs font-semibold uppercase tracking-[0.2em] text-secondary transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isSubmitting ? "Verifying..." : "Verify OTP"}
+                {isVerifyingOtp ? "Verifying..." : "Verify OTP"}
               </button>
             </div>
           </motion.form>

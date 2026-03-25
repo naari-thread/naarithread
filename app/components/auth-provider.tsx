@@ -46,7 +46,24 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const syncUserProfile = useCallback(async (currentUser: Models.User<Models.Preferences>) => {
     const email = currentUser.email?.toLowerCase() ?? "";
     const isAdmin = appwritePublicConfig.adminEmails.includes(email);
-    await getOrCreateUserProfile({ user: currentUser, isAdmin });
+    console.info("[auth-profile] sync start", {
+      userId: currentUser.$id,
+      email: currentUser.email,
+      isAdmin,
+    });
+    const profile = await getOrCreateUserProfile({ user: currentUser, isAdmin });
+
+    if (!profile) {
+      console.warn("[auth-profile] client sync returned null profile (existing unreadable profile or permission restriction)", {
+        userId: currentUser.$id,
+      });
+      return;
+    }
+
+    console.info("[auth-profile] client sync success", {
+      userId: currentUser.$id,
+      profileId: profile.$id,
+    });
   }, []);
 
   const refreshUser = useCallback(async () => {
@@ -66,13 +83,22 @@ export function AuthProvider({ children }: PropsWithChildren) {
     try {
       const currentUser = await account.get();
       setUser(currentUser);
+      console.info("[auth-profile] refreshUser resolved current session", {
+        userId: currentUser.$id,
+        email: currentUser.email,
+      });
 
       try {
         await syncUserProfile(currentUser);
-      } catch {
+      } catch (error) {
         // Profile sync issues should not log users out if session is valid.
+        console.error("[auth-profile] client sync failed", {
+          userId: currentUser.$id,
+          error,
+        });
       }
     } catch {
+      console.warn("[auth-profile] refreshUser: no active session");
       setUser(null);
     } finally {
       setIsLoading(false);
@@ -84,13 +110,25 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [refreshUser]);
 
   const sendEmailOtp = useCallback(async (email: string) => {
+    if (!hasPublicAuthConfig()) {
+      throw new Error("Appwrite auth is not configured.");
+    }
+
     const account = getBrowserAccount();
     if (!account) {
       throw new Error("Appwrite auth is not configured.");
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    const token = await account.createEmailToken(ID.unique(), normalizedEmail);
+    let token;
+
+    try {
+      // Prefer object-style API for Appwrite SDK v23+.
+      token = await account.createEmailToken({ userId: ID.unique(), email: normalizedEmail });
+    } catch {
+      // Backward-compatible fallback for older overloaded signature usage.
+      token = await account.createEmailToken(ID.unique(), normalizedEmail);
+    }
 
     return {
       userId: token.userId,
@@ -99,12 +137,20 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, []);
 
   const verifyEmailOtp = useCallback(async (userId: string, secret: string) => {
+    if (!hasPublicAuthConfig()) {
+      throw new Error("Appwrite auth is not configured.");
+    }
+
     const account = getBrowserAccount();
     if (!account) {
       throw new Error("Appwrite auth is not configured.");
     }
 
-    await account.createSession(userId, secret);
+    try {
+      await account.createSession({ userId, secret });
+    } catch {
+      await account.createSession(userId, secret);
+    }
     await refreshUser();
   }, [refreshUser]);
 

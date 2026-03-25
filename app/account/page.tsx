@@ -13,6 +13,7 @@ import {
   type UserProfileDocument,
 } from "@/lib/appwrite/profiles";
 import { getBrowserAccount } from "@/lib/appwrite/client";
+import { hasUsersCollectionConfig } from "@/lib/appwrite/constants";
 
 export default function AccountPage() {
   const router = useRouter();
@@ -24,7 +25,6 @@ export default function AccountPage() {
   const [address, setAddress] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isProfileLoading, setIsProfileLoading] = useState(false);
-  const [statusMessage, setStatusMessage] = useState("");
   const [isOpeningAdmin, setIsOpeningAdmin] = useState(false);
 
   useEffect(() => {
@@ -40,7 +40,6 @@ export default function AccountPage() {
       }
 
       setIsProfileLoading(true);
-      setStatusMessage("");
 
       try {
         const synced = await getOrCreateUserProfile({ user, isAdmin });
@@ -58,7 +57,8 @@ export default function AccountPage() {
           return;
         }
 
-        setStatusMessage(normalizeError(error));
+        const message = normalizeError(error);
+        toast.error("Could not sync profile", { description: message });
       } finally {
         if (isMounted) {
           setIsProfileLoading(false);
@@ -75,7 +75,7 @@ export default function AccountPage() {
 
   const hasChanges = useMemo(() => {
     if (!profile) {
-      return Boolean(fullName.trim() || phone.trim() || address.trim());
+      return false;
     }
 
     return (
@@ -88,13 +88,21 @@ export default function AccountPage() {
   async function handleProfileUpdate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!profile?.$id) {
-      setStatusMessage("Users collection is not configured yet. Update environment variables and run setup script.");
+    if (!hasUsersCollectionConfig()) {
+      toast.error("Users profile storage is not configured", {
+        description: "Please check Appwrite public database and users collection environment variables.",
+      });
+      return;
+    }
+
+    if (isProfileLoading || !profile?.$id) {
+      toast.error("Profile still syncing", {
+        description: "Please wait a moment and try again.",
+      });
       return;
     }
 
     setIsSaving(true);
-    setStatusMessage("");
 
     try {
       const account = getBrowserAccount();
@@ -110,13 +118,11 @@ export default function AccountPage() {
       });
 
       setProfile(updated);
-      setStatusMessage("Profile updated successfully.");
       toast.success("Profile updated", {
         description: "Your account details have been saved.",
       });
     } catch (error) {
       const message = normalizeError(error);
-      setStatusMessage(message);
       toast.error("Could not update profile", { description: message });
     } finally {
       setIsSaving(false);
@@ -125,7 +131,6 @@ export default function AccountPage() {
 
   async function openAdminDashboard() {
     setIsOpeningAdmin(true);
-    setStatusMessage("");
 
     try {
       const jwt = await createAuthJwt();
@@ -147,7 +152,6 @@ export default function AccountPage() {
       router.push("/admindashboard");
     } catch (error) {
       const message = normalizeError(error);
-      setStatusMessage(message);
       toast.error("Admin access failed", { description: message });
     } finally {
       setIsOpeningAdmin(false);
@@ -286,7 +290,6 @@ export default function AccountPage() {
             ) : null}
 
             {isProfileLoading ? <p className="mt-4 text-sm text-primary/75">Syncing profile data...</p> : null}
-            {statusMessage ? <p className="mt-4 text-sm text-primary/85">{statusMessage}</p> : null}
           </motion.form>
         ) : null}
       </section>

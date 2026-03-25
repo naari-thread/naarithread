@@ -10,12 +10,12 @@ type MobileNavItem = {
   id: "shop" | "cart" | "wishlist" | "account";
   label: string;
   href: string;
-  icon: "ShoppingBag01Icon" | "ShoppingCart01Icon" | "FavouriteIcon" | "UserIcon";
+  icon: "ShoppingBag01Icon" | "ShoppingCart02Icon" | "FavouriteIcon" | "UserIcon";
 };
 
 const mobileNavItems: MobileNavItem[] = [
   { id: "shop", label: "Shop", href: "/products", icon: "ShoppingBag01Icon" },
-  { id: "cart", label: "Cart", href: "/cart", icon: "ShoppingCart01Icon" },
+  { id: "cart", label: "Cart", href: "/cart", icon: "ShoppingCart02Icon" },
   { id: "wishlist", label: "Wishlist", href: "/wishlist", icon: "FavouriteIcon" },
   { id: "account", label: "Account", href: "/account", icon: "UserIcon" },
 ];

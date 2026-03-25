@@ -27,11 +27,11 @@ export const appwritePublicConfig = {
 };
 
 export function hasPublicAuthConfig() {
-  return Boolean(appwritePublicConfig.projectId);
+  return Boolean(appwritePublicConfig.projectId && appwritePublicConfig.endpoint);
 }
 
 export function hasUsersCollectionConfig() {
-  return Boolean(appwritePublicConfig.projectId && appwritePublicConfig.databaseId);
+  return Boolean(appwritePublicConfig.projectId && appwritePublicConfig.databaseId && appwritePublicConfig.usersCollectionId);
 }
 
 export const appwriteServerConfig = {

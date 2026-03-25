@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 
 type AnimatedOtpInputProps = {
@@ -8,15 +8,26 @@ type AnimatedOtpInputProps = {
   onChange: (value: string) => void;
   length?: number;
   disabled?: boolean;
+  autoFocus?: boolean;
 };
 
-export function AnimatedOtpInput({ value, onChange, length = 6, disabled = false }: AnimatedOtpInputProps) {
+export function AnimatedOtpInput({ value, onChange, length = 6, disabled = false, autoFocus = false }: AnimatedOtpInputProps) {
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
 
   const normalized = useMemo(
     () => value.replace(/\D/g, "").slice(0, length).padEnd(length, " "),
     [length, value]
   );
+
+  useEffect(() => {
+    if (!autoFocus || disabled) {
+      return;
+    }
+
+    const firstEmptyIndex = normalized.split("").findIndex((cell) => cell === " ");
+    const targetIndex = firstEmptyIndex === -1 ? length - 1 : firstEmptyIndex;
+    inputRefs.current[targetIndex]?.focus();
+  }, [autoFocus, disabled, length, normalized]);
 
   return (
     <div className="flex items-center justify-center gap-2 sm:gap-3" aria-label="One-time password fields">

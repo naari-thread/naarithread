@@ -1,11 +1,15 @@
 import { Client, Databases, Query } from "node-appwrite";
+import { normalizeProductCategory, type ProductCategorySlug, type ProductSubCategorySlug } from "@/lib/product-taxonomy";
 
 export type ProductRecord = {
   id: string;
   name: string;
   description: string;
   sku: string;
-  category: string;
+  category: ProductCategorySlug;
+  subCategory: ProductSubCategorySlug;
+  categoryValue: string;
+  subCategoryValue: string;
   mainImageUrl: string;
   otherImageUrls: string[];
   discountPrice: number;
@@ -16,12 +20,27 @@ export type ProductRecord = {
   colorOptions: string[];
   sizeOptions: string[];
   isActive: boolean;
+  createdAt: string;
 };
 
 let resolvedDatabaseIdCache: string | null = null;
 
 function toNumber(value: unknown, fallback = 0) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return fallback;
+    }
+
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
+  return fallback;
 }
 
 function toStringArray(value: unknown) {
@@ -33,22 +52,48 @@ function toStringArray(value: unknown) {
 }
 
 function toProductRecord(document: Record<string, unknown>): ProductRecord {
+  const name = String(document.name ?? "Untitled Product");
+  const description = String(document.description ?? "");
+  const categoryRaw = String(document.category ?? "");
+  const subCategoryRaw = String(document.subCategory ?? document.subcategory ?? "");
+  const normalizedCategory = normalizeProductCategory({
+    categoryRaw,
+    subCategoryRaw,
+    name,
+    description,
+  });
+
   return {
     id: String(document.$id ?? ""),
-    name: String(document.name ?? "Untitled Product"),
-    description: String(document.description ?? ""),
-    sku: String(document.sku ?? ""),
-    category: String(document.category ?? ""),
-    mainImageUrl: String(document.mainImageUrl ?? ""),
-    otherImageUrls: toStringArray(document.otherImageUrls),
+    name,
+    description,
+    sku: String(document.sku ?? document.$id ?? ""),
+    category: normalizedCategory.category,
+    subCategory: normalizedCategory.subCategory,
+    categoryValue: categoryRaw.trim() || normalizedCategory.category,
+    subCategoryValue: subCategoryRaw.trim() || normalizedCategory.subCategory,
+    mainImageUrl: String(document.mainImageUrl ?? document.mainImage ?? ""),
+    otherImageUrls: toStringArray(document.otherImageUrls ?? document.altImages),
     discountPrice: toNumber(document.discountPrice),
     originalPrice: toNumber(document.originalPrice),
-    stockQty: toNumber(document.stockQty),
-    rating: toNumber(document.rating),
-    ratingCount: toNumber(document.ratingCount),
+    stockQty:
+      typeof document.inStock === "boolean"
+        ? (document.inStock ? 10 : 0)
+        : toNumber(document.stockQty),
+    rating: Math.min(
+      5,
+      Math.max(0, toNumber(document.rating ?? document.aggRating ?? document.averageRating ?? document.avgRating))
+    ),
+    ratingCount: Math.max(0, Math.trunc(toNumber(document.ratingCount ?? document.reviewCount ?? document.reviewsCount))),
     colorOptions: toStringArray(document.colorOptions),
-    sizeOptions: toStringArray(document.sizeOptions),
+    sizeOptions:
+      Array.isArray(document.sizeOptions)
+        ? toStringArray(document.sizeOptions)
+        : typeof document.size === "string"
+          ? [document.size]
+          : [],
     isActive: typeof document.isActive === "boolean" ? document.isActive : true,
+    createdAt: String(document.$createdAt ?? ""),
   };
 }
 
@@ -108,7 +153,7 @@ async function resolveDatabaseId(databases: Databases, configuredDatabaseId: str
   return configuredDatabaseId;
 }
 
-export async function listProductsFromCollection(category?: string) {
+export async function listProductsFromCollection() {
   const client = createReadClient();
   if (!client) {
     return [] as ProductRecord[];
@@ -119,20 +164,16 @@ export async function listProductsFromCollection(category?: string) {
 
   const queries: string[] = [Query.limit(100), Query.orderDesc("$createdAt")];
 
-  if (category) {
-    queries.push(Query.equal("category", category));
-  }
-
   let response;
   try {
-    response = await databases.listDocuments(configuredDatabaseId, "products", queries);
+    response = await databases.listDocuments(configuredDatabaseId, "sku", queries);
   } catch (error) {
     if (!isNotFoundError(error)) {
       throw error;
     }
 
     const resolvedDatabaseId = await resolveDatabaseId(databases, configuredDatabaseId);
-    response = await databases.listDocuments(resolvedDatabaseId, "products", queries);
+    response = await databases.listDocuments(resolvedDatabaseId, "sku", queries);
   }
 
   return response.documents.map((document) => toProductRecord(document as Record<string, unknown>));

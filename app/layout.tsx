@@ -91,14 +91,16 @@ export default function RootLayout({
           <Toaster
             position="top-right"
             richColors
+            expand
+            visibleToasts={4}
             toastOptions={{
               classNames: {
                 toast:
-                  "border border-primary/20 !bg-primary !text-secondary shadow-[0_14px_35px_rgba(42,15,15,0.30)]",
-                title: "font-semibold text-secondary",
-                description: "text-secondary/85",
-                actionButton: "!bg-secondary !text-primary !border !border-secondary/30",
-                cancelButton: "!bg-secondary/20 !text-secondary",
+                  "font-body rounded-2xl border border-primary/20 !bg-primary !text-secondary shadow-[0_14px_35px_rgba(42,15,15,0.30)]",
+                title: "font-body text-sm font-semibold tracking-[0.01em] text-secondary",
+                description: "font-body text-[0.82rem] leading-relaxed text-secondary/88",
+                actionButton: "font-body !h-8 !rounded-lg !bg-secondary !px-3 !text-xs !font-semibold !text-primary !border !border-secondary/30",
+                cancelButton: "font-body !h-8 !rounded-lg !bg-secondary/20 !px-3 !text-xs !font-semibold !text-secondary",
               },
             }}
           />
