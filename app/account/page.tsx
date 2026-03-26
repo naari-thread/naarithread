@@ -42,7 +42,14 @@ export default function AccountPage() {
       setIsProfileLoading(true);
 
       try {
-        const synced = await getOrCreateUserProfile({ user, isAdmin });
+        let synced = null;
+
+        try {
+          const jwt = await createAuthJwt();
+          synced = await getOrCreateUserProfile({ user, isAdmin, jwt });
+        } catch {
+          synced = await getOrCreateUserProfile({ user, isAdmin });
+        }
 
         if (!isMounted) {
           return;
@@ -71,7 +78,7 @@ export default function AccountPage() {
     return () => {
       isMounted = false;
     };
-  }, [isAdmin, normalizeError, user]);
+  }, [isAdmin, normalizeError, user, createAuthJwt]);
 
   const hasChanges = useMemo(() => {
     if (!profile) {

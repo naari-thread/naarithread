@@ -37,7 +37,16 @@ export function getBrowserAccount() {
   return browserAccount;
 }
 
-export function getBrowserDatabases() {
+export function getBrowserDatabases(jwt?: string) {
+  if (jwt) {
+    // Create a new authenticated client for this request
+    const client = new Client()
+      .setEndpoint(appwritePublicConfig.endpoint)
+      .setProject(appwritePublicConfig.projectId)
+      .setJWT(jwt);
+    return new Databases(client);
+  }
+
   if (browserDatabases) {
     return browserDatabases;
   }

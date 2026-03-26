@@ -19,7 +19,7 @@ type OtpAction = "send" | "resend" | "verify" | null;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function EmailOtpAuthForm({ title, description, onSuccess }: EmailOtpAuthFormProps) {
-  const { isConfigured, sendEmailOtp, verifyEmailOtp, normalizeError } = useAuth();
+  const { isConfigured, sendEmailOtp, verifyEmailOtp, signInWithGoogle, normalizeError } = useAuth();
 
   const [step, setStep] = useState<StepState>("email");
   const [email, setEmail] = useState("");
@@ -27,6 +27,7 @@ export function EmailOtpAuthForm({ title, description, onSuccess }: EmailOtpAuth
   const [otp, setOtp] = useState("");
   const [errorText, setErrorText] = useState("");
   const [activeAction, setActiveAction] = useState<OtpAction>(null);
+  const [isSigningInWithGoogle, setIsSigningInWithGoogle] = useState(false);
 
   const canSendOtp = useMemo(() => emailPattern.test(email.trim().toLowerCase()), [email]);
   const canVerify = otp.length === 6 && /^\d{6}$/.test(otp);
@@ -38,8 +39,10 @@ export function EmailOtpAuthForm({ title, description, onSuccess }: EmailOtpAuth
   const otpButtonClassName =
     "mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl border border-primary bg-primary px-4 text-xs font-semibold uppercase tracking-[0.2em] text-secondary transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60";
 
-  const requestOtp = async (action: "send" | "resend") => {
-    if (!canSendOtp) {
+  const requestOtp = async (action: "send" | "resend", emailOverride?: string) => {
+    const normalizedEmail = (emailOverride ?? email).trim().toLowerCase();
+
+    if (!emailPattern.test(normalizedEmail)) {
       setErrorText("Enter a valid email to continue.");
       return;
     }
@@ -48,7 +51,8 @@ export function EmailOtpAuthForm({ title, description, onSuccess }: EmailOtpAuth
     setActiveAction(action);
 
     try {
-      const response = await sendEmailOtp(email);
+      setEmail(normalizedEmail);
+      const response = await sendEmailOtp(normalizedEmail);
       setUserId(response.userId);
       setEmail(response.email);
       setStep("otp");
@@ -84,7 +88,9 @@ export function EmailOtpAuthForm({ title, description, onSuccess }: EmailOtpAuth
 
   const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    await requestOtp("send");
+    const formData = new FormData(event.currentTarget);
+    const submittedEmail = String(formData.get("email") ?? "");
+    await requestOtp("send", submittedEmail);
   };
 
   const handleOtpSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -116,6 +122,40 @@ export function EmailOtpAuthForm({ title, description, onSuccess }: EmailOtpAuth
 
   const handleResendOtp = async () => {
     await requestOtp("resend");
+  };
+
+  const handleGoogleSignIn = async () => {
+    setErrorText("");
+    setIsSigningInWithGoogle(true);
+
+    try {
+      await signInWithGoogle();
+      toast.success("Signed in with Google", {
+        description: "Redirecting to your account...",
+      });
+      onSuccess?.();
+    } catch (error) {
+      const message = normalizeError(error);
+      setErrorText(message);
+      
+      if (message.toLowerCase().includes("network") || message.toLowerCase().includes("fetch")) {
+        toast.error("Network error", {
+          description: message,
+        });
+      } else if (message.toLowerCase().includes("cancelled")) {
+        toast.info("Sign-in cancelled", {
+          description: message,
+        });
+      } else if (message.toLowerCase().includes("unauthorized") || message.toLowerCase().includes("401") || message.toLowerCase().includes("test user")) {
+        toast.error("Google auth setup incomplete", {
+          description: message,
+        });
+      } else {
+        toast.error("Google sign-in failed", { description: message });
+      }
+    } finally {
+      setIsSigningInWithGoogle(false);
+    }
   };
 
   if (!isConfigured) {
@@ -151,6 +191,7 @@ export function EmailOtpAuthForm({ title, description, onSuccess }: EmailOtpAuth
             </label>
             <input
               id="email-otp-auth-email"
+              name="email"
               type="email"
               autoComplete="email"
               aria-label="Email address for OTP login"
@@ -189,10 +230,11 @@ export function EmailOtpAuthForm({ title, description, onSuccess }: EmailOtpAuth
             <button
               type="button"
               aria-label="Continue with Google"
-              disabled
-              className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl border border-primary/22 bg-secondary px-4 text-xs font-semibold uppercase tracking-[0.2em] text-primary/80 opacity-70"
+              onClick={() => void handleGoogleSignIn()}
+              disabled={isSigningInWithGoogle || isSubmitting}
+              className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl border border-primary/22 bg-secondary px-4 text-xs font-semibold uppercase tracking-[0.2em] text-primary transition hover:border-primary/40 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Continue with Google (setup next)
+              {isSigningInWithGoogle ? "Signing in..." : "Continue with Google"}
             </button>
           </motion.form>
         ) : (

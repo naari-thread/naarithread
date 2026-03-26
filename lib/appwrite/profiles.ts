@@ -21,6 +21,23 @@ function getErrorMessage(error: unknown) {
   return String(error ?? "").toLowerCase();
 }
 
+function formatErrorForLogging(error: unknown) {
+  if (typeof error === "object" && error !== null) {
+    const obj: Record<string, unknown> = {};
+    if ("message" in error) obj.message = error.message;
+    if ("code" in error) obj.code = error.code;
+    if ("status" in error) obj.status = error.status;
+    if ("response" in error) obj.response = error.response;
+    if ("type" in error) obj.type = error.type;
+    // Fallback to toString if no properties were captured
+    if (Object.keys(obj).length === 0) {
+      obj.str = String(error);
+    }
+    return obj;
+  }
+  return error;
+}
+
 function isPermissionError(error: unknown) {
   const message = getErrorMessage(error);
 
@@ -60,17 +77,17 @@ function normalizeProfileError(error: unknown) {
 export async function getOrCreateUserProfile(args: {
   user: Models.User<Models.Preferences>;
   isAdmin: boolean;
+  jwt?: string;
 }) {
   if (!hasUsersCollectionConfig()) {
     return null;
   }
 
-  const databases = getBrowserDatabases();
+  const { user, isAdmin, jwt } = args;
+  const databases = getBrowserDatabases(jwt);
   if (!databases) {
     return null;
   }
-
-  const { user, isAdmin } = args;
   console.info("[auth-profile] start getOrCreateUserProfile", {
     userId: user.$id,
     email: user.email,
@@ -139,12 +156,24 @@ export async function getOrCreateUserProfile(args: {
         ]
       );
     } catch (error) {
+      const normalized = normalizeProfileError(error);
+
+      // Duplicate can happen when two sync calls race on first login.
+      if (isAlreadyExistsError(normalized)) {
+        console.info("[auth-profile] create profile duplicate during concurrent sync", {
+          userId: user.$id,
+          email: user.email,
+          error: formatErrorForLogging(normalized),
+        });
+        throw normalized;
+      }
+
       console.error("[auth-profile] create profile failed", {
         userId: user.$id,
         email: user.email,
-        error,
+        error: formatErrorForLogging(normalized),
       });
-      throw normalizeProfileError(error);
+      throw normalized;
     }
   };
 
@@ -177,7 +206,7 @@ export async function getOrCreateUserProfile(args: {
         query: query[0],
         userId: user.$id,
         email: user.email,
-        error: normalized,
+        error: formatErrorForLogging(normalized),
       });
       if (!isPermissionError(normalized)) {
         throw normalized;
@@ -197,7 +226,7 @@ export async function getOrCreateUserProfile(args: {
       console.error("[auth-profile] create profile failed with non-duplicate error", {
         userId: user.$id,
         email: user.email,
-        error,
+        error: formatErrorForLogging(error),
       });
       throw error;
     }
