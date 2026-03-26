@@ -209,6 +209,106 @@ const policyContent: Record<string, PolicyData> = {
       },
     ],
   },
+  "terms-of-service": {
+    title: "Terms of Service",
+    eyebrow: "Legal",
+    intro:
+      "These Terms of Service govern your use of NaariThread. By accessing the platform, you agree to comply with these terms.",
+    sections: [
+      {
+        heading: "Who Can Use the Platform",
+        items: [
+          "NaariThread is intended for users who are at least 18 years old, or minors using the platform under parental or legal guardian supervision.",
+          "The platform is currently intended for users located in India and serviceable regions where we can process orders and deliveries.",
+          "You agree to use the platform only for lawful purposes and in accordance with applicable regulations.",
+        ],
+      },
+      {
+        heading: "Account Responsibilities",
+        items: [
+          "You are responsible for keeping your account credentials secure and for activity under your account.",
+          "You agree to provide accurate account details, including name, email, and delivery information where needed.",
+          "NaariThread may suspend or terminate accounts involved in fraud, abuse, policy violations, or unlawful activity.",
+        ],
+      },
+      {
+        heading: "Payment Terms",
+        items: [
+          "All prices are listed in INR and are subject to change without prior notice.",
+          "Orders are confirmed only after successful payment authorization or verified COD confirmation, where applicable.",
+          "Payment processing is handled by trusted third-party payment providers. NaariThread does not store full card details.",
+        ],
+      },
+      {
+        heading: "Intellectual Property",
+        items: [
+          "All product images, branding, logos, text, and other platform content are owned by or licensed to NaariThread.",
+          "You may not copy, reproduce, distribute, or commercially use any NaariThread content without prior written permission.",
+        ],
+      },
+      {
+        heading: "Limitation of Liability",
+        items: [
+          "NaariThread is not liable for indirect, incidental, special, or consequential damages arising from platform use.",
+          "To the maximum extent permitted by law, NaariThread's total liability for any claim is limited to the amount paid for the relevant order.",
+          "We are not responsible for delays or failures caused by events beyond reasonable control, including logistics disruptions and force majeure.",
+        ],
+      },
+    ],
+  },
+  "privacy-policy": {
+    title: "Privacy Policy",
+    eyebrow: "Privacy",
+    intro:
+      "This Privacy Policy explains what limited information NaariThread accesses, why it is used, and how users can request deletion.",
+    sections: [
+      {
+        heading: "Data We Access",
+        items: [
+          "For account and order workflows, we may receive name, email address, and delivery address details provided by the user.",
+          "Payment information is processed by payment gateway partners and is not stored directly by NaariThread.",
+          "We use Google Sign-In for authentication. When you sign in with Google, we access your name, email address, and profile picture solely for account creation and identification purposes. We do not store your Google password.",
+        ],
+      },
+      {
+        heading: "Why We Use Data",
+        items: [
+          "To create and manage user accounts securely.",
+          "To process orders, coordinate delivery, and provide customer support.",
+          "To maintain account integrity, prevent misuse, and operate core platform functionality.",
+        ],
+      },
+      {
+        heading: "Third-Party Sharing",
+        items: [
+          "We share only necessary order and contact details with shipping and logistics partners to fulfill deliveries.",
+          "Payment transactions are handled by payment gateway providers under their own compliant security standards.",
+          "We do not sell personal data to third parties for advertising or unrelated marketing.",
+        ],
+      },
+      {
+        heading: "Data Deletion Requests",
+        items: [
+          "Users can request account and personal data deletion by contacting naarithread@gmail.com with their registered email and request details.",
+          "After verification, deletion requests are processed within a reasonable operational timeline, subject to legal or compliance retention requirements.",
+        ],
+      },
+      {
+        heading: "Cookie Usage",
+        items: [
+          "We may use essential cookies or similar technologies to keep users signed in, protect sessions, and support basic website functionality.",
+          "Where analytics or non-essential cookies are introduced, this policy will be updated accordingly.",
+        ],
+      },
+      {
+        heading: "Important Clarification",
+        items: [
+          "NaariThread only accesses data necessary for authentication and platform operations. We do not collect or store unnecessary personal information.",
+          "For Google OAuth verification: We use Google Sign-In for authentication. When you sign in with Google, we access your name, email address, and profile picture solely for account creation and identification purposes. We do not store your Google password.",
+        ],
+      },
+    ],
+  },
 };
 
 export async function generateStaticParams() {
