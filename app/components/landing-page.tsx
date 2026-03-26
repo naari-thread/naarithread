@@ -615,17 +615,11 @@ export function LandingPage() {
               { label: "Fusion Wear", href: categoryHref("fusion-wear") },
             ]}
           />
-          {/* <FooterLinks
-            title="Company"
-            links={[
-              { label: "Our Story", href: "/#story" },
-              { label: "Shop Collection", href: "/products" },
-              { label: "Ethnic Wear", href: "/#ethnic" },
-            ]}
-          /> */}
           <FooterLinks
             title="Policies"
             links={[
+              { label: "Privacy Policy", href: "/policies/privacy-policy" },
+              { label: "Terms of Service", href: "/policies/terms-of-service" },
               { label: "Shipping Policy", href: "/policies/shipping" },
               { label: "Return & Refund", href: "/policies/returns" },
               { label: "Terms & Conditions", href: "/policies/terms-and-conditions" },
