@@ -100,7 +100,7 @@ export function ProductCard({
         />
       ) : null}
 
-      <div className="relative h-full w-[42%] shrink-0 overflow-hidden bg-paper/50 sm:h-auto sm:w-full sm:aspect-[4/5]">
+      <div className="relative h-full w-[42%] shrink-0 overflow-hidden bg-paper/50 sm:h-auto sm:w-full lg:aspect-[4/4.5] sm:aspect-[4/5]">
         <CloudinaryImage
           src={mainImage}
           alt={product.name}
@@ -146,9 +146,9 @@ export function ProductCard({
           </div>
         </div>
 
-        <div className="mt-0 pt-1.5 sm:mt-2 sm:pt-0">
+        <div className="mt-0 py-1 sm:mt-2 sm:pt-0">
           <div className="flex items-baseline gap-2 sm:gap-2.5">
-            <span className="text-[1.05rem] font-medium tracking-wide text-primary/95 sm:text-[1.2rem]">
+            <span className="text-[1rem] font-semibold sm:font-medium tracking-wide text-primary/95 sm:text-[1.1rem]">
               {pricing.effectivePrice > 0 ? formatPrice(pricing.effectivePrice) : "Price on request"}
             </span>
             {pricing.strikePrice > 0 ? (
