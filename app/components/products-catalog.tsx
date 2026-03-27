@@ -358,51 +358,53 @@ export function ProductsCatalog({ products, activeCategory, activeSubCategory }:
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 border-b border-primary/12 pb-4 sm:gap-3">
-          <SelectDropdown
-            label="Categories"
-            placeholder="All Categories"
-            value={selectedCategory}
-            options={availableCategories}
-            clearable={true}
-            open={categoryOpen}
-            onToggle={() => {
-              setCategoryOpen((prev) => !prev);
-              setSubCategoryOpen(false);
-              setFilterOpen(false);
-            }}
-            onSelect={(value) => {
-              setSelectedCategory(value);
-              setSelectedSubCategory("");
-              setCategoryOpen(false);
-            }}
-            onClear={() => {
-              setSelectedCategory("");
-              setSelectedSubCategory("");
-              setCategoryOpen(false);
-            }}
-          />
+          <div className="hidden items-center gap-3 sm:flex">
+            <SelectDropdown
+              label="Categories"
+              placeholder="All Categories"
+              value={selectedCategory}
+              options={availableCategories}
+              clearable={true}
+              open={categoryOpen}
+              onToggle={() => {
+                setCategoryOpen((prev) => !prev);
+                setSubCategoryOpen(false);
+                setFilterOpen(false);
+              }}
+              onSelect={(value) => {
+                setSelectedCategory(value);
+                setSelectedSubCategory("");
+                setCategoryOpen(false);
+              }}
+              onClear={() => {
+                setSelectedCategory("");
+                setSelectedSubCategory("");
+                setCategoryOpen(false);
+              }}
+            />
 
-          <SelectDropdown
-            label="Subcategories"
-            placeholder="All Subcategories"
-            value={selectedSubCategory}
-            options={availableSubCategories}
-            clearable={true}
-            open={subCategoryOpen}
-            onToggle={() => {
-              setSubCategoryOpen((prev) => !prev);
-              setCategoryOpen(false);
-              setFilterOpen(false);
-            }}
-            onSelect={(value) => {
-              setSelectedSubCategory(value);
-              setSubCategoryOpen(false);
-            }}
-            onClear={() => {
-              setSelectedSubCategory("");
-              setSubCategoryOpen(false);
-            }}
-          />
+            <SelectDropdown
+              label="Subcategories"
+              placeholder="All Subcategories"
+              value={selectedSubCategory}
+              options={availableSubCategories}
+              clearable={true}
+              open={subCategoryOpen}
+              onToggle={() => {
+                setSubCategoryOpen((prev) => !prev);
+                setCategoryOpen(false);
+                setFilterOpen(false);
+              }}
+              onSelect={(value) => {
+                setSelectedSubCategory(value);
+                setSubCategoryOpen(false);
+              }}
+              onClear={() => {
+                setSelectedSubCategory("");
+                setSubCategoryOpen(false);
+              }}
+            />
+          </div>
 
           <div className="min-w-[220px] flex-1">
             <label
@@ -454,6 +456,43 @@ export function ProductsCatalog({ products, activeCategory, activeSubCategory }:
                   <p className="text-[0.62rem] font-semibold uppercase tracking-[0.22em] text-primary/62">Advanced Filters</p>
 
                   <div className="mt-3 space-y-2.5">
+                    <div className="block sm:hidden">
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-primary/65">Category</p>
+                      <select
+                        aria-label="Filter by category"
+                        value={selectedCategory}
+                        onChange={(event) => {
+                          setSelectedCategory(event.target.value);
+                          setSelectedSubCategory("");
+                        }}
+                        className="h-10 w-full rounded-lg border border-primary/16 bg-paper px-2.5 text-sm text-primary outline-none"
+                      >
+                        <option value="">All Categories</option>
+                        {availableCategories.map((category) => (
+                          <option key={category} value={category}>
+                            {category}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="block sm:hidden">
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-primary/65">Subcategory</p>
+                      <select
+                        aria-label="Filter by subcategory"
+                        value={selectedSubCategory}
+                        onChange={(event) => setSelectedSubCategory(event.target.value)}
+                        className="h-10 w-full rounded-lg border border-primary/16 bg-paper px-2.5 text-sm text-primary outline-none"
+                      >
+                        <option value="">All Subcategories</option>
+                        {availableSubCategories.map((subcat) => (
+                          <option key={subcat} value={subcat}>
+                            {subcat}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
                     <div>
                       <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-primary/65">Size</p>
                       <select

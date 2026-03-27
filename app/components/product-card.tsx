@@ -91,16 +91,16 @@ export function ProductCard({
       initial={{ opacity: 0, y: 24, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.46, delay: Math.min(index * 0.05, 0.28), ease: cardEase }}
-      className="group relative flex min-h-[320px] overflow-hidden rounded-[1.7rem] border border-primary/15 bg-secondary/95 shadow-[0_14px_36px_rgba(120,0,0,0.10)] transition duration-300 hover:border-primary/30 hover:shadow-[0_22px_44px_rgba(120,0,0,0.16)] sm:block sm:min-h-0 sm:hover:-translate-y-1"
+      className="group relative flex h-[15rem] flex-row overflow-hidden rounded-3xl border border-primary/10 bg-[#fbf5e6] shadow-sm transition duration-300 hover:border-primary/20 hover:shadow-md sm:h-auto sm:flex-col sm:hover:-translate-y-1"
     >
       {isOutOfStock ? (
         <div
-          className="pointer-events-none absolute inset-0 z-[2] bg-paper/28 backdrop-grayscale-[0.22]"
+          className="pointer-events-none absolute inset-0 z-[2] bg-[#fbf5e6]/40 backdrop-grayscale-[0.5]"
           aria-hidden={true}
         />
       ) : null}
 
-      <div className="relative h-[40vh] min-h-[320px] w-[43%] shrink-0 overflow-hidden sm:h-auto sm:min-h-0 sm:w-full sm:aspect-[4/5]">
+      <div className="relative h-full w-[42%] shrink-0 overflow-hidden bg-paper/50 sm:h-auto sm:w-full sm:aspect-[4/5]">
         <CloudinaryImage
           src={mainImage}
           alt={product.name}
@@ -109,108 +109,102 @@ export function ProductCard({
           className="object-cover transition duration-500 group-hover:scale-105"
         />
 
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/35 to-transparent" aria-hidden={true} />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/20 to-transparent" aria-hidden={true} />
 
         {pricing.discountPercent > 0 ? (
-          <span className="absolute bottom-3 left-3 rounded-full border border-primary/15 bg-secondary/90 px-2.5 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.15em] text-primary shadow-sm backdrop-blur-sm sm:bottom-auto sm:top-3 sm:bg-secondary/95 sm:backdrop-blur-0">
+          <span className="absolute bottom-2.5 left-2.5 rounded-full bg-[#faead1] px-2 py-1 text-[0.55rem] font-bold uppercase tracking-wider text-primary shadow-sm sm:bottom-auto sm:left-4 sm:top-4 sm:px-3 sm:py-1.5 sm:text-[0.65rem]">
             {pricing.discountPercent}% Off
           </span>
         ) : null}
 
         {isOutOfStock ? (
-          <span className="absolute right-3 top-3 rounded-full bg-primary px-2.5 py-1 text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-secondary">
+          <span className="absolute right-2.5 top-2.5 rounded-full bg-primary px-2 py-1 text-[0.55rem] font-bold uppercase tracking-wider text-secondary sm:right-4 sm:top-4 sm:px-3 sm:py-1.5 sm:text-[0.65rem]">
             Out of stock
           </span>
         ) : null}
-
-        {/*
-        <p className="absolute bottom-3 left-3 rounded-md bg-black/40 px-2 py-1 text-[0.62rem] font-semibold uppercase tracking-[0.15em] text-secondary/95">
-          SKU {product.sku || "N/A"}
-        </p>
-        */}
       </div>
 
-      <div className="flex h-[40vh] min-h-[320px] flex-1 flex-col p-3.5 sm:h-auto sm:min-h-0 sm:p-5">
-        <div className="flex items-start justify-between gap-2">
-          <p className="line-clamp-2 rounded-full border border-primary/15 bg-paper px-2.5 py-1 text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-primary/70">
-            {product.categoryValue} · {product.subCategoryValue}
-          </p>
+      <div className="flex flex-1 flex-col p-3.5 sm:p-4.5">
+        <div className="flex items-start">
+          <span className="line-clamp-1 text-[0.6rem] font-semibold uppercase tracking-[0.16em] text-primary/60 sm:text-[0.65rem] sm:font-bold sm:tracking-[0.2em] sm:text-primary/50">
+            {product.categoryValue} <span className="mx-0.5 px-0.5 opacity-50">•</span> {product.subCategoryValue}
+          </span>
         </div>
 
-        <div className="mt-3 space-y-1.5">
-          <h3 className="line-clamp-2 text-xl font-semibold leading-tight text-primary">{product.name}</h3>
-          <p className="line-clamp-3 text-sm leading-relaxed text-primary/75 sm:line-clamp-2">{product.description}</p>
-          <div className="flex items-center gap-2 pt-0.5 text-primary/80">
-            <RatingStars rating={product.rating} />
-            {hasRatings ? (
-              <p className="text-xs font-semibold">
-                {product.rating.toFixed(1)} ({ratingCount})
-              </p>
-            ) : (
-              <p className="text-xs font-semibold text-primary/60">No ratings yet</p>
-            )}
+        <div className="mt-1.5 sm:mt-2">
+          <h3 className="line-clamp-2 font-display text-[1.1rem] font-medium leading-tight text-primary sm:text-[1.3rem] sm:leading-tight">
+            {product.name}
+          </h3>
+          <p className="mt-1.5 line-clamp-2 text-[0.8rem] leading-snug text-primary/75 sm:mt-1.5 sm:text-[0.85rem] sm:leading-relaxed sm:text-primary/80">
+            {product.description}
+          </p>
+          <div className="mt-1 flex items-center gap-1.5 text-primary/80 sm:mt-1.5 sm:gap-2">
+            <div className="origin-left scale-[0.85] sm:scale-100"><RatingStars rating={product.rating} /></div>
+            <span className="text-[0.65rem] font-medium sm:text-xs">
+              {product.rating.toFixed(1)} {hasRatings ? `(${ratingCount})` : ""}
+            </span>
           </div>
         </div>
 
-        <div className="mt-auto rounded-2xl border border-primary/12 bg-gradient-to-r from-paper via-secondary to-paper px-3 py-2.5 sm:px-3.5 sm:py-3">
-          <div className="flex items-start justify-between gap-3 sm:items-end">
-            <p className="text-[1.24rem] font-semibold leading-none text-primary sm:text-[1.08rem]">
+        <div className="mt-0 pt-1.5 sm:mt-2 sm:pt-0">
+          <div className="flex items-baseline gap-2 sm:gap-2.5">
+            <span className="text-[1.05rem] font-medium tracking-wide text-primary/95 sm:text-[1.2rem]">
               {pricing.effectivePrice > 0 ? formatPrice(pricing.effectivePrice) : "Price on request"}
-            </p>
+            </span>
             {pricing.strikePrice > 0 ? (
-              <p className="pb-0.5 text-[11px] text-primary/50 line-through">{formatPrice(pricing.strikePrice)}</p>
+              <span className="text-[0.7rem] text-primary/45 line-through sm:text-[0.85rem] sm:font-medium">
+                {formatPrice(pricing.strikePrice)}
+              </span>
             ) : null}
           </div>
-          {pricing.savingsAmount > 0 ? (
-            <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-primary/65">You save {formatPrice(pricing.savingsAmount)}</p>
-          ) : null}
-        </div>
 
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 pt-0.5">
-          <button
-            type="button"
-            aria-label={`Save ${product.name} to wishlist`}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-primary/20 bg-paper text-primary transition hover:border-primary/40 hover:bg-secondary"
-          >
-            <DynamicHugeIcon name="FavouriteIcon" className="h-4.5 w-4.5" iconStrokeWidth={1.9} aria-hidden={true} />
-          </button>
-
-          {quantity > 0 ? (
-            <div
-              aria-label={`${quantity} of ${product.name} in cart`}
-              className="inline-flex items-center gap-2 rounded-full border border-primary bg-primary px-2 py-1.5 text-secondary"
-            >
-              <button
-                type="button"
-                aria-label={`Decrease ${product.name} quantity`}
-                onClick={() => onDecreaseQuantity(product.id)}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-secondary/35 bg-primary/70 transition hover:bg-primary/85"
-              >
-                <DynamicHugeIcon name="Remove01Icon" className="h-3.5 w-3.5" iconStrokeWidth={2} aria-hidden={true} />
-              </button>
-              <span className="inline-flex min-w-5 items-center justify-center text-xs font-semibold">{quantity}</span>
-              <button
-                type="button"
-                aria-label={`Increase ${product.name} quantity`}
-                onClick={() => onIncreaseQuantity(product.id)}
-                disabled={isOutOfStock}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-secondary/35 bg-primary/70 transition hover:bg-primary/85 disabled:cursor-not-allowed disabled:opacity-45"
-              >
-                <DynamicHugeIcon name="Add01Icon" className="h-3.5 w-3.5" iconStrokeWidth={2} aria-hidden={true} />
-              </button>
-            </div>
-          ) : (
+          <div className="mt-2 flex items-center gap-2 sm:mt-3.5 sm:gap-3">
             <button
               type="button"
-              aria-label={`Add ${product.name} to cart`}
-              onClick={() => onAddToCart(product.id)}
-              disabled={isOutOfStock}
-              className="inline-flex items-center gap-2 rounded-full border border-primary bg-primary px-3.5 py-2 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-secondary transition hover:-translate-y-0.5 hover:bg-secondary hover:text-primary disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0 disabled:hover:bg-primary disabled:hover:text-secondary"
+              aria-label={`Save ${product.name} to wishlist`}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-transparent text-primary transition hover:border-primary/40 hover:bg-primary/5 sm:h-10 sm:w-10"
             >
-              {isOutOfStock ? "Sold Out" : "Add to cart"}
-              <DynamicHugeIcon name="ShoppingCart02Icon" className="h-3.5 w-3.5" iconStrokeWidth={2} aria-hidden={true} />
+              <DynamicHugeIcon name="FavouriteIcon" className="h-4 w-4 sm:h-4.5 sm:w-4.5" iconStrokeWidth={1.8} aria-hidden={true} />
             </button>
-          )}
+
+            {quantity > 0 ? (
+              <div
+                aria-label={`${quantity} of ${product.name} in cart`}
+                className="flex h-9 flex-1 items-center justify-between rounded-full bg-primary px-1.5 text-secondary sm:h-10 sm:px-2"
+              >
+                <button
+                  type="button"
+                  aria-label={`Decrease ${product.name} quantity`}
+                  onClick={() => onDecreaseQuantity(product.id)}
+                  className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary/15 transition hover:bg-secondary/25 sm:h-7 sm:w-7"
+                >
+                  <DynamicHugeIcon name="Remove01Icon" className="h-3 w-3 sm:h-3.5 sm:w-3.5" iconStrokeWidth={2} aria-hidden={true} />
+                </button>
+                <span className="text-xs font-semibold sm:text-sm">{quantity}</span>
+                <button
+                  type="button"
+                  aria-label={`Increase ${product.name} quantity`}
+                  onClick={() => onIncreaseQuantity(product.id)}
+                  disabled={isOutOfStock}
+                  className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary/15 transition hover:bg-secondary/25 disabled:cursor-not-allowed disabled:opacity-45 sm:h-7 sm:w-7"
+                >
+                  <DynamicHugeIcon name="Add01Icon" className="h-3 w-3 sm:h-3.5 sm:w-3.5" iconStrokeWidth={2} aria-hidden={true} />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                aria-label={`Add ${product.name} to cart`}
+                onClick={() => onAddToCart(product.id)}
+                disabled={isOutOfStock}
+                className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-full bg-primary px-3 text-[0.65rem] font-semibold uppercase tracking-widest text-[#fbf5e6] transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-45 sm:h-10 sm:gap-2 sm:px-4 sm:text-xs"
+              >
+                <span className="max-sm:hidden">{isOutOfStock ? "Sold Out" : "Add to cart"}</span>
+                <span className="sm:hidden">{isOutOfStock ? "Out of Stock" : "Add to cart"}</span>
+                <DynamicHugeIcon name="ShoppingCart02Icon" className="h-3.5 w-3.5 sm:h-4 sm:w-4" iconStrokeWidth={2} aria-hidden={true} />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </motion.article>
