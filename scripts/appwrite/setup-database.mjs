@@ -45,8 +45,8 @@ const collectionDefs = [
     ],
   },
   {
-    id: "products",
-    name: "products",
+    id: "sku",
+    name: "sku",
     permissions: [
       Permission.read(Role.any()),
       Permission.create(Role.label("admin")),
@@ -67,14 +67,39 @@ const collectionDefs = [
       ["double", "discountPrice", 0, true],
       ["double", "originalPrice", 0, true],
       ["string", "sku", 100, true],
+      ["string", "slug", 140, true],
       ["string", "category", 100, true],
       ["integer", "stockQty", 0, true],
       ["boolean", "isActive", true, false],
     ],
     indexes: [
-      ["products_sku_unique", "unique", ["sku"]],
-      ["products_category_idx", "key", ["category"]],
-      ["products_active_idx", "key", ["isActive"]],
+      ["sku_sku_unique", "unique", ["sku"]],
+      ["sku_slug_unique", "unique", ["slug"]],
+      ["sku_category_idx", "key", ["category"]],
+      ["sku_active_idx", "key", ["isActive"]],
+    ],
+  },
+  {
+    id: "carts",
+    name: "carts",
+    permissions: [
+      Permission.create(Role.users()),
+      Permission.read(Role.label("admin")),
+      Permission.update(Role.label("admin")),
+      Permission.delete(Role.label("admin")),
+    ],
+    documentSecurity: true,
+    attributes: [
+      ["string", "userId", 64, true],
+      ["string", "productId", 64, true],
+      ["integer", "quantity", 0, true],
+      ["datetime", "addedAt", true],
+      ["datetime", "updatedAt", true],
+    ],
+    indexes: [
+      ["carts_user_idx", "key", ["userId"]],
+      ["carts_product_idx", "key", ["productId"]],
+      ["carts_user_product_unique", "unique", ["userId", "productId"]],
     ],
   },
   {

@@ -11,7 +11,7 @@ export async function GET() {
     const databaseId = getDatabaseId();
 
     const [products, orders, payments, reviews] = await Promise.all([
-      databases.listDocuments(databaseId, "products", [Query.limit(1)]),
+      databases.listDocuments(databaseId, "sku", [Query.limit(1)]),
       databases.listDocuments(databaseId, "orders", [Query.limit(1)]),
       databases.listDocuments(databaseId, "payments", [Query.limit(1)]),
       databases.listDocuments(databaseId, "reviews", [Query.limit(1)]),

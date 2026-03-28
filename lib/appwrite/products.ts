@@ -1,8 +1,10 @@
 import { Client, Databases, Query } from "node-appwrite";
 import { normalizeProductCategory, type ProductCategorySlug, type ProductSubCategorySlug } from "@/lib/product-taxonomy";
+import { ensureSlug, toSlug } from "@/lib/slug";
 
 export type ProductRecord = {
   id: string;
+  slug: string;
   name: string;
   description: string;
   sku: string;
@@ -24,6 +26,7 @@ export type ProductRecord = {
 };
 
 let resolvedDatabaseIdCache: string | null = null;
+const SKU_COLLECTION_ID = "sku";
 
 function toNumber(value: unknown, fallback = 0) {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -65,6 +68,7 @@ function toProductRecord(document: Record<string, unknown>): ProductRecord {
 
   return {
     id: String(document.$id ?? ""),
+    slug: ensureSlug(String(document.slug ?? name), String(document.$id ?? "product")),
     name,
     description,
     sku: String(document.sku ?? document.$id ?? ""),
@@ -153,28 +157,68 @@ async function resolveDatabaseId(databases: Databases, configuredDatabaseId: str
   return configuredDatabaseId;
 }
 
-export async function listProductsFromCollection() {
+async function resolveContext() {
   const client = createReadClient();
   if (!client) {
-    return [] as ProductRecord[];
+    return null;
   }
 
   const databases = new Databases(client);
   const configuredDatabaseId = process.env.APPWRITE_DATABASE_ID ?? process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID ?? "naarithread";
 
-  const queries: string[] = [Query.limit(100), Query.orderDesc("$createdAt")];
-
-  let response;
+  let databaseId = configuredDatabaseId;
   try {
-    response = await databases.listDocuments(configuredDatabaseId, "sku", queries);
+    databaseId = await resolveDatabaseId(databases, configuredDatabaseId);
   } catch (error) {
     if (!isNotFoundError(error)) {
       throw error;
     }
-
-    const resolvedDatabaseId = await resolveDatabaseId(databases, configuredDatabaseId);
-    response = await databases.listDocuments(resolvedDatabaseId, "sku", queries);
   }
 
+  return {
+    databases,
+    databaseId,
+    collectionId: SKU_COLLECTION_ID,
+  };
+}
+
+export async function listProductsFromCollection() {
+  const context = await resolveContext();
+  if (!context) {
+    return [] as ProductRecord[];
+  }
+
+  const queries: string[] = [Query.limit(100), Query.orderDesc("$createdAt")];
+
+  const response = await context.databases.listDocuments(context.databaseId, context.collectionId, queries);
+
   return response.documents.map((document) => toProductRecord(document as Record<string, unknown>));
+}
+
+export async function getProductBySlug(slug: string) {
+  const normalizedSlug = toSlug(slug);
+  if (!normalizedSlug) {
+    return null;
+  }
+
+  const context = await resolveContext();
+  if (!context) {
+    return null;
+  }
+
+  try {
+    const bySlug = await context.databases.listDocuments(context.databaseId, context.collectionId, [
+      Query.equal("slug", normalizedSlug),
+      Query.limit(1),
+    ]);
+
+    if (bySlug.documents[0]) {
+      return toProductRecord(bySlug.documents[0] as Record<string, unknown>);
+    }
+  } catch {
+    // Fallback below handles projects that don't have slug indexed yet.
+  }
+
+  const all = await listProductsFromCollection();
+  return all.find((item) => item.slug === normalizedSlug) ?? null;
 }

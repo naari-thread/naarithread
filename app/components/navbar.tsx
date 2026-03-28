@@ -5,8 +5,11 @@ import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { AuthModal } from "@/app/components/auth-modal";
+import { useAuth } from "@/app/components/auth-provider";
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
 import { getCartItemsCount, readCartItems, subscribeToCartChanges } from "@/lib/cart-state";
+import { getWishlistItemsCount, readWishlistItems, subscribeToWishlistChanges } from "@/lib/wishlist-state";
 
 type NavSubCategory = {
   label: string;
@@ -109,11 +112,11 @@ const sampleNotifications: NotificationItem[] = [
 ];
 
 function categoryHref(category: string, subcategory?: string) {
-  const params = new URLSearchParams({ category });
   if (subcategory) {
-    params.set("subcategory", subcategory);
+    return `/products/${category}/${subcategory}`;
   }
-  return `/products?${params.toString()}`;
+
+  return `/products/${category}`;
 }
 
 const menuContainer = {
@@ -140,20 +143,39 @@ const menuItem = {
 };
 
 export function Navbar() {
+  const { isAuthenticated, isLoading, logout } = useAuth();
   const pathname = usePathname();
   const prefersReducedMotion = useReducedMotion();
   const isLandingPage = pathname === "/";
   const hideOnMobile = pathname !== "/";
+  const [isMounted, setIsMounted] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [isHeroInView, setIsHeroInView] = useState(pathname === "/");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeDesktopCategory, setActiveDesktopCategory] = useState<string | null>(null);
   const [activeMobileCategory, setActiveMobileCategory] = useState<string | null>(null);
-  const [cartCount, setCartCount] = useState(() => getCartItemsCount(readCartItems()));
+  const [cartCount, setCartCount] = useState(0);
+  const [wishlistCount, setWishlistCount] = useState(0);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [selectedAccountAction, setSelectedAccountAction] = useState<"account" | "wallet" | null>(null);
   const [selectedNotification, setSelectedNotification] = useState<NotificationItem | null>(null);
   const closeDropdownTimer = useRef<number | null>(null);
   const notificationPanelRef = useRef<HTMLDivElement | null>(null);
+  const accountPanelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setIsMounted(true);
+      setCartCount(getCartItemsCount(readCartItems()));
+      setWishlistCount(getWishlistItemsCount(readWishlistItems()));
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, []);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 48);
@@ -204,6 +226,12 @@ export function Navbar() {
   }, []);
 
   useEffect(() => {
+    return subscribeToWishlistChanges((items) => {
+      setWishlistCount(getWishlistItemsCount(items));
+    });
+  }, []);
+
+  useEffect(() => {
     return () => {
       if (closeDropdownTimer.current) {
         window.clearTimeout(closeDropdownTimer.current);
@@ -220,12 +248,18 @@ export function Navbar() {
       if (!notificationPanelRef.current.contains(event.target as Node)) {
         setIsNotificationsOpen(false);
       }
+
+      if (accountPanelRef.current && !accountPanelRef.current.contains(event.target as Node)) {
+        setIsAccountMenuOpen(false);
+      }
     };
 
     const onEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setIsNotificationsOpen(false);
+        setIsAccountMenuOpen(false);
         setSelectedNotification(null);
+        setSelectedAccountAction(null);
       }
     };
 
@@ -252,26 +286,14 @@ export function Navbar() {
       label: "Wishlist",
       icon: "FavouriteIcon" as const,
       isActive: pathname.startsWith("/wishlist"),
+      badgeCount: isMounted ? wishlistCount : 0,
     },
     {
       href: "/cart",
       label: "Cart",
       icon: "ShoppingCart02Icon" as const,
       isActive: pathname.startsWith("/cart"),
-      badgeCount: cartCount,
-    },
-    {
-      href: "/account",
-      label: "Alerts",
-      icon: "Notification01Icon" as const,
-      isActive: false,
-      badgeCount: sampleNotifications.length,
-    },
-    {
-      href: "/account",
-      label: "Account",
-      icon: "UserIcon" as const,
-      isActive: pathname.startsWith("/account"),
+      badgeCount: isMounted ? cartCount : 0,
     },
   ];
 
@@ -385,7 +407,7 @@ export function Navbar() {
                         transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
                         className="absolute left-1/2 top-full z-[130] mt-3 w-[280px] -translate-x-1/2 rounded-2xl border border-primary/12 bg-secondary p-4 shadow-[0_20px_42px_rgba(120,0,0,0.14)]"
                       >
-                        <div className="mt-3 flex flex-col gap-2">
+                        <div className="mt-3 flex max-h-[22rem] flex-col gap-2 overflow-y-auto overscroll-contain pr-1" onWheel={(event) => event.stopPropagation()}>
                           {category.subCategories.map((subCategory) => (
                             <Link
                               key={`${category.id}-${subCategory.slug}`}
@@ -425,114 +447,172 @@ export function Navbar() {
             </motion.nav>
           ) : (
             <nav aria-label="Quick links" className="hidden items-center gap-2 md:flex">
-              {desktopQuickLinks.map((item) => {
-                const isNotificationItem = item.label === "Alerts";
+              {desktopQuickLinks.map((item) => (
+                <Link
+                  key={item.label}
+                  href={item.href}
+                  aria-label={`Open ${item.label}`}
+                  aria-current={item.isActive ? "page" : undefined}
+                  className={`group relative inline-flex h-10 items-center gap-1.5 rounded-full px-3.5 text-[0.68rem] font-semibold uppercase tracking-[0.16em] transition ${
+                    item.isActive
+                      ? "text-secondary"
+                      : "text-primary/80 hover:text-primary"
+                  }`}
+                >
+                  <div className={`absolute inset-0 rounded-full border pointer-events-none transition duration-300 ${item.isActive ? "border-transparent" : "border-primary/20 bg-secondary group-hover:border-primary/40"}`} aria-hidden="true" />
+                  {item.isActive && (
+                    <motion.div
+                      layoutId="active-desktop-nav-link"
+                      className="absolute inset-0 rounded-full bg-primary shadow-[0_4px_16px_rgba(120,0,0,0.18)]"
+                      initial={false}
+                      transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                      aria-hidden="true"
+                    />
+                  )}
+                  <DynamicHugeIcon
+                    name={item.icon}
+                    className="relative z-10 h-4.5 w-4.5"
+                    iconStrokeWidth={item.isActive ? 2.2 : 2}
+                  />
+                  <span className="relative z-10">{item.label}</span>
+                  {typeof item.badgeCount === "number" && item.badgeCount > 0 ? (
+                    <span
+                      className={`absolute right-0 top-0 -translate-y-[20%] translate-x-[20%] z-20 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full px-1 text-[0.54rem] font-bold leading-none ring-2 ring-secondary ${
+                        item.isActive ? "bg-secondary text-primary" : "bg-primary text-secondary"
+                      }`}
+                      aria-hidden={true}
+                    >
+                      {item.badgeCount > 9 ? "9+" : item.badgeCount}
+                    </span>
+                  ) : null}
+                </Link>
+              ))}
 
-                if (isNotificationItem) {
-                  return (
-                    <div key={item.label} className="relative" ref={notificationPanelRef}>
+              <div className="relative" ref={notificationPanelRef}>
+                <button
+                  type="button"
+                  aria-label="Open notifications"
+                  aria-expanded={isNotificationsOpen}
+                  onClick={() => {
+                    setIsNotificationsOpen((prev) => !prev);
+                    setIsAccountMenuOpen(false);
+                  }}
+                  className="group relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-primary/20 bg-secondary text-primary/75 transition hover:border-primary/40 hover:text-primary"
+                >
+                  <DynamicHugeIcon
+                    name="Notification01Icon"
+                    className="relative z-10 h-5.5 w-5.5"
+                    iconStrokeWidth={2.1}
+                  />
+                  <span
+                    className="absolute right-0 top-0 -translate-y-[20%] translate-x-[20%] z-20 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-primary px-1 text-[0.54rem] font-bold leading-none text-secondary ring-2 ring-secondary"
+                    aria-hidden={true}
+                  >
+                    {sampleNotifications.length > 9 ? "9+" : sampleNotifications.length}
+                  </span>
+                </button>
+
+                <AnimatePresence>
+                  {isNotificationsOpen ? (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 6, scale: 0.98 }}
+                      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                      className="absolute right-0 top-[calc(100%+10px)] z-[130] w-[320px] overflow-hidden rounded-2xl border border-primary/14 bg-secondary shadow-[0_20px_42px_rgba(120,0,0,0.16)]"
+                    >
+                      <div className="border-b border-primary/10 px-4 py-3">
+                        <p className="text-[0.62rem] font-semibold uppercase tracking-[0.22em] text-primary/62">Notifications</p>
+                      </div>
+                      <div className="max-h-64 overflow-y-auto overscroll-contain p-2" onWheel={(event) => event.stopPropagation()}>
+                        {sampleNotifications.map((notification) => (
+                          <button
+                            key={notification.id}
+                            type="button"
+                            aria-label={`Open notification: ${notification.title}`}
+                            onClick={() => {
+                              setSelectedNotification(notification);
+                              setIsNotificationsOpen(false);
+                            }}
+                            className="mb-1 w-full rounded-xl border border-transparent px-3 py-2 text-left transition hover:border-primary/12 hover:bg-primary/[0.04]"
+                          >
+                            <p className="text-sm font-semibold text-primary">{notification.title}</p>
+                            <p className="mt-0.5 line-clamp-2 text-xs text-primary/72">{notification.body}</p>
+                            <p className="mt-1 text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-primary/55">{notification.createdAt}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
+              </div>
+
+              <div className="relative" ref={accountPanelRef}>
+                <button
+                  type="button"
+                  aria-label="Open account menu"
+                  aria-expanded={isAccountMenuOpen}
+                  onClick={() => {
+                    if (!isAuthenticated && !isLoading) {
+                      setIsAuthModalOpen(true);
+                      return;
+                    }
+                    setIsAccountMenuOpen((prev) => !prev);
+                    setIsNotificationsOpen(false);
+                  }}
+                  className="group inline-flex h-10 w-10 items-center justify-center rounded-full border border-primary/20 bg-secondary text-primary/75 transition hover:border-primary/40 hover:text-primary"
+                >
+                  <DynamicHugeIcon name="UserIcon" className="h-5.5 w-5.5" iconStrokeWidth={2.1} />
+                </button>
+
+                <AnimatePresence>
+                  {isAuthenticated && isAccountMenuOpen ? (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 6, scale: 0.98 }}
+                      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                      className="absolute right-0 top-[calc(100%+10px)] z-[130] w-[220px] rounded-2xl border border-primary/14 bg-secondary p-2 shadow-[0_20px_42px_rgba(120,0,0,0.16)]"
+                    >
                       <button
                         type="button"
-                        aria-label="Open notifications"
-                        aria-expanded={isNotificationsOpen}
-                        onClick={() => setIsNotificationsOpen((prev) => !prev)}
-                        className="group relative inline-flex h-10 w-10 items-center justify-center rounded-full text-primary/72 transition-colors duration-250 hover:text-primary"
+                        aria-label="Open account details"
+                        onClick={() => {
+                          setSelectedAccountAction("account");
+                          setIsAccountMenuOpen(false);
+                        }}
+                        className="mb-1 inline-flex h-10 w-full items-center justify-between rounded-xl px-3 text-sm text-primary/82 transition hover:bg-primary/[0.04]"
                       >
-                        <span className="relative inline-flex h-6 w-6 items-center justify-center">
-                          <DynamicHugeIcon
-                            name={item.icon}
-                            className="h-5.5 w-5.5 text-primary/78 transition-colors duration-250 group-hover:text-primary"
-                            iconStrokeWidth={2.1}
-                          />
-                          {typeof item.badgeCount === "number" && item.badgeCount > 0 ? (
-                            <span
-                              className="absolute -right-3 -top-2 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-primary px-1 text-[0.54rem] font-bold leading-none text-secondary"
-                              aria-hidden={true}
-                            >
-                              {item.badgeCount > 9 ? "9+" : item.badgeCount}
-                            </span>
-                          ) : null}
-                        </span>
+                        <span>Account</span>
+                        <DynamicHugeIcon name="ArrowRight01Icon" className="h-4 w-4" iconStrokeWidth={2} />
                       </button>
-
-                      <AnimatePresence>
-                        {isNotificationsOpen ? (
-                          <motion.div
-                            initial={{ opacity: 0, y: 8, scale: 0.98 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: 6, scale: 0.98 }}
-                            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-                            className="absolute right-0 top-[calc(100%+10px)] z-[130] w-[320px] overflow-hidden rounded-2xl border border-primary/14 bg-secondary shadow-[0_20px_42px_rgba(120,0,0,0.16)]"
-                          >
-                            <div className="border-b border-primary/10 px-4 py-3">
-                              <p className="text-[0.62rem] font-semibold uppercase tracking-[0.22em] text-primary/62">Notifications</p>
-                            </div>
-                            <div className="max-h-64 overflow-y-auto p-2">
-                              {sampleNotifications.map((notification) => (
-                                <button
-                                  key={notification.id}
-                                  type="button"
-                                  aria-label={`Open notification: ${notification.title}`}
-                                  onClick={() => {
-                                    setSelectedNotification(notification);
-                                    setIsNotificationsOpen(false);
-                                  }}
-                                  className="mb-1 w-full rounded-xl border border-transparent px-3 py-2 text-left transition hover:border-primary/12 hover:bg-primary/[0.04]"
-                                >
-                                  <p className="text-sm font-semibold text-primary">{notification.title}</p>
-                                  <p className="mt-0.5 line-clamp-2 text-xs text-primary/72">{notification.body}</p>
-                                  <p className="mt-1 text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-primary/55">{notification.createdAt}</p>
-                                </button>
-                              ))}
-                            </div>
-                          </motion.div>
-                        ) : null}
-                      </AnimatePresence>
-                    </div>
-                  );
-                }
-
-                return (
-                  <Link
-                    key={item.label}
-                    href={item.href}
-                    aria-label={`Open ${item.label}`}
-                    className="group relative inline-flex h-10 w-10 items-center justify-center rounded-full text-primary/72 transition-colors duration-250 hover:text-primary"
-                    aria-current={item.isActive ? "page" : undefined}
-                  >
-                    {item.isActive ? (
-                      <motion.span
-                        layoutId="desktop-quick-link-active"
-                        className="absolute inset-0 rounded-full bg-primary shadow-[0_8px_20px_rgba(120,0,0,0.24)]"
-                        transition={
-                          prefersReducedMotion
-                            ? { duration: 0 }
-                            : { type: "spring", stiffness: 420, damping: 34, mass: 0.72 }
-                        }
-                        aria-hidden={true}
-                      />
-                    ) : null}
-
-                    <span className="relative inline-flex h-6 w-6 items-center justify-center">
-                      <DynamicHugeIcon
-                        name={item.icon}
-                        className={`h-5.5 w-5.5 transition-colors duration-250 ${item.isActive ? "text-secondary" : "text-primary/78 group-hover:text-primary"}`}
-                        iconStrokeWidth={item.isActive ? 2.3 : 2.05}
-                      />
-                      {typeof item.badgeCount === "number" && item.badgeCount > 0 ? (
-                        <span
-                          className={`absolute -right-3 -top-2 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full px-1 text-[0.54rem] font-bold leading-none ${
-                            item.isActive ? "bg-secondary text-primary" : "bg-primary text-secondary"
-                          }`}
-                          aria-hidden={true}
-                        >
-                          {item.badgeCount > 9 ? "9+" : item.badgeCount}
-                        </span>
-                      ) : null}
-                    </span>
-                  </Link>
-                );
-              })}
+                      <button
+                        type="button"
+                        aria-label="Open wallet details"
+                        onClick={() => {
+                          setSelectedAccountAction("wallet");
+                          setIsAccountMenuOpen(false);
+                        }}
+                        className="mb-1 inline-flex h-10 w-full items-center justify-between rounded-xl px-3 text-sm text-primary/82 transition hover:bg-primary/[0.04]"
+                      >
+                        <span>Wallet</span>
+                        <DynamicHugeIcon name="ArrowRight01Icon" className="h-4 w-4" iconStrokeWidth={2} />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Logout from account"
+                        onClick={() => {
+                          void logout();
+                          setIsAccountMenuOpen(false);
+                        }}
+                        className="inline-flex h-10 w-full items-center justify-center rounded-xl border border-primary/20 text-xs font-semibold uppercase tracking-[0.18em] text-primary transition hover:border-primary/40"
+                      >
+                        Logout
+                      </button>
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
+              </div>
             </nav>
           )}
 
@@ -587,13 +667,16 @@ export function Navbar() {
       </header>
 
       <AnimatePresence initial={false}>
-        {selectedNotification ? (
+        {selectedNotification || selectedAccountAction ? (
           <motion.div
             className="fixed inset-0 z-[160] flex items-center justify-center bg-black/35 p-4 backdrop-blur-[2px]"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => setSelectedNotification(null)}
+            onClick={() => {
+              setSelectedNotification(null);
+              setSelectedAccountAction(null);
+            }}
           >
             <motion.div
               initial={{ opacity: 0, y: 16, scale: 0.98 }}
@@ -604,24 +687,43 @@ export function Navbar() {
               onClick={(event) => event.stopPropagation()}
               role="dialog"
               aria-modal={true}
-              aria-label="Notification details"
+              aria-label={selectedNotification ? "Notification details" : "Account details"}
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-primary/58">Notification</p>
-                  <h3 className="mt-1 text-lg font-semibold text-primary">{selectedNotification.title}</h3>
+                  <p className="text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-primary/58">
+                    {selectedNotification ? "Notification" : "Account"}
+                  </p>
+                  <h3 className="mt-1 text-lg font-semibold text-primary">
+                    {selectedNotification
+                      ? selectedNotification.title
+                      : selectedAccountAction === "wallet"
+                        ? "Wallet"
+                        : "My Account"}
+                  </h3>
                 </div>
                 <button
                   type="button"
-                  aria-label="Close notification modal"
-                  onClick={() => setSelectedNotification(null)}
+                  aria-label="Close details modal"
+                  onClick={() => {
+                    setSelectedNotification(null);
+                    setSelectedAccountAction(null);
+                  }}
                   className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-primary/18 text-primary transition hover:border-primary/35"
                 >
                   <DynamicHugeIcon name="Cancel01Icon" className="h-4.5 w-4.5" iconStrokeWidth={2.2} aria-hidden={true} />
                 </button>
               </div>
-              <p className="mt-3 text-sm leading-relaxed text-primary/82">{selectedNotification.body}</p>
-              <p className="mt-4 text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-primary/56">{selectedNotification.createdAt}</p>
+              <p className="mt-3 text-sm leading-relaxed text-primary/82">
+                {selectedNotification
+                  ? selectedNotification.body
+                  : selectedAccountAction === "wallet"
+                    ? "Wallet balance and transactions are being prepared. This modal is now the dedicated wallet surface."
+                    : "Manage profile, addresses, and account settings from this panel. Expanded account controls can be connected here."}
+              </p>
+              {selectedNotification ? (
+                <p className="mt-4 text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-primary/56">{selectedNotification.createdAt}</p>
+              ) : null}
             </motion.div>
           </motion.div>
         ) : null}
@@ -740,7 +842,7 @@ export function Navbar() {
                               transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
                               className="overflow-hidden border-t border-primary/12"
                             >
-                              <div className="flex flex-col gap-1.5 px-3 py-3">
+                              <div className="flex max-h-[18rem] flex-col gap-1.5 overflow-y-auto overscroll-contain px-3 py-3" onWheel={(event) => event.stopPropagation()}>
                                 {category.subCategories.map((subCategory) => (
                                   <Link
                                     key={`mobile-${category.id}-${subCategory.slug}`}
@@ -795,6 +897,13 @@ export function Navbar() {
           </motion.div>
         ) : null}
       </AnimatePresence>
+
+      <AuthModal
+        open={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        title="Sign up / Login"
+        description="Use Email OTP to continue to your account, wishlist, and cart sync."
+      />
     </>
   );
 }

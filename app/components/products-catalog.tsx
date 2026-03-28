@@ -2,23 +2,38 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
 import { ProductCard } from "@/app/components/product-card";
 import { readCartItems, subscribeToCartChanges, writeCartItems, type CartItemsMap } from "@/lib/cart-state";
 import type { ProductRecord } from "@/lib/appwrite/products";
+import {
+  PRODUCT_TAXONOMY,
+  getCategoryForSubCategory,
+  getCategoryLabelBySlug,
+  getSubCategoryLabelBySlug,
+  isProductCategorySlug,
+  isProductSubCategorySlug,
+  type ProductCategorySlug,
+  type ProductSubCategorySlug,
+} from "@/lib/product-taxonomy";
+import {
+  readWishlistItems,
+  subscribeToWishlistChanges,
+  toggleWishlistItem,
+  type WishlistItemsMap,
+} from "@/lib/wishlist-state";
 
 type CatalogFilterPayload = {
-  categories: string[];
-  subcategories: string[];
   sizes: string[];
   colors: string[];
 };
 
 type ProductsCatalogProps = {
   products: ProductRecord[];
-  activeCategory: string;
-  activeSubCategory: string;
+  activeCategorySlug: string;
+  activeSubCategorySlug: string;
 };
 
 function normalizeValue(value: string) {
@@ -53,7 +68,7 @@ type SelectDropdownProps = {
   label: string;
   placeholder: string;
   value: string;
-  options: string[];
+  options: Array<{ label: string; value: string }>;
   open: boolean;
   onToggle: () => void;
   onSelect: (value: string) => void;
@@ -127,15 +142,15 @@ function SelectDropdown({
             >
               All
             </button>
-            <div className="max-h-56 overflow-y-auto">
+            <div className="max-h-56 overflow-y-auto overscroll-contain" onWheel={(event) => event.stopPropagation()}>
               {options.map((option) => (
                 <button
-                  key={option}
+                  key={option.value}
                   type="button"
-                  onClick={() => onSelect(option)}
+                  onClick={() => onSelect(option.value)}
                   className="block w-full px-3 py-2.5 text-left text-sm text-primary/82 transition hover:bg-primary/[0.05] hover:text-primary"
                 >
-                  {option}
+                  {option.label}
                 </button>
               ))}
             </div>
@@ -146,21 +161,22 @@ function SelectDropdown({
   );
 }
 
-export function ProductsCatalog({ products, activeCategory, activeSubCategory }: ProductsCatalogProps) {
+export function ProductsCatalog({ products, activeCategorySlug, activeSubCategorySlug }: ProductsCatalogProps) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [searchText, setSearchText] = useState("");
-  const [cartItems, setCartItems] = useState<CartItemsMap>(() => readCartItems());
+  const [cartItems, setCartItems] = useState<CartItemsMap>({});
+  const [wishlistItems, setWishlistItems] = useState<WishlistItemsMap>({});
   const [filterPayload, setFilterPayload] = useState<CatalogFilterPayload>({
-    categories: [],
-    subcategories: [],
     sizes: [],
     colors: [],
   });
-  const [selectedCategory, setSelectedCategory] = useState("");
-  const [selectedSubCategory, setSelectedSubCategory] = useState("");
-    useEffect(() => {
-      setSelectedCategory(activeCategory || "");
-      setSelectedSubCategory(activeSubCategory || "");
-    }, [activeCategory, activeSubCategory]);
+  const [selectedCategory, setSelectedCategory] = useState<ProductCategorySlug | "">("");
+  const [selectedSubCategory, setSelectedSubCategory] = useState<ProductSubCategorySlug | "">("");
+  useEffect(() => {
+    setSelectedCategory(isProductCategorySlug(activeCategorySlug) ? activeCategorySlug : "");
+    setSelectedSubCategory(isProductSubCategorySlug(activeSubCategorySlug) ? activeSubCategorySlug : "");
+  }, [activeCategorySlug, activeSubCategorySlug]);
 
   const [selectedSize, setSelectedSize] = useState("");
   const [selectedColor, setSelectedColor] = useState("");
@@ -173,8 +189,21 @@ export function ProductsCatalog({ products, activeCategory, activeSubCategory }:
   const [filterOpen, setFilterOpen] = useState(false);
 
   useEffect(() => {
+    setCartItems(readCartItems());
     return subscribeToCartChanges((items) => setCartItems(items));
   }, []);
+
+  useEffect(() => {
+    setWishlistItems(readWishlistItems());
+    return subscribeToWishlistChanges((items) => setWishlistItems(items));
+  }, []);
+
+  const navigateForFilter = (category: ProductCategorySlug | "", subCategory: ProductSubCategorySlug | "") => {
+    const nextPath = subCategory ? `/products/${category}/${subCategory}` : category ? `/products/${category}` : "/products";
+    if (pathname !== nextPath) {
+      router.push(nextPath);
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -192,8 +221,6 @@ export function ProductsCatalog({ products, activeCategory, activeSubCategory }:
         }
 
         setFilterPayload({
-          categories: Array.isArray(payload.categories) ? payload.categories : [],
-          subcategories: Array.isArray(payload.subcategories) ? payload.subcategories : [],
           sizes: Array.isArray(payload.sizes) ? payload.sizes : [],
           colors: Array.isArray(payload.colors) ? payload.colors : [],
         });
@@ -203,8 +230,6 @@ export function ProductsCatalog({ products, activeCategory, activeSubCategory }:
         }
 
         setFilterPayload({
-          categories: toUniqueSorted(products.map((item) => item.categoryValue)),
-          subcategories: toUniqueSorted(products.map((item) => item.subCategoryValue)),
           sizes: toUniqueSorted(products.flatMap((item) => item.sizeOptions)),
           colors: toUniqueSorted(products.flatMap((item) => item.colorOptions)),
         });
@@ -237,26 +262,18 @@ export function ProductsCatalog({ products, activeCategory, activeSubCategory }:
   };
 
   const availableCategories = useMemo(() => {
-    if (filterPayload.categories.length > 0) {
-      return toUniqueSorted(filterPayload.categories);
-    }
-
-    return toUniqueSorted(products.map((item) => item.categoryValue));
-  }, [filterPayload.categories, products]);
+    return PRODUCT_TAXONOMY.map((item) => ({ label: item.label, value: item.slug }));
+  }, []);
 
   const availableSubCategories = useMemo(() => {
-    if (filterPayload.subcategories.length > 0) {
-      return toUniqueSorted(filterPayload.subcategories);
-    }
+    const categories = selectedCategory
+      ? PRODUCT_TAXONOMY.filter((item) => item.slug === selectedCategory)
+      : PRODUCT_TAXONOMY;
 
-    const fromRows = selectedCategory
-      ? products
-          .filter((item) => normalizeValue(item.categoryValue) === normalizeValue(selectedCategory))
-          .map((item) => item.subCategoryValue)
-      : products.map((item) => item.subCategoryValue);
-
-    return toUniqueSorted(fromRows);
-  }, [filterPayload.subcategories, products, selectedCategory]);
+    return categories
+      .flatMap((item) => item.subCategories)
+      .map((item) => ({ label: item.label, value: item.slug }));
+  }, [selectedCategory]);
 
   const availableSizes = useMemo(() => {
     return toUniqueSorted([...filterPayload.sizes, ...products.flatMap((item) => item.sizeOptions)]);
@@ -271,7 +288,7 @@ export function ProductsCatalog({ products, activeCategory, activeSubCategory }:
       return;
     }
 
-    const exists = availableCategories.some((item) => normalizeValue(item) === normalizeValue(selectedCategory));
+    const exists = availableCategories.some((item) => item.value === selectedCategory);
     if (!exists) {
       setSelectedCategory("");
       setSelectedSubCategory("");
@@ -283,7 +300,7 @@ export function ProductsCatalog({ products, activeCategory, activeSubCategory }:
       return;
     }
 
-    const exists = availableSubCategories.some((item) => normalizeValue(item) === normalizeValue(selectedSubCategory));
+    const exists = availableSubCategories.some((item) => item.value === selectedSubCategory);
     if (!exists) {
       setSelectedSubCategory("");
     }
@@ -293,11 +310,11 @@ export function ProductsCatalog({ products, activeCategory, activeSubCategory }:
     const normalizedSearch = searchText.trim().toLowerCase();
 
     return products.filter((product) => {
-      if (selectedCategory && normalizeValue(product.categoryValue) !== normalizeValue(selectedCategory)) {
+      if (selectedCategory && product.category !== selectedCategory) {
         return false;
       }
 
-      if (selectedSubCategory && normalizeValue(product.subCategoryValue) !== normalizeValue(selectedSubCategory)) {
+      if (selectedSubCategory && product.subCategory !== selectedSubCategory) {
         return false;
       }
 
@@ -344,6 +361,20 @@ export function ProductsCatalog({ products, activeCategory, activeSubCategory }:
     onlyInStock,
   ]);
 
+  const activeFilterCount = [
+    selectedCategory,
+    selectedSubCategory,
+    selectedSize,
+    selectedColor,
+    onlyOnSale ? "on-sale" : "",
+    onlyNew ? "new" : "",
+    onlyInStock ? "in-stock" : "",
+  ].filter(Boolean).length;
+
+  const toggleProductWishlist = (productId: string) => {
+    toggleWishlistItem(productId);
+  };
+
   return (
     <>
       <section className="mx-auto w-full max-w-7xl">
@@ -362,7 +393,7 @@ export function ProductsCatalog({ products, activeCategory, activeSubCategory }:
             <SelectDropdown
               label="Categories"
               placeholder="All Categories"
-              value={selectedCategory}
+              value={selectedCategory ? getCategoryLabelBySlug(selectedCategory) : ""}
               options={availableCategories}
               clearable={true}
               open={categoryOpen}
@@ -372,13 +403,23 @@ export function ProductsCatalog({ products, activeCategory, activeSubCategory }:
                 setFilterOpen(false);
               }}
               onSelect={(value) => {
+                if (!isProductCategorySlug(value)) {
+                  setSelectedCategory("");
+                  setSelectedSubCategory("");
+                  navigateForFilter("", "");
+                  setCategoryOpen(false);
+                  return;
+                }
+
                 setSelectedCategory(value);
                 setSelectedSubCategory("");
+                navigateForFilter(value, "");
                 setCategoryOpen(false);
               }}
               onClear={() => {
                 setSelectedCategory("");
                 setSelectedSubCategory("");
+                navigateForFilter("", "");
                 setCategoryOpen(false);
               }}
             />
@@ -386,7 +427,7 @@ export function ProductsCatalog({ products, activeCategory, activeSubCategory }:
             <SelectDropdown
               label="Subcategories"
               placeholder="All Subcategories"
-              value={selectedSubCategory}
+              value={selectedSubCategory ? getSubCategoryLabelBySlug(selectedSubCategory) : ""}
               options={availableSubCategories}
               clearable={true}
               open={subCategoryOpen}
@@ -396,11 +437,22 @@ export function ProductsCatalog({ products, activeCategory, activeSubCategory }:
                 setFilterOpen(false);
               }}
               onSelect={(value) => {
+                if (!isProductSubCategorySlug(value)) {
+                  setSelectedSubCategory("");
+                  navigateForFilter(selectedCategory, "");
+                  setSubCategoryOpen(false);
+                  return;
+                }
+
+                const nextCategory = selectedCategory || getCategoryForSubCategory(value);
+                setSelectedCategory(nextCategory);
                 setSelectedSubCategory(value);
+                navigateForFilter(nextCategory, value);
                 setSubCategoryOpen(false);
               }}
               onClear={() => {
                 setSelectedSubCategory("");
+                navigateForFilter(selectedCategory, "");
                 setSubCategoryOpen(false);
               }}
             />
@@ -442,6 +494,14 @@ export function ProductsCatalog({ products, activeCategory, activeSubCategory }:
               className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-primary/20 bg-secondary text-primary transition hover:border-primary/35"
             >
               <DynamicHugeIcon name="FilterHorizontalIcon" className="h-4.5 w-4.5" iconStrokeWidth={1.9} aria-hidden={true} />
+              {activeFilterCount > 0 ? (
+                <span
+                  className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[0.62rem] font-semibold leading-none text-secondary"
+                  aria-label={`${activeFilterCount} active filters`}
+                >
+                  {activeFilterCount > 9 ? "9+" : activeFilterCount}
+                </span>
+              ) : null}
             </button>
 
             <AnimatePresence>
@@ -451,7 +511,8 @@ export function ProductsCatalog({ products, activeCategory, activeSubCategory }:
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 6, scale: 0.98 }}
                   transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-                  className="absolute right-0 top-[calc(100%+8px)] z-20 w-[300px] rounded-xl border border-primary/16 bg-secondary p-3 shadow-[0_18px_36px_rgba(120,0,0,0.16)]"
+                  className="absolute right-0 top-[calc(100%+8px)] z-20 w-[300px] max-h-[72vh] overflow-y-auto overscroll-contain rounded-xl border border-primary/16 bg-secondary p-3 shadow-[0_18px_36px_rgba(120,0,0,0.16)]"
+                  onWheel={(event) => event.stopPropagation()}
                 >
                   <p className="text-[0.62rem] font-semibold uppercase tracking-[0.22em] text-primary/62">Advanced Filters</p>
 
@@ -462,15 +523,22 @@ export function ProductsCatalog({ products, activeCategory, activeSubCategory }:
                         aria-label="Filter by category"
                         value={selectedCategory}
                         onChange={(event) => {
-                          setSelectedCategory(event.target.value);
+                          const nextCategory = event.target.value;
+                          if (isProductCategorySlug(nextCategory)) {
+                            setSelectedCategory(nextCategory);
+                            navigateForFilter(nextCategory, "");
+                          } else {
+                            setSelectedCategory("");
+                            navigateForFilter("", "");
+                          }
                           setSelectedSubCategory("");
                         }}
                         className="h-10 w-full rounded-lg border border-primary/16 bg-paper px-2.5 text-sm text-primary outline-none"
                       >
                         <option value="">All Categories</option>
                         {availableCategories.map((category) => (
-                          <option key={category} value={category}>
-                            {category}
+                          <option key={category.value} value={category.value}>
+                            {category.label}
                           </option>
                         ))}
                       </select>
@@ -481,13 +549,29 @@ export function ProductsCatalog({ products, activeCategory, activeSubCategory }:
                       <select
                         aria-label="Filter by subcategory"
                         value={selectedSubCategory}
-                        onChange={(event) => setSelectedSubCategory(event.target.value)}
+                        onChange={(event) => {
+                          const nextSubCategory = event.target.value;
+                          if (!nextSubCategory) {
+                            setSelectedSubCategory("");
+                            navigateForFilter(selectedCategory, "");
+                            return;
+                          }
+
+                          if (!isProductSubCategorySlug(nextSubCategory)) {
+                            return;
+                          }
+
+                          const nextCategory = selectedCategory || getCategoryForSubCategory(nextSubCategory);
+                          setSelectedCategory(nextCategory);
+                          setSelectedSubCategory(nextSubCategory);
+                          navigateForFilter(nextCategory, nextSubCategory);
+                        }}
                         className="h-10 w-full rounded-lg border border-primary/16 bg-paper px-2.5 text-sm text-primary outline-none"
                       >
                         <option value="">All Subcategories</option>
                         {availableSubCategories.map((subcat) => (
-                          <option key={subcat} value={subcat}>
-                            {subcat}
+                          <option key={subcat.value} value={subcat.value}>
+                            {subcat.label}
                           </option>
                         ))}
                       </select>
@@ -568,6 +652,11 @@ export function ProductsCatalog({ products, activeCategory, activeSubCategory }:
             <p className="text-xs font-semibold uppercase tracking-[0.26em] text-primary/65">No products found</p>
             <h2 className="mt-3 text-3xl font-semibold leading-tight sm:text-4xl">Try another search or category</h2>
             <p className="mt-3 text-sm text-primary/75 sm:text-base">No matching products are available right now.</p>
+            {activeFilterCount > 0 ? (
+              <p className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-primary/62">
+                {activeFilterCount} active filter{activeFilterCount === 1 ? "" : "s"} may be hiding results
+              </p>
+            ) : null}
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -580,6 +669,8 @@ export function ProductsCatalog({ products, activeCategory, activeSubCategory }:
                 onAddToCart={(productId) => updateCartQuantity(productId, 1)}
                 onIncreaseQuantity={(productId) => updateCartQuantity(productId, (cartItems[productId] ?? 0) + 1)}
                 onDecreaseQuantity={(productId) => updateCartQuantity(productId, (cartItems[productId] ?? 0) - 1)}
+                isWishlisted={Boolean(wishlistItems[product.id])}
+                onToggleWishlist={toggleProductWishlist}
               />
             ))}
           </div>

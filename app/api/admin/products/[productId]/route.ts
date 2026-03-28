@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createDatabasesWithApiKey, getDatabaseId } from "@/lib/appwrite/admin-server";
+import { ensureSlug } from "@/lib/slug";
 
 export const runtime = "nodejs";
 
@@ -8,6 +9,7 @@ type ProductUpdatePayload = {
   name?: string;
   description?: string;
   sku?: string;
+  slug?: string;
   category?: string;
   mainImageUrl?: string;
   discountPrice?: number;
@@ -34,8 +36,13 @@ export async function PATCH(
     const databases = createDatabasesWithApiKey();
     const databaseId = getDatabaseId();
 
-    const updated = await databases.updateDocument(databaseId, "products", productId, {
+    const patchPayload = {
       ...body,
+      ...(body.slug || body.name ? { slug: ensureSlug(body.slug ?? body.name ?? "", productId) } : {}),
+    };
+
+    const updated = await databases.updateDocument(databaseId, "sku", productId, {
+      ...patchPayload,
     });
 
     return NextResponse.json({ ok: true, product: updated });

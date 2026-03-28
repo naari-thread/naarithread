@@ -65,6 +65,9 @@ export const PRODUCT_TAXONOMY: ProductCategoryDefinition[] = [
 ];
 
 const CATEGORY_MAP = new Map(PRODUCT_TAXONOMY.map((item) => [item.slug, item]));
+const CATEGORY_LABEL_TO_SLUG = new Map(
+  PRODUCT_TAXONOMY.map((item) => [item.label.trim().toLowerCase(), item.slug] as const)
+);
 
 const SUBCATEGORY_TO_CATEGORY = new Map<ProductSubCategorySlug, ProductCategorySlug>(
   PRODUCT_TAXONOMY.flatMap((item) => item.subCategories.map((sub) => [sub.slug, item.slug] as const))
@@ -72,6 +75,11 @@ const SUBCATEGORY_TO_CATEGORY = new Map<ProductSubCategorySlug, ProductCategoryS
 
 const SUBCATEGORY_LABEL_MAP = new Map<ProductSubCategorySlug, string>(
   PRODUCT_TAXONOMY.flatMap((item) => item.subCategories.map((sub) => [sub.slug, sub.label] as const))
+);
+const SUBCATEGORY_LABEL_TO_SLUG = new Map(
+  PRODUCT_TAXONOMY.flatMap((item) =>
+    item.subCategories.map((sub) => [sub.label.trim().toLowerCase(), sub.slug] as const)
+  )
 );
 
 export function isProductCategorySlug(value: string): value is ProductCategorySlug {
@@ -86,8 +94,16 @@ export function getCategoryLabelBySlug(slug: ProductCategorySlug) {
   return CATEGORY_MAP.get(slug)?.label ?? "Ethnic";
 }
 
+export function getCategorySlugByLabel(label: string): ProductCategorySlug | null {
+  return CATEGORY_LABEL_TO_SLUG.get(label.trim().toLowerCase()) ?? null;
+}
+
 export function getSubCategoryLabelBySlug(slug: ProductSubCategorySlug) {
   return SUBCATEGORY_LABEL_MAP.get(slug) ?? "Saree";
+}
+
+export function getSubCategorySlugByLabel(label: string): ProductSubCategorySlug | null {
+  return SUBCATEGORY_LABEL_TO_SLUG.get(label.trim().toLowerCase()) ?? null;
 }
 
 export function getSubCategoriesByCategory(slug: ProductCategorySlug) {

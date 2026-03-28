@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "appwrite:setup-db": "node scripts/appwrite/setup-database.mjs"
+    "appwrite:setup-db": "node scripts/appwrite/setup-database.mjs",
+    "appwrite:backfill-product-slugs": "node scripts/appwrite/backfill-product-slugs.mjs"
   },
   "dependencies": {
     "@hugeicons/core-free-icons": "^4.0.0",

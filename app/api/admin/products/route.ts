@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ID } from "node-appwrite";
 
 import { createDatabasesWithApiKey, getDatabaseId } from "@/lib/appwrite/admin-server";
+import { ensureSlug } from "@/lib/slug";
 
 export const runtime = "nodejs";
 
@@ -9,6 +10,7 @@ type ProductPayload = {
   name?: string;
   description?: string;
   sku?: string;
+  slug?: string;
   category?: string;
   mainImageUrl?: string;
   discountPrice?: number;
@@ -38,10 +40,11 @@ export async function POST(request: Request) {
     const databases = createDatabasesWithApiKey();
     const databaseId = getDatabaseId();
 
-    const document = await databases.createDocument(databaseId, "products", ID.unique(), {
+    const document = await databases.createDocument(databaseId, "sku", ID.unique(), {
       name: body.name,
       description: body.description,
       sku: body.sku,
+      slug: ensureSlug(body.slug ?? body.name, body.sku),
       category: body.category,
       mainImageUrl: body.mainImageUrl,
       discountPrice: body.discountPrice,

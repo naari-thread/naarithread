@@ -34,10 +34,11 @@ export async function GET() {
   try {
     const databases = createDatabasesWithApiKey();
     const databaseId = getDatabaseId();
+    const productsCollectionId = "sku";
 
     const [collection, documents] = await Promise.all([
-      databases.getCollection(databaseId, "sku"),
-      databases.listDocuments(databaseId, "sku", [Query.limit(500), Query.orderDesc("$createdAt")]),
+      databases.getCollection(databaseId, productsCollectionId),
+      databases.listDocuments(databaseId, productsCollectionId, [Query.limit(500), Query.orderDesc("$createdAt")]),
     ]);
 
     const categoryAttribute = collection.attributes.find((attribute) => attribute.key === "category");

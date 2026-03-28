@@ -21,7 +21,7 @@ export function AuthModal({
     <AnimatePresence>
       {open ? (
         <motion.div
-          className="fixed inset-0 z-[150] flex items-end justify-center bg-primary/40 p-3 backdrop-blur-sm sm:items-center sm:p-6"
+          className="fixed inset-0 z-[150] flex items-end justify-center bg-primary/25 p-3 backdrop-blur-sm sm:items-center sm:p-6"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -34,7 +34,7 @@ export function AuthModal({
             exit={{ opacity: 0, y: 18, scale: 0.98 }}
             transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
             onClick={(event) => event.stopPropagation()}
-            className="w-full max-w-lg rounded-[1.8rem] border border-primary/15 bg-secondary p-3 shadow-[0_26px_60px_rgba(42,15,15,0.25)] sm:p-4"
+            className="w-full max-w-xl rounded-[1.8rem] border border-primary/15 bg-secondary p-4 shadow-[0_26px_60px_rgba(42,15,15,0.25)] sm:p-6"
             role="dialog"
             aria-modal={true}
             aria-label="Sign up or login modal"

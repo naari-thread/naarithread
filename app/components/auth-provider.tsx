@@ -14,6 +14,9 @@ import { ID, OAuthProvider, type Models } from "appwrite";
 import { appwritePublicConfig, hasPublicAuthConfig } from "@/lib/appwrite/constants";
 import { getBrowserAccount } from "@/lib/appwrite/client";
 import { getOrCreateUserProfile } from "@/lib/appwrite/profiles";
+import { readCartItems, writeCartItems } from "@/lib/cart-state";
+import { readWishlistItems, writeWishlistItems } from "@/lib/wishlist-state";
+import { mergeLocalAndRemoteShopState } from "@/lib/appwrite/shop-sync";
 
 type AuthContextValue = {
   user: Models.User<Models.Preferences> | null;
@@ -59,6 +62,7 @@ function formatErrorForLogging(error: unknown) {
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<Models.User<Models.Preferences> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [lastSyncedUserId, setLastSyncedUserId] = useState("");
 
   const createAuthJwt = useCallback(async () => {
     const account = getBrowserAccount();
@@ -165,6 +169,46 @@ export function AuthProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     void refreshUser();
   }, [refreshUser]);
+
+  useEffect(() => {
+    if (!user?.$id || lastSyncedUserId === user.$id) {
+      return;
+    }
+
+    let alive = true;
+
+    const syncLocalShopState = async () => {
+      try {
+        const jwt = await createAuthJwt();
+        const merged = await mergeLocalAndRemoteShopState({
+          jwt,
+          userId: user.$id,
+          localCart: readCartItems(),
+          localWishlist: readWishlistItems(),
+        });
+
+        if (!alive) {
+          return;
+        }
+
+        writeCartItems(merged.cart);
+        writeWishlistItems(merged.wishlist);
+        setLastSyncedUserId(user.$id);
+      } catch {
+        if (!alive) {
+          return;
+        }
+        // Silent fallback keeps local-first behavior available when sync is blocked.
+        setLastSyncedUserId(user.$id);
+      }
+    };
+
+    void syncLocalShopState();
+
+    return () => {
+      alive = false;
+    };
+  }, [createAuthJwt, lastSyncedUserId, user?.$id]);
 
   useEffect(() => {
     // OAuth callbacks can return via full-page redirect where cookie propagation
@@ -296,6 +340,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     await account.deleteSession("current");
     setUser(null);
+    setLastSyncedUserId("");
   }, []);
 
   const isAdmin = useMemo(() => {
