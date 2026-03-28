@@ -8,6 +8,9 @@ import { usePathname } from "next/navigation";
 import { AuthModal } from "@/app/components/auth-modal";
 import { useAuth } from "@/app/components/auth-provider";
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
+import { AccountDetailsModal } from "@/app/components/account-details-modal";
+import { OrdersDetailsModal } from "@/app/components/orders-details-modal";
+import { WalletDetailsModal } from "@/app/components/wallet-details-modal";
 import { getCartItemsCount, readCartItems, subscribeToCartChanges } from "@/lib/cart-state";
 import { getWishlistItemsCount, readWishlistItems, subscribeToWishlistChanges } from "@/lib/wishlist-state";
 
@@ -143,7 +146,7 @@ const menuItem = {
 };
 
 export function Navbar() {
-  const { isAuthenticated, isLoading, logout } = useAuth();
+  const { isAuthenticated, isLoading, logout, isAdmin } = useAuth();
   const pathname = usePathname();
   const prefersReducedMotion = useReducedMotion();
   const isLandingPage = pathname === "/";
@@ -159,7 +162,7 @@ export function Navbar() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [selectedAccountAction, setSelectedAccountAction] = useState<"account" | "wallet" | null>(null);
+  const [selectedAccountAction, setSelectedAccountAction] = useState<"account" | "wallet" | "orders" | null>(null);
   const [selectedNotification, setSelectedNotification] = useState<NotificationItem | null>(null);
   const closeDropdownTimer = useRef<number | null>(null);
   const notificationPanelRef = useRef<HTMLDivElement | null>(null);
@@ -600,6 +603,29 @@ export function Navbar() {
                       </button>
                       <button
                         type="button"
+                        aria-label="Open orders"
+                        onClick={() => {
+                          setSelectedAccountAction("orders");
+                          setIsAccountMenuOpen(false);
+                        }}
+                        className="mb-1 inline-flex h-10 w-full items-center justify-between rounded-xl px-3 text-sm text-primary/82 transition hover:bg-primary/[0.04]"
+                      >
+                        <span>Orders</span>
+                        <DynamicHugeIcon name="ArrowRight01Icon" className="h-4 w-4" iconStrokeWidth={2} />
+                      </button>
+                      {isAdmin && (
+                        <Link
+                          href="/admin"
+                          onClick={() => setIsAccountMenuOpen(false)}
+                          className="mb-1 inline-flex h-10 w-full items-center justify-between rounded-xl px-3 text-sm text-primary/82 transition hover:bg-primary/[0.04]"
+                          aria-label="Open admin panel"
+                        >
+                          <span>Admin Panel</span>
+                          <DynamicHugeIcon name="ArrowRight01Icon" className="h-4 w-4" iconStrokeWidth={2} />
+                        </Link>
+                      )}
+                      <button
+                        type="button"
                         aria-label="Logout from account"
                         onClick={() => {
                           void logout();
@@ -683,22 +709,24 @@ export function Navbar() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.98 }}
               transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-              className="w-full max-w-md rounded-2xl border border-primary/15 bg-secondary p-4 shadow-[0_20px_48px_rgba(120,0,0,0.2)]"
+              className="w-full max-w-md max-h-[80vh] rounded-2xl border border-primary/15 bg-secondary p-3 sm:p-4 shadow-[0_20px_48px_rgba(120,0,0,0.2)] flex flex-col"
               onClick={(event) => event.stopPropagation()}
               role="dialog"
               aria-modal={true}
               aria-label={selectedNotification ? "Notification details" : "Account details"}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-primary/58">
+              <div className="flex items-start justify-between gap-2 sm:gap-3 shrink-0">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[0.6rem] sm:text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-primary/58">
                     {selectedNotification ? "Notification" : "Account"}
                   </p>
-                  <h3 className="mt-1 text-lg font-semibold text-primary">
+                  <h3 className="mt-1 text-base sm:text-lg font-semibold text-primary truncate">
                     {selectedNotification
                       ? selectedNotification.title
                       : selectedAccountAction === "wallet"
                         ? "Wallet"
+                        : selectedAccountAction === "orders"
+                          ? "Orders"
                         : "My Account"}
                   </h3>
                 </div>
@@ -709,21 +737,49 @@ export function Navbar() {
                     setSelectedNotification(null);
                     setSelectedAccountAction(null);
                   }}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-primary/18 text-primary transition hover:border-primary/35"
+                  className="inline-flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-full border border-primary/18 text-primary transition hover:border-primary/35"
                 >
-                  <DynamicHugeIcon name="Cancel01Icon" className="h-4.5 w-4.5" iconStrokeWidth={2.2} aria-hidden={true} />
+                  <DynamicHugeIcon name="Cancel01Icon" className="h-4 w-4 sm:h-4.5 sm:w-4.5" iconStrokeWidth={2.2} aria-hidden={true} />
                 </button>
               </div>
-              <p className="mt-3 text-sm leading-relaxed text-primary/82">
-                {selectedNotification
-                  ? selectedNotification.body
-                  : selectedAccountAction === "wallet"
-                    ? "Wallet balance and transactions are being prepared. This modal is now the dedicated wallet surface."
-                    : "Manage profile, addresses, and account settings from this panel. Expanded account controls can be connected here."}
-              </p>
-              {selectedNotification ? (
-                <p className="mt-4 text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-primary/56">{selectedNotification.createdAt}</p>
-              ) : null}
+              <div className="flex-1 min-h-0 overflow-hidden mt-2 sm:mt-3">
+                {selectedNotification ? (
+                  <div className="space-y-3 overflow-y-auto overscroll-contain h-full">
+                    <p className="text-xs sm:text-sm leading-relaxed text-primary/82">{selectedNotification.body}</p>
+                    <p className="text-[0.6rem] sm:text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-primary/56">
+                      {selectedNotification.createdAt}
+                    </p>
+                  </div>
+                ) : selectedAccountAction === "account" ? (
+                  <div className="overflow-y-auto overscroll-contain h-full">
+                    <AccountDetailsModal
+                      onClose={() => {
+                        setSelectedNotification(null);
+                        setSelectedAccountAction(null);
+                      }}
+                      showLogout={true}
+                    />
+                  </div>
+                ) : selectedAccountAction === "wallet" ? (
+                  <div className="overflow-y-auto overscroll-contain h-full">
+                    <WalletDetailsModal
+                      onClose={() => {
+                        setSelectedNotification(null);
+                        setSelectedAccountAction(null);
+                      }}
+                    />
+                  </div>
+                ) : selectedAccountAction === "orders" ? (
+                  <div className="overflow-y-auto overscroll-contain h-full">
+                    <OrdersDetailsModal
+                      onClose={() => {
+                        setSelectedNotification(null);
+                        setSelectedAccountAction(null);
+                      }}
+                    />
+                  </div>
+                ) : null}
+              </div>
             </motion.div>
           </motion.div>
         ) : null}

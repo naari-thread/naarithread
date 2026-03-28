@@ -1,8 +1,7 @@
 "use client";
 
-import { motion } from "framer-motion";
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, memo } from "react";
 
 import { CloudinaryImage } from "@/app/components/cloudinary-image";
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
@@ -19,14 +18,15 @@ type ProductCardProps = {
   onToggleWishlist: (productId: string) => void;
 };
 
-const cardEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
+// Memoize the price formatter for performance
+const priceFormatter = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  maximumFractionDigits: 0,
+});
 
 function formatPrice(value: number) {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(value);
+  return priceFormatter.format(value);
 }
 
 function calculateDiscount(discountPrice: number, originalPrice: number) {
@@ -76,18 +76,16 @@ function RatingStars({ rating }: { rating: number }) {
   );
 }
 
-export function ProductCard({
+function ProductCardInternal({
   product,
-  index = 0,
   quantity,
   onAddToCart,
   onIncreaseQuantity,
   onDecreaseQuantity,
   isWishlisted,
   onToggleWishlist,
-}: ProductCardProps) {
-  const [wishlistPulse, setWishlistPulse] = useState(false);
-  const pricing = getPricingSummary(product);
+}: Omit<ProductCardProps, 'index'>) {
+  const pricing = useMemo(() => getPricingSummary(product), [product]);
   const ratingCount = Math.max(0, Math.trunc(product.ratingCount));
   const hasRatings = ratingCount > 0 || product.rating > 0;
   const isOutOfStock = product.stockQty <= 0;
@@ -95,23 +93,11 @@ export function ProductCard({
   const productHref = `/products/${product.category}/${product.subCategory}/${product.slug}`;
 
   return (
-    <motion.article
-      initial={{ opacity: 0, y: 24, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.46, delay: Math.min(index * 0.05, 0.28), ease: cardEase }}
-      className="group relative flex h-[15rem] flex-row overflow-hidden rounded-3xl border border-primary/10 bg-[#fbf5e6] shadow-sm transition duration-300 hover:border-primary/20 hover:shadow-md sm:h-auto sm:flex-col sm:hover:-translate-y-1"
-    >
-      <motion.button
+    <article className="group relative flex h-[15rem] flex-row overflow-hidden rounded-3xl border border-primary/10 bg-[#fbf5e6] shadow-sm transition duration-300 hover:border-primary/20 hover:shadow-md sm:h-auto sm:flex-col sm:hover:sm:-translate-y-1">
+      <button
         type="button"
         aria-label={`${isWishlisted ? "Remove" : "Save"} ${product.name} ${isWishlisted ? "from" : "to"} wishlist`}
-        onClick={() => {
-          onToggleWishlist(product.id);
-          setWishlistPulse(true);
-          window.setTimeout(() => setWishlistPulse(false), 220);
-        }}
-        whileTap={{ scale: 0.92 }}
-        animate={wishlistPulse ? { scale: [1, 1.18, 1] } : { scale: 1 }}
-        transition={{ duration: 0.24, ease: cardEase }}
+        onClick={() => onToggleWishlist(product.id)}
         className={`absolute right-2.5 top-2.5 z-[4] flex h-9 w-9 items-center justify-center rounded-full border backdrop-blur-sm transition sm:right-4 sm:top-4 ${
           isWishlisted
             ? "border-primary bg-primary text-secondary shadow-[0_10px_24px_rgba(120,0,0,0.24)]"
@@ -119,7 +105,7 @@ export function ProductCard({
         }`}
       >
         <DynamicHugeIcon name="FavouriteIcon" className="h-4.5 w-4.5" iconStrokeWidth={2} aria-hidden={true} />
-      </motion.button>
+      </button>
 
       {isOutOfStock ? (
         <div
@@ -135,7 +121,7 @@ export function ProductCard({
             alt={product.name}
             fill
             sizes="(max-width: 640px) 45vw, (max-width: 1024px) 50vw, 25vw"
-            className="object-cover transition duration-500 group-hover:scale-105"
+            className="object-cover transition duration-500 sm:group-hover:scale-105"
           />
         </Link>
 
@@ -157,7 +143,7 @@ export function ProductCard({
 
         <div className="mt-1.5 sm:mt-2">
           <Link href={productHref} aria-label={`Open ${product.name}`} className="inline-block">
-            <h3 className="line-clamp-2 font-display text-[1.1rem] font-medium leading-tight text-primary transition hover:text-primary/90 sm:text-[1.3rem] sm:leading-tight">
+            <h3 className="line-clamp-2 font-display text-[1.1rem] font-medium leading-tight text-primary transition hover:text-primary/90 sm:text-[1.3rem] sm:leading-tight min-h-[2.75rem] sm:min-h-[3.35rem] flex items-start">
               {product.name}
             </h3>
           </Link>
@@ -224,6 +210,8 @@ export function ProductCard({
           </div>
         </div>
       </div>
-    </motion.article>
+    </article>
   );
 }
+
+export const ProductCard = memo(ProductCardInternal);

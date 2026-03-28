@@ -109,6 +109,23 @@ export function MobileProductsBottomBar() {
           );
 
           if (item.id === "account") {
+            if (isAuthenticated) {
+              return (
+                <Link
+                  key={item.label}
+                  href="/account"
+                  aria-label="Open account"
+                  className={`relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-[1.05rem] px-1 py-2.5 text-[0.72rem] font-semibold tracking-[0.01em] transition-all duration-250 ${
+                    isActive
+                      ? "text-secondary"
+                      : "text-primary/70 hover:bg-primary/5 hover:text-primary"
+                  }`}
+                >
+                  {content}
+                </Link>
+              );
+            }
+
             return (
               <button
                 key={item.label}

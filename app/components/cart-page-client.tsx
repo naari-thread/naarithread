@@ -11,13 +11,20 @@ import { useAuth } from "@/app/components/auth-provider";
 import type { ProductRecord } from "@/lib/appwrite/products";
 import { readCartItems, writeCartItems, type CartItemsMap } from "@/lib/cart-state";
 import { readUserCartMap, upsertUserCartMap } from "@/lib/appwrite/shop-sync";
-
-type CartPageClientProps = {
-  products: ProductRecord[];
-};
+import {
+  areProductsEquivalent,
+  fetchCatalogProductsFromApi,
+  readCachedProductSnapshot,
+  writeCachedProductSnapshot,
+} from "@/lib/product-catalog-cache";
 
 type CartLine = {
   product: ProductRecord;
+  quantity: number;
+};
+
+type MissingCartLine = {
+  productId: string;
   quantity: number;
 };
 
@@ -29,9 +36,11 @@ function formatPrice(value: number) {
   }).format(value);
 }
 
-export function CartPageClient({ products }: CartPageClientProps) {
+export function CartPageClient() {
   const { user, isLoading, isAuthenticated, createAuthJwt } = useAuth();
   const [cartItems, setCartItems] = useState<CartItemsMap>({});
+  const [products, setProducts] = useState<ProductRecord[]>([]);
+  const [hasCompletedCatalogSync, setHasCompletedCatalogSync] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   useEffect(() => {
@@ -41,6 +50,42 @@ export function CartPageClient({ products }: CartPageClientProps) {
 
     return () => {
       window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    const cachedProducts = readCachedProductSnapshot();
+
+    if (cachedProducts.length > 0) {
+      setProducts(cachedProducts);
+    }
+
+    const controller = new AbortController();
+
+    const hydrateCatalog = async () => {
+      try {
+        const serverProducts = await fetchCatalogProductsFromApi(controller.signal);
+        if (!alive || serverProducts.length === 0) {
+          return;
+        }
+
+        if (!areProductsEquivalent(serverProducts, cachedProducts)) {
+          setProducts(serverProducts);
+          writeCachedProductSnapshot(serverProducts);
+        }
+      } finally {
+        if (alive) {
+          setHasCompletedCatalogSync(true);
+        }
+      }
+    };
+
+    void hydrateCatalog();
+
+    return () => {
+      alive = false;
+      controller.abort();
     };
   }, []);
 
@@ -74,22 +119,32 @@ export function CartPageClient({ products }: CartPageClientProps) {
     };
   }, [createAuthJwt, isAuthenticated, user?.$id]);
 
-  const lines = useMemo<CartLine[]>(() => {
+  const { lines, missingLines } = useMemo(() => {
     const byId = new Map(products.map((item) => [item.id, item] as const));
+    const resolvedLines: CartLine[] = [];
+    const unresolvedLines: MissingCartLine[] = [];
 
-    return Object.entries(cartItems)
-      .map(([productId, quantity]) => {
-        const product = byId.get(productId);
-        if (!product || quantity <= 0) {
-          return null;
-        }
+    for (const [productId, quantity] of Object.entries(cartItems)) {
+      if (quantity <= 0) {
+        continue;
+      }
 
-        return {
-          product,
-          quantity,
-        };
-      })
-      .filter((item): item is CartLine => Boolean(item));
+      const product = byId.get(productId);
+      if (!product) {
+        unresolvedLines.push({ productId, quantity });
+        continue;
+      }
+
+      resolvedLines.push({
+        product,
+        quantity,
+      });
+    }
+
+    return {
+      lines: resolvedLines,
+      missingLines: unresolvedLines,
+    };
   }, [cartItems, products]);
 
   const subtotal = lines.reduce((total, line) => {
@@ -164,7 +219,7 @@ export function CartPageClient({ products }: CartPageClientProps) {
 
           <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start lg:gap-12">
             <div className="flex flex-col">
-              {lines.length === 0 ? (
+              {lines.length === 0 && missingLines.length === 0 ? (
                 <div className="py-12 text-center text-sm text-primary/75">
                   Your cart is empty. Add products from the catalog to continue.
                 </div>
@@ -240,6 +295,39 @@ export function CartPageClient({ products }: CartPageClientProps) {
                   </article>
                 );
               })}
+
+              {missingLines.map((line) =>
+                hasCompletedCatalogSync ? (
+                  <article key={line.productId} className="flex flex-col gap-4 border-b border-primary/10 py-6">
+                    <div className="rounded-xl border border-primary/12 bg-primary/[0.03] p-4">
+                      <p className="text-sm font-medium text-primary">Product unavailable</p>
+                      <p className="mt-1 text-xs text-primary/70">
+                        This item could not be loaded right now. You can remove it from your cart.
+                      </p>
+                      <p className="mt-2 text-xs text-primary/70">Quantity: {line.quantity}</p>
+                      <button
+                        type="button"
+                        aria-label="Remove unavailable item from cart"
+                        onClick={() => void updateQuantity(line.productId, 0)}
+                        className="mt-3 inline-flex h-9 items-center justify-center rounded-xl border border-primary/20 px-4 text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-primary transition hover:border-primary/45 hover:bg-primary/5"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </article>
+                ) : (
+                  <article key={line.productId} className="flex flex-col gap-6 border-b border-primary/10 py-6" aria-hidden={true}>
+                    <div className="flex flex-1 items-start gap-5">
+                      <div className="h-28 w-24 shrink-0 animate-pulse rounded-xl bg-primary/10 sm:h-32 sm:w-28" />
+                      <div className="flex flex-1 flex-col gap-2">
+                        <div className="h-4 w-2/3 animate-pulse rounded bg-primary/10" />
+                        <div className="h-3 w-1/2 animate-pulse rounded bg-primary/10" />
+                        <div className="mt-2 h-4 w-1/3 animate-pulse rounded bg-primary/10" />
+                      </div>
+                    </div>
+                  </article>
+                )
+              )}
             </div>
 
             <aside className="rounded-2xl border border-primary/15 bg-secondary p-5 sm:p-6 lg:sticky lg:top-28">

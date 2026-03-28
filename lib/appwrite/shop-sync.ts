@@ -41,7 +41,8 @@ async function resolveCollectionId(jwt: string, candidates: readonly string[]) {
       await databases.listDocuments(appwritePublicConfig.databaseId, collectionId, [Query.limit(1)]);
       return collectionId;
     } catch {
-      // Continue fallback lookup.
+      // Silently continue fallback lookup - CORS errors are expected in development
+      // Console logging for errors is suppressed to avoid cluttering the console
     }
   }
 

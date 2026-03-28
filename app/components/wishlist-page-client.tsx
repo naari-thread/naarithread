@@ -12,14 +12,18 @@ import type { ProductRecord } from "@/lib/appwrite/products";
 import { readWishlistItems, toggleWishlistItem, writeWishlistItems, type WishlistItemsMap } from "@/lib/wishlist-state";
 import { readCartItems, writeCartItems } from "@/lib/cart-state";
 import { readUserWishlistMap, upsertUserWishlistMap, upsertUserCartMap } from "@/lib/appwrite/shop-sync";
+import {
+  areProductsEquivalent,
+  fetchCatalogProductsFromApi,
+  readCachedProductSnapshot,
+  writeCachedProductSnapshot,
+} from "@/lib/product-catalog-cache";
 
-type WishlistPageClientProps = {
-  products: ProductRecord[];
-};
-
-export function WishlistPageClient({ products }: WishlistPageClientProps) {
+export function WishlistPageClient() {
   const { isLoading, isAuthenticated, user, createAuthJwt } = useAuth();
   const [wishlistItems, setWishlistItems] = useState<WishlistItemsMap>({});
+  const [products, setProducts] = useState<ProductRecord[]>([]);
+  const [hasCompletedCatalogSync, setHasCompletedCatalogSync] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   useEffect(() => {
@@ -29,6 +33,42 @@ export function WishlistPageClient({ products }: WishlistPageClientProps) {
 
     return () => {
       window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    const cachedProducts = readCachedProductSnapshot();
+
+    if (cachedProducts.length > 0) {
+      setProducts(cachedProducts);
+    }
+
+    const controller = new AbortController();
+
+    const hydrateCatalog = async () => {
+      try {
+        const serverProducts = await fetchCatalogProductsFromApi(controller.signal);
+        if (!alive || serverProducts.length === 0) {
+          return;
+        }
+
+        if (!areProductsEquivalent(serverProducts, cachedProducts)) {
+          setProducts(serverProducts);
+          writeCachedProductSnapshot(serverProducts);
+        }
+      } finally {
+        if (alive) {
+          setHasCompletedCatalogSync(true);
+        }
+      }
+    };
+
+    void hydrateCatalog();
+
+    return () => {
+      alive = false;
+      controller.abort();
     };
   }, []);
 
@@ -62,10 +102,18 @@ export function WishlistPageClient({ products }: WishlistPageClientProps) {
     };
   }, [createAuthJwt, isAuthenticated, user?.$id]);
 
-  const wishlistProducts = useMemo(() => {
+  const { wishlistProducts, missingProductIds } = useMemo(() => {
     const selected = new Set(Object.keys(wishlistItems));
-    return products.filter((item) => selected.has(item.id));
+    const presentProducts = products.filter((item) => selected.has(item.id));
+    const presentIds = new Set(presentProducts.map((item) => item.id));
+
+    return {
+      wishlistProducts: presentProducts,
+      missingProductIds: Object.keys(wishlistItems).filter((productId) => !presentIds.has(productId)),
+    };
   }, [products, wishlistItems]);
+
+  const selectedCount = Object.keys(wishlistItems).length;
 
   const removeItem = async (productId: string) => {
     const wasAdded = toggleWishlistItem(productId);
@@ -139,7 +187,7 @@ export function WishlistPageClient({ products }: WishlistPageClientProps) {
             </motion.div>
           ) : null}
 
-          {wishlistProducts.length === 0 ? (
+          {selectedCount === 0 ? (
             <div className="mt-8 py-12 text-center text-sm text-primary/75">
               No items in wishlist yet. Explore products and tap the heart icon to save styles.
               <div className="mt-6">
@@ -220,6 +268,38 @@ export function WishlistPageClient({ products }: WishlistPageClientProps) {
                   </article>
                 );
               })}
+
+              {missingProductIds.map((productId) =>
+                hasCompletedCatalogSync ? (
+                  <article key={productId} className="flex flex-col gap-4 border-b border-primary/10 py-6">
+                    <div className="rounded-xl border border-primary/12 bg-primary/[0.03] p-4">
+                      <p className="text-sm font-medium text-primary">Product unavailable</p>
+                      <p className="mt-1 text-xs text-primary/70">
+                        This saved item could not be loaded right now. You can remove it from wishlist.
+                      </p>
+                      <button
+                        type="button"
+                        aria-label="Remove unavailable item from wishlist"
+                        onClick={() => void removeItem(productId)}
+                        className="mt-3 inline-flex h-9 items-center justify-center rounded-xl border border-primary/20 px-4 text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-primary transition hover:border-primary/45 hover:bg-primary/5"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </article>
+                ) : (
+                  <article key={productId} className="flex flex-col gap-6 border-b border-primary/10 py-6" aria-hidden={true}>
+                    <div className="flex flex-1 items-start gap-5">
+                      <div className="h-28 w-24 shrink-0 animate-pulse rounded-xl bg-primary/10 sm:h-32 sm:w-28" />
+                      <div className="flex flex-1 flex-col gap-2">
+                        <div className="h-4 w-2/3 animate-pulse rounded bg-primary/10" />
+                        <div className="h-3 w-1/2 animate-pulse rounded bg-primary/10" />
+                        <div className="mt-2 h-4 w-1/3 animate-pulse rounded bg-primary/10" />
+                      </div>
+                    </div>
+                  </article>
+                )
+              )}
             </div>
           )}
         </section>

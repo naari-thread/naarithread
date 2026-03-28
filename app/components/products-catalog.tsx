@@ -660,11 +660,10 @@ export function ProductsCatalog({ products, activeCategorySlug, activeSubCategor
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {filteredProducts.map((product, index) => (
+            {filteredProducts.map((product) => (
               <ProductCard
                 key={product.id}
                 product={product}
-                index={index}
                 quantity={cartItems[product.id] ?? 0}
                 onAddToCart={(productId) => updateCartQuantity(productId, 1)}
                 onIncreaseQuantity={(productId) => updateCartQuantity(productId, (cartItems[productId] ?? 0) + 1)}
