@@ -158,7 +158,7 @@ export function WishlistPageClient() {
 
   return (
     <>
-      <main className="min-h-screen bg-paper px-4 pb-32 pt-24 text-primary sm:px-6 md:px-8 md:pb-20 md:pt-30">
+      <main className="min-h-screen bg-paper px-4 pb-32 pt-7 text-primary sm:px-6 md:px-8 md:pb-20 md:pt-30">
         <section className="mx-auto w-full max-w-6xl">
           <header className={`pb-5 sm:pb-6 ${isLoading || isAuthenticated ? 'border-b border-primary/15' : ''}`}>
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary/70">Saved</p>
@@ -249,13 +249,13 @@ export function WishlistPageClient() {
                       >
                         Move to Cart
                       </button>
-                      <Link
+                      {/* <Link
                         href={`/products/${product.category}/${product.subCategory}/${product.slug}`}
                         aria-label={`Open ${product.name}`}
                         className="inline-flex h-9 w-full items-center justify-center rounded-xl border border-primary/20 px-4 text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-primary transition hover:border-primary/45 hover:bg-primary/5"
                       >
                         View Product
-                      </Link>
+                      </Link> */}
                       <button
                         type="button"
                         aria-label={`Remove ${product.name} from wishlist`}

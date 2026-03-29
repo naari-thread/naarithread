@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "appwrite:setup-db": "node scripts/appwrite/setup-database.mjs",
-    "appwrite:backfill-product-slugs": "node scripts/appwrite/backfill-product-slugs.mjs"
+    "appwrite:backfill-product-slugs": "node scripts/appwrite/backfill-product-slugs.mjs",
+    "appwrite:backfill-product-sizes": "node scripts/appwrite/backfill-product-size-options.mjs",
+    "appwrite:seed-reviews": "node scripts/appwrite/seed-reviews.mjs"
   },
   "dependencies": {
     "@hugeicons/core-free-icons": "^4.0.0",

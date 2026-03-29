@@ -26,6 +26,7 @@ type HugeIconName =
   | "ShoppingBag01Icon"
   | "ShoppingCart01Icon"
   | "ShoppingCart02Icon"
+  | "Share01Icon"
   | "StarIcon"
   | "StarHalfIcon"
   | "Sun01Icon"
@@ -59,6 +60,7 @@ const iconLoaders: Record<HugeIconName, () => Promise<{ default: HugeIconData }>
   ShoppingBag01Icon: () => import("@hugeicons/core-free-icons/ShoppingBag01Icon"),
   ShoppingCart01Icon: () => import("@hugeicons/core-free-icons/ShoppingCart01Icon"),
   ShoppingCart02Icon: () => import("@hugeicons/core-free-icons/ShoppingCart02Icon"),
+  Share01Icon: () => import("@hugeicons/core-free-icons/Share08Icon"),
   StarIcon: () => import("@hugeicons/core-free-icons/StarIcon"),
   StarHalfIcon: () => import("@hugeicons/core-free-icons/StarHalfIcon"),
   Sun01Icon: () => import("@hugeicons/core-free-icons/Sun01Icon"),

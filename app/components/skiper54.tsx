@@ -141,7 +141,7 @@ const Skiper54 = ({
                 src={slide.image.src}
                 alt={slide.image.alt}
                 fill
-                priority={slide.slot === 0}
+                loading="lazy"
                 sizes={CLOUDINARY_SIZES.carousel}
                 className="object-cover object-top"
               />

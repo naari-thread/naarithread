@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Lora, Plus_Jakarta_Sans } from "next/font/google";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/react";
@@ -14,6 +15,7 @@ const loraDisplay = Lora({
   variable: "--font-display",
   subsets: ["latin"],
   display: "swap",
+  preload: true,
   weight: ["400", "500", "600", "700"],
   style: ["normal", "italic"],
 });
@@ -22,6 +24,7 @@ const plusJakartaSans = Plus_Jakarta_Sans({
   variable: "--font-body",
   subsets: ["latin"],
   display: "swap",
+  preload: true,
   weight: ["400", "500", "600", "700"],
 });
 
@@ -82,6 +85,29 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <link
+          rel="preload"
+          as="image"
+          href="https://res.cloudinary.com/dueruzfoq/image/upload/v1774145271/heroimage_eirhec.png"
+          fetchPriority="high"
+        />
+        <Script
+          src="https://cdn.databuddy.cc/databuddy.js"
+          strategy="afterInteractive"
+          data-client-id="f660a715-6ce7-4265-a431-ced32672bca1"
+          data-track-outgoing-links="true"
+          data-track-interactions="true"
+          data-track-performance="false"
+          crossOrigin="anonymous"
+          async
+        />
+        <Script
+          src="https://cloud.umami.is/script.js"
+          strategy="afterInteractive"
+          data-website-id="25ccc360-592c-49f3-97ff-a5e528519ccc"
+        />
+      </head>
       <body className={`${loraDisplay.variable} ${plusJakartaSans.variable} bg-paper text-primary antialiased`}>
         <AuthProvider>
           <Navbar />

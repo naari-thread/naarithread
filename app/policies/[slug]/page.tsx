@@ -4,6 +4,9 @@ import { notFound } from "next/navigation";
 
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
 
+export const revalidate = false;
+export const dynamicParams = false;
+
 type PolicyPageProps = {
   params: Promise<{ slug: string }>;
 };

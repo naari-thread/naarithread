@@ -21,6 +21,36 @@ type ProductUpdatePayload = {
   isActive?: boolean;
 };
 
+function normalizeStringArray(value: unknown) {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const item of value) {
+    if (typeof item !== "string") {
+      continue;
+    }
+
+    const trimmed = item.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    const dedupeKey = trimmed.toLowerCase();
+    if (seen.has(dedupeKey)) {
+      continue;
+    }
+
+    seen.add(dedupeKey);
+    normalized.push(trimmed);
+  }
+
+  return normalized;
+}
+
 export async function PATCH(
   request: Request,
   context: { params: Promise<{ productId: string }> }
@@ -36,8 +66,15 @@ export async function PATCH(
     const databases = createDatabasesWithApiKey();
     const databaseId = getDatabaseId();
 
+    const normalizedColorOptions = normalizeStringArray(body.colorOptions);
+    const normalizedSizeOptions = normalizeStringArray(body.sizeOptions);
+    const normalizedOtherImageUrls = normalizeStringArray(body.otherImageUrls);
+
     const patchPayload = {
       ...body,
+      ...(normalizedColorOptions ? { colorOptions: normalizedColorOptions } : {}),
+      ...(normalizedSizeOptions ? { sizeOptions: normalizedSizeOptions } : {}),
+      ...(normalizedOtherImageUrls ? { otherImageUrls: normalizedOtherImageUrls } : {}),
       ...(body.slug || body.name ? { slug: ensureSlug(body.slug ?? body.name ?? "", productId) } : {}),
     };
 

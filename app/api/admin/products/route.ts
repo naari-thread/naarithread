@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ID } from "node-appwrite";
+import { ID, Query } from "node-appwrite";
 
 import { createDatabasesWithApiKey, getDatabaseId } from "@/lib/appwrite/admin-server";
 import { ensureSlug } from "@/lib/slug";
@@ -21,8 +21,80 @@ type ProductPayload = {
   otherImageUrls?: string[];
 };
 
+function normalizeStringArray(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [] as string[];
+  }
+
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const item of value) {
+    if (typeof item !== "string") {
+      continue;
+    }
+
+    const trimmed = item.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    const dedupeKey = trimmed.toLowerCase();
+    if (seen.has(dedupeKey)) {
+      continue;
+    }
+
+    seen.add(dedupeKey);
+    normalized.push(trimmed);
+  }
+
+  return normalized;
+}
+
 function badRequest(message: string) {
   return NextResponse.json({ error: message }, { status: 400 });
+}
+
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const limitParam = Number(searchParams.get("limit") ?? 40);
+    const offsetParam = Number(searchParams.get("offset") ?? 0);
+    const limit = Number.isFinite(limitParam) ? Math.min(100, Math.max(1, Math.trunc(limitParam))) : 40;
+    const offset = Number.isFinite(offsetParam) ? Math.max(0, Math.trunc(offsetParam)) : 0;
+
+    const databases = createDatabasesWithApiKey();
+    const databaseId = getDatabaseId();
+
+    const response = await databases.listDocuments(databaseId, "sku", [
+      Query.limit(limit),
+      Query.offset(offset),
+      Query.orderDesc("$createdAt"),
+    ]);
+
+    const products = response.documents.map((document) => ({
+      id: document.$id,
+      slug: document.slug ?? "",
+      name: document.name ?? "Untitled Product",
+      category: document.category ?? "",
+      subCategory: document.subCategory ?? document.subcategory ?? "",
+      sizeOptions: normalizeStringArray(document.sizeOptions),
+      discountPrice: Number(document.discountPrice ?? 0),
+      originalPrice: Number(document.originalPrice ?? 0),
+      stockQty: Number(document.stockQty ?? 0),
+      isActive: typeof document.isActive === "boolean" ? document.isActive : true,
+    }));
+
+    return NextResponse.json({ ok: true, products, total: response.total });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: "Failed to list products.",
+        detail: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 }
+    );
+  }
 }
 
 export async function POST(request: Request) {
@@ -53,9 +125,9 @@ export async function POST(request: Request) {
       rating: 0,
       ratingCount: 0,
       reviewIds: [],
-      colorOptions: body.colorOptions ?? [],
-      sizeOptions: body.sizeOptions ?? [],
-      otherImageUrls: body.otherImageUrls ?? [],
+      colorOptions: normalizeStringArray(body.colorOptions),
+      sizeOptions: normalizeStringArray(body.sizeOptions),
+      otherImageUrls: normalizeStringArray(body.otherImageUrls),
       isActive: true,
     });
 

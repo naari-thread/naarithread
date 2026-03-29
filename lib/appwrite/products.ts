@@ -222,3 +222,39 @@ export async function getProductBySlug(slug: string) {
   const all = await listProductsFromCollection();
   return all.find((item) => item.slug === normalizedSlug) ?? null;
 }
+
+export async function getRelatedProducts(product: ProductRecord, limit = 4) {
+  const allProducts = await listProductsFromCollection();
+  const available = allProducts.filter((item) => item.id !== product.id && item.isActive);
+
+  const selected: ProductRecord[] = [];
+  const seen = new Set<string>();
+
+  function takeMatching(predicate: (item: ProductRecord) => boolean, maxToTake: number) {
+    if (maxToTake <= 0) {
+      return;
+    }
+
+    const matches = available.filter((item) => predicate(item) && !seen.has(item.id)).slice(0, maxToTake);
+    for (const item of matches) {
+      seen.add(item.id);
+      selected.push(item);
+    }
+  }
+
+  takeMatching((item) => item.subCategory === product.subCategory, limit);
+  takeMatching((item) => item.category === product.category, limit - selected.length);
+
+  if (selected.length < limit) {
+    const randomPool = available.filter((item) => !seen.has(item.id)).sort(() => Math.random() - 0.5);
+    for (const item of randomPool) {
+      seen.add(item.id);
+      selected.push(item);
+      if (selected.length >= limit) {
+        break;
+      }
+    }
+  }
+
+  return selected.slice(0, limit);
+}
