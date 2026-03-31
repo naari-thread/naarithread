@@ -777,14 +777,14 @@ export default async function AdminPage({
           {products.length === 0 ? (
             <p className="text-sm text-primary/72">No products found.</p>
           ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-2 gap-3 md:gap-5 sm:grid-cols-2 lg:grid-cols-4">
               {products.map((product) => {
                 const price = product.discountPrice > 0 ? product.discountPrice : product.originalPrice;
                 const imageSrc = product.mainImageUrl || product.otherImageUrls[0] || "/logo4.png";
                 const isInStock = product.inStock;
 
                 return (
-                  <article key={product.id} className="rounded-2xl border border-primary/12 bg-[#fbf5e6] p-2.5">
+                  <article key={product.id} className="rounded-2xl border border-primary/12 bg-[#fbf5e6] p-2.5 hover:shadow-lg transition ">
                     <div className="relative mb-2.5 overflow-hidden rounded-xl border border-primary/10 bg-paper/60">
                       <div className="relative aspect-[4/3] w-full">
                         <CloudinaryImage
@@ -792,7 +792,7 @@ export default async function AdminPage({
                           alt={product.name}
                           fill
                           sizes="(max-width: 640px) 40vw, 220px"
-                          className="object-cover"
+                          className="object-cover md:object-contain"
                         />
                       </div>
                       {!isInStock ? (
