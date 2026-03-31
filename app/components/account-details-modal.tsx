@@ -102,6 +102,19 @@ export function AccountDetailsModal({ onClose, showLogout = false }: AccountDeta
 
   return (
     <div className="flex flex-col max-h-[60vh] overflow-y-auto overscroll-contain space-y-4 px-1 pb-1 sm:px-2 sm:pb-2">
+      {showLogout && (
+        <div className="flex justify-end shrink-0">
+          <button
+            type="button"
+            onClick={handleLogout}
+            aria-label="Logout from account"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-primary/20 text-primary transition hover:border-primary/40 hover:bg-primary/5"
+          >
+            <DynamicHugeIcon name="ArrowLeft01Icon" className="h-4.5 w-4.5" iconStrokeWidth={2} aria-hidden={true} />
+          </button>
+        </div>
+      )}
+
       {isLoading && !profile ? (
         <div className="flex min-h-40 items-center justify-center">
           <div className="inline-flex flex-col items-center gap-2">
@@ -171,40 +184,24 @@ export function AccountDetailsModal({ onClose, showLogout = false }: AccountDeta
             </div>
           )}
 
-          <div className={`mt-4 grid shrink-0 ${showLogout ? "grid-cols-2 gap-2" : "grid-cols-1"}`}>
-            {showLogout ? (
-              <button
-                type="button"
-                onClick={() => {
-                  void handleLogout();
-                }}
-                aria-label="Logout from account"
-                className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-primary/20 px-4 text-xs font-semibold uppercase tracking-[0.18em] text-primary transition hover:border-primary/40 hover:bg-primary/5 sm:h-10"
-              >
-                <DynamicHugeIcon name="ArrowLeft01Icon" className="h-3.5 w-3.5 sm:h-4 sm:w-4" iconStrokeWidth={2} aria-hidden={true} />
-                Logout
-              </button>
-            ) : null}
-
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={isSaving}
-              className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-primary/20 bg-primary px-4 text-xs font-semibold uppercase tracking-[0.18em] text-secondary transition hover:border-primary/40 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 sm:h-10"
-            >
-              {isSaving ? (
-                <>
-                  <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-secondary/30 border-t-secondary" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <DynamicHugeIcon name="Mail01Icon" className="h-3.5 w-3.5 sm:h-4 sm:w-4" iconStrokeWidth={2} aria-hidden={true} />
-                  Save Changes
-                </>
-              )}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={isSaving}
+            className="mt-4 inline-flex h-9 sm:h-10 w-full items-center justify-center gap-2 rounded-lg border border-primary/20 bg-primary px-4 text-xs font-semibold uppercase tracking-[0.18em] text-secondary transition hover:border-primary/40 hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+          >
+            {isSaving ? (
+              <>
+                <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-secondary/30 border-t-secondary" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <DynamicHugeIcon name="Mail01Icon" className="h-3.5 w-3.5 sm:h-4 sm:w-4" iconStrokeWidth={2} aria-hidden={true} />
+                Save Changes
+              </>
+            )}
+          </button>
         </>
       ) : (
         <div className="flex min-h-40 items-center justify-center">

@@ -4,8 +4,7 @@ import { ProductsCatalog } from "@/app/components/products-catalog";
 import { listProductsFromCollection } from "@/lib/appwrite/products";
 import { getCategoryForSubCategory, isProductCategorySlug, isProductSubCategorySlug } from "@/lib/product-taxonomy";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+export const revalidate = 900;
 
 type SubCategoryProductsPageProps = {
   params: Promise<{ category: string; subcategory: string }>;

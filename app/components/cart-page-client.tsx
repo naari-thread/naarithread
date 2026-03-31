@@ -9,7 +9,14 @@ import { CloudinaryImage } from "@/app/components/cloudinary-image";
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
 import { useAuth } from "@/app/components/auth-provider";
 import type { ProductRecord } from "@/lib/appwrite/products";
-import { readCartItems, writeCartItems, type CartItemsMap } from "@/lib/cart-state";
+import {
+  readCartItemSelections,
+  readCartItems,
+  removeCartItemSelection,
+  writeCartItems,
+  type CartItemSelectionsMap,
+  type CartItemsMap,
+} from "@/lib/cart-state";
 import { readUserCartMap, upsertUserCartMap } from "@/lib/appwrite/shop-sync";
 import {
   areProductsEquivalent,
@@ -39,6 +46,7 @@ function formatPrice(value: number) {
 export function CartPageClient() {
   const { user, isLoading, isAuthenticated, createAuthJwt } = useAuth();
   const [cartItems, setCartItems] = useState<CartItemsMap>({});
+  const [cartSelections, setCartSelections] = useState<CartItemSelectionsMap>({});
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [hasCompletedCatalogSync, setHasCompletedCatalogSync] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -46,6 +54,7 @@ export function CartPageClient() {
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       setCartItems(readCartItems());
+      setCartSelections(readCartItemSelections());
     });
 
     return () => {
@@ -179,6 +188,12 @@ export function CartPageClient() {
 
     if (normalized <= 0) {
       delete next[productId];
+      removeCartItemSelection(productId);
+      setCartSelections((previous) => {
+        const rest = { ...previous };
+        delete rest[productId];
+        return rest;
+      });
     } else {
       next[productId] = normalized;
     }
@@ -253,6 +268,13 @@ export function CartPageClient() {
                         <p className="mt-1 text-xs uppercase tracking-[0.18em] text-primary/65">
                           {line.product.categoryValue} • {line.product.subCategoryValue}
                         </p>
+                        {(cartSelections[line.product.id]?.size || cartSelections[line.product.id]?.color) ? (
+                          <p className="mt-2 text-[0.62rem] font-semibold uppercase tracking-[0.13em] text-primary/60">
+                            {cartSelections[line.product.id]?.size ? `Size: ${cartSelections[line.product.id]?.size}` : ""}
+                            {cartSelections[line.product.id]?.size && cartSelections[line.product.id]?.color ? "  •  " : ""}
+                            {cartSelections[line.product.id]?.color ? `Color: ${cartSelections[line.product.id]?.color}` : ""}
+                          </p>
+                        ) : null}
                         
                         <div className="mt-3 flex items-baseline gap-2">
                           <span className="text-base font-semibold">₹{sellingPrice.toLocaleString("en-IN")}</span>

@@ -15,6 +15,7 @@ type ProductUpdatePayload = {
   discountPrice?: number;
   originalPrice?: number;
   stockQty?: number;
+  inStock?: boolean;
   colorOptions?: string[];
   sizeOptions?: string[];
   otherImageUrls?: string[];

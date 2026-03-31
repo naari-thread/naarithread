@@ -1,6 +1,12 @@
 export type CartItemsMap = Record<string, number>;
+export type CartItemSelection = {
+  size?: string;
+  color?: string;
+};
+export type CartItemSelectionsMap = Record<string, CartItemSelection>;
 
 const CART_STORAGE_KEY = "nt-cart-items-v1";
+const CART_SELECTIONS_STORAGE_KEY = "nt-cart-item-selections-v1";
 const CART_CHANGE_EVENT = "nt-cart-change";
 
 function normalizeQuantity(value: unknown) {
@@ -33,6 +39,48 @@ function normalizeCartMap(value: unknown): CartItemsMap {
   return normalized;
 }
 
+function normalizeSelectionValue(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const raw = value as { size?: unknown; color?: unknown };
+  const size = typeof raw.size === "string" ? raw.size.trim() : "";
+  const color = typeof raw.color === "string" ? raw.color.trim() : "";
+
+  if (!size && !color) {
+    return null;
+  }
+
+  return {
+    ...(size ? { size } : {}),
+    ...(color ? { color } : {}),
+  } satisfies CartItemSelection;
+}
+
+function normalizeSelectionsMap(value: unknown): CartItemSelectionsMap {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+
+  const normalized: CartItemSelectionsMap = {};
+  for (const [productId, selectionRaw] of Object.entries(value)) {
+    const safeProductId = productId.trim();
+    if (!safeProductId) {
+      continue;
+    }
+
+    const selection = normalizeSelectionValue(selectionRaw);
+    if (!selection) {
+      continue;
+    }
+
+    normalized[safeProductId] = selection;
+  }
+
+  return normalized;
+}
+
 export function readCartItems(): CartItemsMap {
   if (typeof window === "undefined") {
     return {};
@@ -46,6 +94,23 @@ export function readCartItems(): CartItemsMap {
 
     const parsed = JSON.parse(raw) as unknown;
     return normalizeCartMap(parsed);
+  } catch {
+    return {};
+  }
+}
+
+export function readCartItemSelections(): CartItemSelectionsMap {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const raw = window.localStorage.getItem(CART_SELECTIONS_STORAGE_KEY);
+    if (!raw) {
+      return {};
+    }
+
+    return normalizeSelectionsMap(JSON.parse(raw));
   } catch {
     return {};
   }
@@ -76,6 +141,54 @@ export function writeCartItems(items: CartItemsMap) {
       },
     })
   );
+}
+
+export function writeCartItemSelections(selections: CartItemSelectionsMap) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const normalized = normalizeSelectionsMap(selections);
+
+  try {
+    window.localStorage.setItem(CART_SELECTIONS_STORAGE_KEY, JSON.stringify(normalized));
+  } catch {
+    return;
+  }
+
+  window.dispatchEvent(
+    new CustomEvent(CART_CHANGE_EVENT, {
+      detail: {
+        items: readCartItems(),
+        selections: normalized,
+        count: getCartItemsCount(readCartItems()),
+      },
+    })
+  );
+}
+
+export function writeCartItemSelection(productId: string, selection: CartItemSelection | null) {
+  const safeProductId = productId.trim();
+  if (!safeProductId) {
+    return;
+  }
+
+  const nextSelections = {
+    ...readCartItemSelections(),
+  };
+
+  const normalizedSelection = normalizeSelectionValue(selection);
+  if (!normalizedSelection) {
+    delete nextSelections[safeProductId];
+  } else {
+    nextSelections[safeProductId] = normalizedSelection;
+  }
+
+  writeCartItemSelections(nextSelections);
+}
+
+export function removeCartItemSelection(productId: string) {
+  writeCartItemSelection(productId, null);
 }
 
 export function subscribeToCartChanges(listener: (items: CartItemsMap) => void) {

@@ -9,7 +9,7 @@ import { useAuth } from "@/app/components/auth-provider";
 import { CloudinaryImage } from "@/app/components/cloudinary-image";
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
 import { upsertUserCartMap } from "@/lib/appwrite/shop-sync";
-import { readCartItems, writeCartItems } from "@/lib/cart-state";
+import { readCartItems, writeCartItemSelection, writeCartItems } from "@/lib/cart-state";
 import type { ProductRecord } from "@/lib/appwrite/products";
 import { createProductReview, listProductReviews, type ProductReview } from "@/lib/appwrite/reviews";
 import { readWishlistItems, toggleWishlistItem, subscribeToWishlistChanges, type WishlistItemsMap } from "@/lib/wishlist-state";
@@ -72,8 +72,9 @@ export function ProductDetailsClient({
     : 0;
 
   const [activeImage, setActiveImage] = useState<string>(galleryImages[0] ?? "/logo4.png");
-  const [activeSize, setActiveSize] = useState<string | null>(product.sizeOptions[0] ?? null);
+  const [activeSize, setActiveSize] = useState<string | null>(null);
   const [activeColor, setActiveColor] = useState<string | null>(product.colorOptions[0] ?? null);
+  const [cartActionError, setCartActionError] = useState("");
 
   const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [isReviewsLoading, setIsReviewsLoading] = useState(true);
@@ -247,6 +248,13 @@ export function ProductDetailsClient({
   };
 
   const handleAddToCart = async () => {
+    if (product.sizeOptions.length > 0 && !activeSize) {
+      setCartActionError("Select a size to add to cart.");
+      return;
+    }
+
+    setCartActionError("");
+
     const current = readCartItems();
     const currentQuantity = Math.max(0, Math.trunc(current[product.id] ?? 0));
     const next = {
@@ -255,6 +263,10 @@ export function ProductDetailsClient({
     };
 
     writeCartItems(next);
+    writeCartItemSelection(product.id, {
+      ...(activeSize ? { size: activeSize } : {}),
+      ...(activeColor ? { color: activeColor } : {}),
+    });
 
     if (!isAuthenticated || !user?.$id) {
       return;
@@ -431,7 +443,10 @@ export function ProductDetailsClient({
                           <button
                             key={color}
                             type="button"
-                            onClick={() => setActiveColor(color)}
+                            onClick={() => {
+                              setActiveColor(color);
+                              setCartActionError("");
+                            }}
                             aria-label={`Select color ${color}`}
                             className={`flex h-9 min-w-[3.4rem] items-center justify-center rounded-full border px-3.5 text-[0.72rem] font-semibold uppercase tracking-wide transition-colors sm:h-10 sm:min-w-[3.6rem] sm:px-4 sm:text-xs ${
                               activeColor === color 
@@ -499,7 +514,10 @@ export function ProductDetailsClient({
                           <button
                             key={size}
                             type="button"
-                            onClick={() => setActiveSize(size)}
+                            onClick={() => {
+                              setActiveSize(size);
+                              setCartActionError("");
+                            }}
                             aria-label={`Select size ${size}`}
                             className={`flex h-9 min-w-[3rem] items-center justify-center rounded-full border px-3 text-[0.72rem] font-semibold uppercase tracking-wide transition-colors sm:h-10 sm:text-xs ${
                               activeSize === size 
@@ -547,6 +565,10 @@ export function ProductDetailsClient({
                     {isWishlisted ? "Saved" : "Add to Wishlist"}
                   </button>
                 </div>
+
+                {cartActionError ? (
+                  <p className="mt-2 text-xs font-medium text-[#a83232]">{cartActionError}</p>
+                ) : null}
                 
                 {/* Value Props */}
                 <div className="mt-4.5 flex flex-col gap-2 text-[0.6rem] font-semibold uppercase tracking-wider text-primary/70 sm:text-[0.65rem]">

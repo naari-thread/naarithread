@@ -102,11 +102,6 @@ export default function RootLayout({
           crossOrigin="anonymous"
           async
         />
-        <Script
-          src="https://cloud.umami.is/script.js"
-          strategy="afterInteractive"
-          data-website-id="25ccc360-592c-49f3-97ff-a5e528519ccc"
-        />
       </head>
       <body className={`${loraDisplay.variable} ${plusJakartaSans.variable} bg-paper text-primary antialiased`}>
         <AuthProvider>

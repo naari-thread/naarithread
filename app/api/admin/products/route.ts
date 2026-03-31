@@ -16,6 +16,7 @@ type ProductPayload = {
   discountPrice?: number;
   originalPrice?: number;
   stockQty?: number;
+  inStock?: boolean;
   colorOptions?: string[];
   sizeOptions?: string[];
   otherImageUrls?: string[];
@@ -82,6 +83,7 @@ export async function GET(request: Request) {
       discountPrice: Number(document.discountPrice ?? 0),
       originalPrice: Number(document.originalPrice ?? 0),
       stockQty: Number(document.stockQty ?? 0),
+      inStock: typeof document.inStock === "boolean" ? document.inStock : Number(document.stockQty ?? 0) > 0,
       isActive: typeof document.isActive === "boolean" ? document.isActive : true,
     }));
 
@@ -122,6 +124,7 @@ export async function POST(request: Request) {
       discountPrice: body.discountPrice,
       originalPrice: body.originalPrice,
       stockQty: body.stockQty ?? 0,
+      inStock: typeof body.inStock === "boolean" ? body.inStock : (body.stockQty ?? 0) > 0,
       rating: 0,
       ratingCount: 0,
       reviewIds: [],

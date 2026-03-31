@@ -143,7 +143,7 @@ function ProductCardInternal({
 
         <div className="mt-1.5 sm:mt-2">
           <Link href={productHref} aria-label={`Open ${product.name}`} className="inline-block">
-            <h3 className="line-clamp-2 font-display text-[1.1rem] font-medium leading-tight text-primary transition hover:text-primary/90 sm:text-[1.3rem] sm:leading-tight min-h-[2.75rem] sm:min-h-[3.35rem]">
+            <h3 className="line-clamp-2 font-display text-[1.1rem] font-medium leading-tight text-primary transition hover:text-primary/90 sm:text-[1.3rem] sm:leading-tight min-h-[2.75rem] sm:min-h-[3.35rem] flex items-start">
               {product.name}
             </h3>
           </Link>

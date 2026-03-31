@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type PropsWithChildren,
 } from "react";
@@ -63,6 +64,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<Models.User<Models.Preferences> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [lastSyncedUserId, setLastSyncedUserId] = useState("");
+  const isRefreshingRef = useRef(false);
+  const syncingUserIdRef = useRef<string | null>(null);
+  const lastRevalidateAtRef = useRef(0);
 
   const createAuthJwt = useCallback(async () => {
     const account = getBrowserAccount();
@@ -126,9 +130,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [createAuthJwt]);
 
   const refreshUser = useCallback(async () => {
+    if (isRefreshingRef.current) {
+      return;
+    }
+
+    isRefreshingRef.current = true;
+
     if (!hasPublicAuthConfig()) {
       setUser(null);
       setIsLoading(false);
+      isRefreshingRef.current = false;
       return;
     }
 
@@ -136,6 +147,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     if (!account) {
       setUser(null);
       setIsLoading(false);
+      isRefreshingRef.current = false;
       return;
     }
 
@@ -163,6 +175,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setUser(null);
     } finally {
       setIsLoading(false);
+      isRefreshingRef.current = false;
     }
   }, [syncUserProfile]);
 
@@ -171,11 +184,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [refreshUser]);
 
   useEffect(() => {
-    if (!user?.$id || lastSyncedUserId === user.$id) {
+    if (!user?.$id || lastSyncedUserId === user.$id || syncingUserIdRef.current === user.$id) {
       return;
     }
 
     let alive = true;
+    syncingUserIdRef.current = user.$id;
 
     const syncLocalShopState = async () => {
       try {
@@ -200,6 +214,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
         }
         // Silent fallback keeps local-first behavior available when sync is blocked.
         setLastSyncedUserId(user.$id);
+      } finally {
+        if (syncingUserIdRef.current === user.$id) {
+          syncingUserIdRef.current = null;
+        }
       }
     };
 
@@ -207,6 +225,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     return () => {
       alive = false;
+      if (syncingUserIdRef.current === user.$id) {
+        syncingUserIdRef.current = null;
+      }
     };
   }, [createAuthJwt, lastSyncedUserId, user?.$id]);
 
@@ -214,24 +235,28 @@ export function AuthProvider({ children }: PropsWithChildren) {
     // OAuth callbacks can return via full-page redirect where cookie propagation
     // and client hydration timing are slightly out of sync. Re-check on focus/restore.
     const revalidateSession = () => {
+      const now = Date.now();
+      if (now - lastRevalidateAtRef.current < 3000) {
+        return;
+      }
+
+      lastRevalidateAtRef.current = now;
       void refreshUser();
     };
 
     window.addEventListener("focus", revalidateSession);
-    window.addEventListener("pageshow", revalidateSession);
 
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
         revalidateSession();
       }
     };
 
-    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("pageshow", onPageShow);
 
     return () => {
       window.removeEventListener("focus", revalidateSession);
-      window.removeEventListener("pageshow", revalidateSession);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("pageshow", onPageShow);
     };
   }, [refreshUser]);
 

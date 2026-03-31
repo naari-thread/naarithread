@@ -5,8 +5,7 @@ import { ProductDetailsClient } from "@/app/components/product-details-client";
 import { getProductBySlug, getRelatedProducts } from "@/lib/appwrite/products";
 import { getCategoryForSubCategory, getCategoryLabelBySlug, getSubCategoryLabelBySlug, isProductCategorySlug, isProductSubCategorySlug } from "@/lib/product-taxonomy";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+export const revalidate = 900;
 
 type ProductDetailsPageProps = {
   params: Promise<{ category: string; subcategory: string; productSlug: string }>;

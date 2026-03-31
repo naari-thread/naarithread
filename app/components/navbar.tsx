@@ -449,14 +449,14 @@ export function Navbar() {
               ))}
             </motion.nav>
           ) : (
-            <nav aria-label="Quick links" className="hidden items-center gap-3 lg:gap-4 md:flex">
+            <nav aria-label="Quick links" className="hidden items-center gap-2 md:flex">
               {desktopQuickLinks.map((item) => (
                 <Link
                   key={item.label}
                   href={item.href}
                   aria-label={`Open ${item.label}`}
                   aria-current={item.isActive ? "page" : undefined}
-                  className={`group relative inline-flex h-10 items-center gap-1.5 rounded-full px-4 text-[0.68rem] font-semibold uppercase tracking-[0.16em] transition ${
+                  className={`group relative inline-flex h-10 items-center gap-1.5 rounded-full px-3.5 text-[0.68rem] font-semibold uppercase tracking-[0.16em] transition ${
                     item.isActive
                       ? "text-secondary"
                       : "text-primary/80 hover:text-primary"
@@ -480,8 +480,8 @@ export function Navbar() {
                   <span className="relative z-10">{item.label}</span>
                   {typeof item.badgeCount === "number" && item.badgeCount > 0 ? (
                     <span
-                      className={`absolute right-1.5 top-0.5 z-20 inline-flex h-4.5 min-w-4.5 -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full pl-0.5 pb-0.5 text-[0.54rem] font-bold leading-none  ${
-                        item.isActive ? "bg-secondary text-primary ring-2 ring-primary" : "bg-primary text-secondary ring-2 ring-secondary"
+                      className={`absolute right-0 top-0 -translate-y-[20%] translate-x-[20%] z-20 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full px-1 text-[0.54rem] font-bold leading-none ring-2 ring-secondary ${
+                        item.isActive ? "bg-secondary text-primary" : "bg-primary text-secondary"
                       }`}
                       aria-hidden={true}
                     >
@@ -504,11 +504,11 @@ export function Navbar() {
                 >
                   <DynamicHugeIcon
                     name="Notification01Icon"
-                    className="relative z-10 h-5 w-5"
+                    className="relative z-10 h-5.5 w-5.5"
                     iconStrokeWidth={2.1}
                   />
                   <span
-                    className="absolute right-1 top-0.5 z-20 inline-flex h-4.5 min-w-4.5 -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full bg-primary pb-0.5 text-[0.54rem] font-bold leading-none text-secondary ring-2 ring-secondary"
+                    className="absolute right-0 top-0 -translate-y-[20%] translate-x-[20%] z-20 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-primary px-1 text-[0.54rem] font-bold leading-none text-secondary ring-2 ring-secondary"
                     aria-hidden={true}
                   >
                     {sampleNotifications.length > 9 ? "9+" : sampleNotifications.length}
@@ -565,7 +565,7 @@ export function Navbar() {
                   }}
                   className="group inline-flex h-10 w-10 items-center justify-center rounded-full border border-primary/20 bg-secondary text-primary/75 transition hover:border-primary/40 hover:text-primary"
                 >
-                  <DynamicHugeIcon name="UserIcon" className="h-5 w-5" iconStrokeWidth={2.1} />
+                  <DynamicHugeIcon name="UserIcon" className="h-5.5 w-5.5" iconStrokeWidth={2.1} />
                 </button>
 
                 <AnimatePresence>

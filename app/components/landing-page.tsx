@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
@@ -7,8 +8,17 @@ import { useEffect, useRef, useState } from "react";
 
 import { CloudinaryImage } from "@/app/components/cloudinary-image";
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
-import { Skiper54, type SkiperImage } from "@/app/components/skiper54";
+import type { SkiperImage } from "@/app/components/skiper54";
 import { CLOUDINARY_SIZES } from "@/lib/cloudinary";
+
+const Skiper54 = dynamic(() => import("@/app/components/skiper54").then((module) => module.Skiper54), {
+  loading: () => (
+    <div className="mx-auto w-full overflow-hidden rounded-2xl border border-secondary/30 bg-secondary/10 p-4">
+      <div className="h-[420px] w-full animate-pulse rounded-xl bg-secondary/20" />
+    </div>
+  ),
+  ssr: false,
+});
 
 type SubCategory = {
   name: string;

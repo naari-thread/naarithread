@@ -1,8 +1,7 @@
 import { ProductsCatalog } from "@/app/components/products-catalog";
 import { listProductsFromCollection } from "@/lib/appwrite/products";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+export const revalidate = 900;
 
 export default async function ProductsPage() {
   let products: Awaited<ReturnType<typeof listProductsFromCollection>> = [];

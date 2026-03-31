@@ -25,6 +25,13 @@ export type ProductRecord = {
   createdAt: string;
 };
 
+export type PaginatedProductsResult = {
+  products: ProductRecord[];
+  total: number;
+  hasMore: boolean;
+  nextOffset: number | null;
+};
+
 let resolvedDatabaseIdCache: string | null = null;
 const SKU_COLLECTION_ID = "sku";
 
@@ -193,6 +200,42 @@ export async function listProductsFromCollection() {
   const response = await context.databases.listDocuments(context.databaseId, context.collectionId, queries);
 
   return response.documents.map((document) => toProductRecord(document as Record<string, unknown>));
+}
+
+type ListProductsPageOptions = {
+  limit?: number;
+  offset?: number;
+};
+
+export async function listProductsPageFromCollection(options: ListProductsPageOptions = {}): Promise<PaginatedProductsResult> {
+  const limit = Math.min(100, Math.max(1, Math.trunc(options.limit ?? 12)));
+  const offset = Math.max(0, Math.trunc(options.offset ?? 0));
+
+  const context = await resolveContext();
+  if (!context) {
+    return {
+      products: [],
+      total: 0,
+      hasMore: false,
+      nextOffset: null,
+    };
+  }
+
+  const response = await context.databases.listDocuments(context.databaseId, context.collectionId, [
+    Query.limit(limit),
+    Query.offset(offset),
+    Query.orderDesc("$createdAt"),
+  ]);
+
+  const products = response.documents.map((document) => toProductRecord(document as Record<string, unknown>));
+  const nextOffset = offset + products.length;
+
+  return {
+    products,
+    total: response.total,
+    hasMore: nextOffset < response.total,
+    nextOffset: nextOffset < response.total ? nextOffset : null,
+  };
 }
 
 export async function getProductBySlug(slug: string) {
