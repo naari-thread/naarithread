@@ -127,8 +127,7 @@ const menuContainer = {
   show: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.06,
-      delayChildren: 0.1,
+      staggerChildren: 0.03,
     },
   },
 };
@@ -139,8 +138,8 @@ const menuItem = {
     opacity: 1,
     x: 0,
     transition: {
-      duration: 0.28,
-      ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
+      duration: 0.18,
+      ease: [0.16, 1, 0.3, 1] as const,
     },
   },
 };
@@ -150,11 +149,12 @@ export function Navbar() {
   const pathname = usePathname();
   const prefersReducedMotion = useReducedMotion();
   const isLandingPage = pathname === "/";
-  const hideOnMobile = pathname !== "/";
   const [isMounted, setIsMounted] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [isHeroInView, setIsHeroInView] = useState(pathname === "/");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  // Non-landing pages mobile drawer state
+  const [isQuickDrawerOpen, setIsQuickDrawerOpen] = useState(false);
   const [activeDesktopCategory, setActiveDesktopCategory] = useState<string | null>(null);
   const [activeMobileCategory, setActiveMobileCategory] = useState<string | null>(null);
   const [cartCount, setCartCount] = useState(0);
@@ -187,7 +187,8 @@ export function Navbar() {
   }, []);
 
   useEffect(() => {
-    if (!isMobileMenuOpen) {
+    const overflow = isMobileMenuOpen || isQuickDrawerOpen;
+    if (!overflow) {
       document.body.style.overflow = "";
       return;
     }
@@ -197,7 +198,7 @@ export function Navbar() {
     return () => {
       document.body.style.overflow = "";
     };
-  }, [isMobileMenuOpen]);
+  }, [isMobileMenuOpen, isQuickDrawerOpen]);
 
   useEffect(() => {
     if (pathname !== "/") return;
@@ -263,6 +264,7 @@ export function Navbar() {
         setIsAccountMenuOpen(false);
         setSelectedNotification(null);
         setSelectedAccountAction(null);
+        setIsQuickDrawerOpen(false);
       }
     };
 
@@ -275,7 +277,6 @@ export function Navbar() {
     };
   }, []);
 
-  const showShopNow = pathname !== "/" || !isHeroInView;
   const isProductsRoute = pathname.startsWith("/products");
   const desktopQuickLinks = [
     {
@@ -321,43 +322,45 @@ export function Navbar() {
 
   return (
     <>
-      <header
-        className={`fixed inset-x-0 top-0 z-[95] transition-all duration-500 border-b border-primary/40 ${hideOnMobile ? "hidden md:block" : ""} ${
-          scrolled || isMobileMenuOpen
-            ? "border-b border-primary/10 bg-secondary/90 shadow-[0_2px_24px_rgba(120,0,0,0.07)] backdrop-blur-md"
-            : "bg-secondary/95 md:bg-transparent"
-        }`}
-      >
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-3 py-2 sm:px-5 sm:py-3 md:px-8 lg:px-12">
-          <Link
-            href="/"
-            aria-label="NaariThread — return to homepage"
-            className="group flex min-w-0 items-center gap-2"
-            onClick={() => setIsMobileMenuOpen(false)}
-          >
-            <Image
-              src="/logo4.png"
-              alt="NaariThread logo mark"
-              width={80}
-              height={80}
-              priority
-              className="h-11 w-11 rounded-full border border-primary/20 object-cover transition duration-300 group-hover:border-primary/50 group-hover:shadow-[0_0_0_3px_rgba(120,0,0,0.09)] sm:h-12 sm:w-12"
-            />
-            <Image
-              src="/logoname2.png"
-              alt="NaariThread logotype"
-              width={128}
-              height={128}
-              className="mb-1 block h-8 w-auto object-contain sm:mb-2 sm:h-auto sm:w-auto"
-            />
-          </Link>
+      {/* ─── LANDING PAGE NAVBAR ─── */}
+      {isLandingPage && (
+        <header
+          className={`fixed inset-x-0 top-0 z-[95] transition-all duration-500 border-b border-primary/40 ${
+            scrolled || isMobileMenuOpen
+              ? "border-b border-primary/10 bg-secondary/90 shadow-[0_2px_24px_rgba(120,0,0,0.07)] backdrop-blur-md"
+              : "bg-secondary/95 md:bg-transparent"
+          }`}
+        >
+          <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-3 py-2 sm:px-5 sm:py-3 md:px-8 lg:px-12">
+            <Link
+              href="/"
+              aria-label="NaariThread — return to homepage"
+              className="group flex min-w-0 items-center gap-2"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              <Image
+                src="/logo4.png"
+                alt="NaariThread logo mark"
+                width={80}
+                height={80}
+                priority
+                className="h-11 w-11 rounded-full border border-primary/20 object-cover transition duration-300 group-hover:border-primary/50 group-hover:shadow-[0_0_0_3px_rgba(120,0,0,0.09)] sm:h-12 sm:w-12"
+              />
+              <Image
+                src="/logoname2.png"
+                alt="NaariThread logotype"
+                width={128}
+                height={128}
+                className="mb-1 block h-8 w-auto object-contain sm:mb-2 sm:h-auto sm:w-auto"
+              />
+            </Link>
 
-          {isLandingPage ? (
+            {/* Desktop: Category Nav */}
             <motion.nav
               aria-label="Categories"
               className="hidden items-center gap-6 md:flex lg:gap-8"
               initial={false}
-              animate={prefersReducedMotion ? undefined : { x: showShopNow ? -22 : 0 }}
+              animate={prefersReducedMotion ? undefined : { x: 0 }}
               transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
             >
               {navCategories.map((category) => (
@@ -448,7 +451,113 @@ export function Navbar() {
                 </div>
               ))}
             </motion.nav>
-          ) : (
+
+            {/* Desktop: 3 Icon Buttons (always visible on landing page) */}
+            <nav aria-label="Quick actions" className="hidden items-center gap-2 md:flex">
+              {desktopQuickLinks.map((item) => (
+                <Link
+                  key={item.label}
+                  href={item.href}
+                  aria-label={`Open ${item.label}`}
+                  aria-current={item.isActive ? "page" : undefined}
+                  className={`group relative inline-flex h-10 w-10 items-center justify-center rounded-full border transition ${
+                    item.isActive
+                      ? "border-transparent text-secondary"
+                      : "border-primary/20 bg-secondary text-primary/80 hover:border-primary/40 hover:text-primary"
+                  }`}
+                >
+                  {item.isActive && (
+                    <motion.div
+                      layoutId="active-landing-nav-icon"
+                      className="absolute inset-0 rounded-full bg-primary shadow-[0_4px_16px_rgba(120,0,0,0.18)]"
+                      initial={false}
+                      transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                      aria-hidden="true"
+                    />
+                  )}
+                  <DynamicHugeIcon
+                    name={item.icon}
+                    className="relative z-10 h-5 w-5"
+                    iconStrokeWidth={item.isActive ? 2.2 : 2}
+                  />
+                  {typeof item.badgeCount === "number" && item.badgeCount > 0 ? (
+                    <span
+                      className={`absolute right-0 top-0 -translate-y-[20%] translate-x-[20%] z-20 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full px-1 text-[0.54rem] font-bold leading-none ring-2 ring-secondary ${
+                        item.isActive ? "bg-secondary text-primary" : "bg-primary text-secondary"
+                      }`}
+                      aria-hidden={true}
+                    >
+                      {item.badgeCount > 9 ? "9+" : item.badgeCount}
+                    </span>
+                  ) : null}
+                </Link>
+              ))}
+            </nav>
+
+            {/* Mobile: Hamburger (landing page — opens category drawer) */}
+            <button
+              type="button"
+              aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
+              aria-expanded={isMobileMenuOpen}
+              aria-controls="mobile-sidebar-menu"
+              onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-secondary text-primary transition hover:border-primary/40 md:hidden"
+            >
+              <span className="sr-only">Toggle navigation menu</span>
+              <span className="relative h-4 w-5">
+                <span
+                  className={`absolute left-0 top-0 block h-[2px] w-5 rounded-full bg-primary transition-all duration-300 ${
+                    isMobileMenuOpen ? "translate-y-[7px] rotate-45" : ""
+                  }`}
+                />
+                <span
+                  className={`absolute left-0 top-[7px] block h-[2px] w-5 rounded-full bg-primary transition-all duration-300 ${
+                    isMobileMenuOpen ? "opacity-0" : "opacity-100"
+                  }`}
+                />
+                <span
+                  className={`absolute left-0 top-[14px] block h-[2px] w-5 rounded-full bg-primary transition-all duration-300 ${
+                    isMobileMenuOpen ? "-translate-y-[7px] -rotate-45" : ""
+                  }`}
+                />
+              </span>
+            </button>
+          </div>
+        </header>
+      )}
+
+      {/* ─── NON-LANDING PAGE NAVBAR ─── */}
+      {!isLandingPage && (
+        <header
+          className={`fixed inset-x-0 top-0 z-[95] transition-all duration-500 ${
+            scrolled
+              ? "border-b border-primary/10 bg-secondary/90 shadow-[0_2px_24px_rgba(120,0,0,0.07)] backdrop-blur-md"
+              : "border-b border-primary/10 bg-secondary/95 backdrop-blur-sm"
+          }`}
+        >
+          <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-3 py-2 sm:px-5 sm:py-3 md:px-8 lg:px-12">
+            <Link
+              href="/"
+              aria-label="NaariThread — return to homepage"
+              className="group flex min-w-0 items-center gap-2"
+            >
+              <Image
+                src="/logo4.png"
+                alt="NaariThread logo mark"
+                width={80}
+                height={80}
+                priority
+                className="h-11 w-11 rounded-full border border-primary/20 object-cover transition duration-300 group-hover:border-primary/50 group-hover:shadow-[0_0_0_3px_rgba(120,0,0,0.09)] sm:h-12 sm:w-12"
+              />
+              <Image
+                src="/logoname2.png"
+                alt="NaariThread logotype"
+                width={128}
+                height={128}
+                className="mb-1 block h-8 w-auto object-contain sm:mb-2 sm:h-auto sm:w-auto"
+              />
+            </Link>
+
             <nav aria-label="Quick links" className="hidden items-center gap-2 md:flex">
               {desktopQuickLinks.map((item) => (
                 <Link
@@ -640,58 +749,47 @@ export function Navbar() {
                 </AnimatePresence>
               </div>
             </nav>
-          )}
 
-          <button
-            type="button"
-            aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
-            aria-expanded={isMobileMenuOpen}
-            aria-controls="mobile-sidebar-menu"
-            onClick={() => setIsMobileMenuOpen((prev) => !prev)}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-secondary text-primary transition hover:border-primary/40 md:hidden"
-          >
-            <span className="sr-only">Toggle navigation menu</span>
-            <span className="relative h-4 w-5">
-              <span
-                className={`absolute left-0 top-0 block h-[2px] w-5 rounded-full bg-primary transition-all duration-300 ${
-                  isMobileMenuOpen ? "translate-y-[7px] rotate-45" : ""
-                }`}
-              />
-              <span
-                className={`absolute left-0 top-[7px] block h-[2px] w-5 rounded-full bg-primary transition-all duration-300 ${
-                  isMobileMenuOpen ? "opacity-0" : "opacity-100"
-                }`}
-              />
-              <span
-                className={`absolute left-0 top-[14px] block h-[2px] w-5 rounded-full bg-primary transition-all duration-300 ${
-                  isMobileMenuOpen ? "-translate-y-[7px] -rotate-45" : ""
-                }`}
-              />
-            </span>
-          </button>
+            {/* Mobile: Hamburger (non-landing page — opens Quick Drawer) */}
+            <button
+              type="button"
+              aria-label={isQuickDrawerOpen ? "Close menu" : "Open menu"}
+              aria-expanded={isQuickDrawerOpen}
+              aria-controls="mobile-quick-drawer"
+              onClick={() => setIsQuickDrawerOpen((prev) => !prev)}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-secondary text-primary transition hover:border-primary/40 md:hidden"
+            >
+              <span className="sr-only">Toggle navigation menu</span>
+              <span className="relative h-4 w-5">
+                <span
+                  className={`absolute left-0 top-0 block h-[2px] w-5 rounded-full bg-primary transition-all duration-300 ${
+                    isQuickDrawerOpen ? "translate-y-[7px] rotate-45" : ""
+                  }`}
+                />
+                <span
+                  className={`absolute left-0 top-[7px] block h-[2px] w-5 rounded-full bg-primary transition-all duration-300 ${
+                    isQuickDrawerOpen ? "opacity-0" : "opacity-100"
+                  }`}
+                />
+                <span
+                  className={`absolute left-0 top-[14px] block h-[2px] w-5 rounded-full bg-primary transition-all duration-300 ${
+                    isQuickDrawerOpen ? "-translate-y-[7px] -rotate-45" : ""
+                  }`}
+                />
+              </span>
+            </button>
+          </div>
+        </header>
+      )}
 
-          <AnimatePresence initial={false}>
-            {isLandingPage && showShopNow ? (
-              <motion.div
-                className="hidden lg:block"
-                initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, x: 18 }}
-                animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
-                exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, x: 16 }}
-                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-              >
-                <Link
-                  href="/products"
-                  aria-label="Shop the NaariThread collection"
-                  className="cta-thread px-4 py-2 text-[10px] tracking-[0.16em] sm:px-6 sm:text-xs sm:tracking-[0.2em]"
-                >
-                  Shop Now
-                </Link>
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
+      {/* ─── MOBILE QUICK DRAWER TRIGGER (non-landing pages, desktop-only fallback) ─── */}
+      {!isLandingPage && (
+        <div className="fixed top-3 right-3 z-[95] hidden">
+          {/* Retained for programmatic access; mobile now uses the navbar hamburger */}
         </div>
-      </header>
+      )}
 
+      {/* ─── MODAL LAYER (notifications / account details) ─── */}
       <AnimatePresence initial={false}>
         {selectedNotification || selectedAccountAction ? (
           <motion.div
@@ -784,6 +882,7 @@ export function Navbar() {
           </motion.div>
         ) : null}
 
+        {/* ─── MOBILE CATEGORY DRAWER (all pages) ─── */}
         {isMobileMenuOpen ? (
           <motion.div
             id="mobile-sidebar-menu"
@@ -849,11 +948,6 @@ export function Navbar() {
                 animate="show"
                 className="flex flex-1 flex-col px-5 pb-8 pt-6"
               >
-                {/* <motion.div variants={menuItem} className="mb-5 rounded-2xl border border-primary/12 bg-primary/[0.03] px-4 py-3">
-                  <p className="text-[0.62rem] font-semibold uppercase tracking-[0.24em] text-primary/60">Browse By Style</p>
-                  <p className="mt-1 text-sm leading-snug text-primary/80">Find your perfect look across heritage and modern edits.</p>
-                </motion.div> */}
-
                 <div className="flex flex-col gap-3">
                   {navCategories.map((category) => {
                     const isOpen = activeMobileCategory === category.id;
@@ -938,6 +1032,27 @@ export function Navbar() {
                   })}
                 </div>
 
+                {/* Ask AI (Landing Page Drawer) */}
+                <motion.button
+                  variants={menuItem}
+                  type="button"
+                  aria-label="Open AI Style Assistant"
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    window.dispatchEvent(new CustomEvent("open-saathi-chat"));
+                  }}
+                  className="mt-6 group flex items-center gap-4 rounded-3xl border border-primary/15 bg-[#FDF8F1] px-4 py-4 text-left transition hover:border-primary/30 shadow-[0_2px_12px_rgba(120,0,0,0.04)]"
+                >
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#F2E8DA] text-primary">
+                    <DynamicHugeIcon name="AiChat01Icon" className="h-5 w-5" iconStrokeWidth={1.5} />
+                  </span>
+                  <span className="block min-w-0">
+                    <span className="block text-[1rem] font-semibold text-primary">Ask Saathi AI</span>
+                    <span className="mt-0.5 block text-[0.68rem] text-primary/60 leading-tight">Your personal style assistant</span>
+                  </span>
+                  <DynamicHugeIcon name="ArrowRight01Icon" className="ml-auto h-4 w-4 shrink-0 text-primary/30 transition group-hover:translate-x-0.5" iconStrokeWidth={1.5} />
+                </motion.button>
+
                 <motion.div variants={menuItem} className="mt-auto pt-8">
                   <Link
                     href="/products"
@@ -949,6 +1064,135 @@ export function Navbar() {
                   </Link>
                 </motion.div>
               </motion.nav>
+            </motion.aside>
+          </motion.div>
+        ) : null}
+
+        {/* ─── NON-LANDING MOBILE QUICK DRAWER ─── */}
+        {isQuickDrawerOpen && !isLandingPage ? (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            style={{ willChange: "opacity" }}
+            className="fixed inset-0 z-[120] bg-primary/35 md:hidden"
+            onClick={() => setIsQuickDrawerOpen(false)}
+          >
+            <motion.aside
+              initial={prefersReducedMotion ? { x: 0 } : { x: "100%" }}
+              animate={{ x: 0 }}
+              exit={prefersReducedMotion ? { x: 0 } : { x: "100%" }}
+              transition={
+                prefersReducedMotion
+                  ? { duration: 0 }
+                  : { duration: 0.2, ease: [0.16, 1, 0.3, 1] }
+              }
+              style={{ willChange: "transform" }}
+              className="ml-auto flex h-full w-[80%] max-w-[340px] flex-col overflow-hidden rounded-l-[2rem] border-l border-primary/15 bg-secondary shadow-[-8px_0_32px_rgba(120,0,0,0.18)]"
+              onClick={(event) => event.stopPropagation()}
+            >
+              {/* Drawer Header */}
+              <div className="flex items-center justify-between border-b border-primary/10 px-5 py-4">
+                <Link
+                  href="/"
+                  aria-label="NaariThread — return to homepage"
+                  className="group flex items-center gap-2"
+                  onClick={() => setIsQuickDrawerOpen(false)}
+                >
+                  <Image
+                    src="/logo4.png"
+                    alt="NaariThread logo mark"
+                    width={80}
+                    height={80}
+                    className="h-10 w-10 rounded-full border border-primary/20 object-cover"
+                  />
+                  <Image
+                    src="/logoname2.png"
+                    alt="NaariThread logotype"
+                    width={128}
+                    height={128}
+                    className="h-7 w-auto object-contain"
+                  />
+                </Link>
+                <button
+                  type="button"
+                  aria-label="Close menu"
+                  onClick={() => setIsQuickDrawerOpen(false)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-primary/20 text-primary transition hover:border-primary/40"
+                >
+                  <DynamicHugeIcon name="Cancel01Icon" className="h-4 w-4" iconStrokeWidth={2.2} />
+                </button>
+              </div>
+
+              {/* Drawer Body */}
+              <motion.div
+                variants={menuContainer}
+                initial="hidden"
+                animate="show"
+                className="flex flex-1 flex-col gap-3 px-5 py-6"
+              >
+                {/* Ask AI */}
+                <motion.button
+                  variants={menuItem}
+                  type="button"
+                  aria-label="Open AI Style Assistant"
+                  onClick={() => {
+                    setIsQuickDrawerOpen(false);
+                    window.dispatchEvent(new CustomEvent("open-saathi-chat"));
+                  }}
+                  className="group flex items-center gap-4 rounded-3xl border border-primary/15 bg-[#FDF8F1] px-4 py-5 text-left transition hover:border-primary/30 hover:bg-[#F9F1E6] shadow-[0_2px_12px_rgba(120,0,0,0.04)]"
+                >
+                  <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#F2E8DA] text-primary">
+                    <DynamicHugeIcon name="AiChat01Icon" className="h-6 w-6" iconStrokeWidth={1.5} />
+                  </span>
+                  <span className="block min-w-0">
+                    <span className="block text-[1.1rem] font-semibold text-primary">Ask AI</span>
+                    <span className="mt-0.5 block text-xs text-primary/60 leading-tight">Chat with Saathi, our style assistant</span>
+                  </span>
+                  <DynamicHugeIcon name="ArrowRight01Icon" className="ml-auto h-5 w-5 shrink-0 text-primary/30 transition group-hover:translate-x-0.5 group-hover:text-primary/70" iconStrokeWidth={1.5} />
+                </motion.button>
+
+                {/* Contact Us */}
+                <motion.a
+                  variants={menuItem}
+                  href="tel:+918487849852"
+                  aria-label="Call NaariThread support"
+                  className="group flex items-center gap-4 rounded-3xl border border-primary/15 bg-[#FDF8F1] px-4 py-5 text-left transition hover:border-primary/30 hover:bg-[#F9F1E6] shadow-[0_2px_12px_rgba(120,0,0,0.04)]"
+                  onClick={() => setIsQuickDrawerOpen(false)}
+                >
+                  <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#F2E8DA] text-primary">
+                    <DynamicHugeIcon name="CallIcon" className="h-6 w-6" iconStrokeWidth={1.5} />
+                  </span>
+                  <span className="block min-w-0">
+                    <span className="block text-[1.1rem] font-semibold text-primary">Contact Us</span>
+                    <span className="mt-0.5 block text-xs text-primary/60 leading-tight">+91 84878 49852</span>
+                  </span>
+                  <DynamicHugeIcon name="ArrowRight01Icon" className="ml-auto h-5 w-5 shrink-0 text-primary/30 transition group-hover:translate-x-0.5 group-hover:text-primary/70" iconStrokeWidth={1.5} />
+                </motion.a>
+
+                {/* WhatsApp */}
+                <motion.a
+                  variants={menuItem}
+                  href="https://wa.me/918487849852?text=Hi%2C+I+have+this+query"
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="Chat with NaariThread on WhatsApp"
+                  className="group flex items-center gap-4 rounded-3xl border border-[#25D366]/20 bg-[#F2FAF5] px-4 py-5 text-left transition hover:border-[#25D366]/40 hover:bg-[#E8F5EE] shadow-[0_2px_12px_rgba(37,211,102,0.06)]"
+                  onClick={() => setIsQuickDrawerOpen(false)}
+                >
+                  <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#E1F3E8] text-[#128C35]">
+                    <DynamicHugeIcon name="WhatsappIcon" className="h-6 w-6" iconStrokeWidth={1.5} />
+                  </span>
+                  <span className="block min-w-0">
+                    <span className="block text-[1.1rem] font-semibold text-primary">Chat on WhatsApp</span>
+                    <span className="mt-0.5 block text-xs text-primary/60 leading-tight">Tap to open a conversation</span>
+                  </span>
+                  <DynamicHugeIcon name="ArrowRight01Icon" className="ml-auto h-5 w-5 shrink-0 text-primary/30 transition group-hover:translate-x-0.5 group-hover:text-primary/70" iconStrokeWidth={1.5} />
+                </motion.a>
+
+
+              </motion.div>
             </motion.aside>
           </motion.div>
         ) : null}

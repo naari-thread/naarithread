@@ -41,3 +41,4 @@ yarn-error.log*
 next-env.d.ts
 scripts/appwrite/setup-database.mjs
 
+public/implementation_plan.md

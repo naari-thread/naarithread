@@ -6,7 +6,12 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
 import { ProductCard } from "@/app/components/product-card";
-import { readCartItems, subscribeToCartChanges, writeCartItems, type CartItemsMap } from "@/lib/cart-state";
+import {
+  readCartItems,
+  subscribeToCartChanges,
+  writeCartItems,
+  type CartItemsMap,
+} from "@/lib/cart-state";
 import type { ProductRecord } from "@/lib/appwrite/products";
 import {
   PRODUCT_TAXONOMY,
@@ -41,7 +46,11 @@ function normalizeValue(value: string) {
 }
 
 function isOnSale(product: ProductRecord) {
-  return product.originalPrice > 0 && product.discountPrice > 0 && product.discountPrice < product.originalPrice;
+  return (
+    product.originalPrice > 0 &&
+    product.discountPrice > 0 &&
+    product.discountPrice < product.originalPrice
+  );
 }
 
 function isNewArrival(product: ProductRecord) {
@@ -58,10 +67,42 @@ function isNewArrival(product: ProductRecord) {
   return ageMs >= 0 && ageMs <= 1000 * 60 * 60 * 24 * 30;
 }
 
+const PRICE_ABSOLUTE_MIN = 499;
+const PRICE_ABSOLUTE_MAX = 5000;
+
+const COLOR_SWATCH_MAP: Record<string, string> = {
+  red: "#C62828",
+  maroon: "#7B1D1D",
+  black: "#1A1A1A",
+  white: "#FFFFFF",
+  cream: "#FFF0D6",
+  beige: "#F5ECD7",
+  navy: "#1A237E",
+  blue: "#1565C0",
+  green: "#2E7D32",
+  pink: "#E91E8C",
+  yellow: "#F9A825",
+  orange: "#E65100",
+  purple: "#6A1B9A",
+  grey: "#757575",
+  gray: "#757575",
+  brown: "#5D4037",
+  gold: "#B8860B",
+  silver: "#A8A9AD",
+  lavender: "#967BB6",
+  peach: "#FFCBA4",
+  teal: "#00695C",
+  mustard: "#E3A020",
+};
+
+function getSwatchHex(colorName: string): string {
+  return COLOR_SWATCH_MAP[colorName.trim().toLowerCase()] ?? "#CCCCCC";
+}
+
 function toUniqueSorted(values: string[]) {
-  return Array.from(new Set(values.map((item) => item.trim()).filter(Boolean))).sort((a, b) =>
-    a.localeCompare(b, undefined, { sensitivity: "base" })
-  );
+  return Array.from(
+    new Set(values.map((item) => item.trim()).filter(Boolean)),
+  ).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
 }
 
 type SelectDropdownProps = {
@@ -116,12 +157,25 @@ function SelectDropdown({
               }}
               className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-primary/14 text-primary/66 transition hover:border-primary/28 hover:text-primary"
             >
-              <DynamicHugeIcon name="Cancel01Icon" className="h-3.5 w-3.5" iconStrokeWidth={2} aria-hidden={true} />
+              <DynamicHugeIcon
+                name="Cancel01Icon"
+                className="h-3.5 w-3.5"
+                iconStrokeWidth={2}
+                aria-hidden={true}
+              />
             </span>
           ) : null}
 
-          <motion.span animate={{ rotate: open ? 90 : 0 }} transition={{ duration: 0.2 }}>
-            <DynamicHugeIcon name="ArrowRight01Icon" className="h-4 w-4 text-primary/65" iconStrokeWidth={2} aria-hidden={true} />
+          <motion.span
+            animate={{ rotate: open ? 90 : 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <DynamicHugeIcon
+              name="ArrowRight01Icon"
+              className="h-4 w-4 text-primary/65"
+              iconStrokeWidth={2}
+              aria-hidden={true}
+            />
           </motion.span>
         </span>
       </button>
@@ -142,7 +196,10 @@ function SelectDropdown({
             >
               All
             </button>
-            <div className="max-h-56 overflow-y-auto overscroll-contain" onWheel={(event) => event.stopPropagation()}>
+            <div
+              className="max-h-56 overflow-y-auto overscroll-contain"
+              onWheel={(event) => event.stopPropagation()}
+            >
               {options.map((option) => (
                 <button
                   key={option.value}
@@ -161,7 +218,11 @@ function SelectDropdown({
   );
 }
 
-export function ProductsCatalog({ products, activeCategorySlug, activeSubCategorySlug }: ProductsCatalogProps) {
+export function ProductsCatalog({
+  products,
+  activeCategorySlug,
+  activeSubCategorySlug,
+}: ProductsCatalogProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [searchText, setSearchText] = useState("");
@@ -171,13 +232,25 @@ export function ProductsCatalog({ products, activeCategorySlug, activeSubCategor
     sizes: [],
     colors: [],
   });
-  const [selectedCategory, setSelectedCategory] = useState<ProductCategorySlug | "">("");
-  const [selectedSubCategory, setSelectedSubCategory] = useState<ProductSubCategorySlug | "">("");
+  const [selectedCategory, setSelectedCategory] = useState<
+    ProductCategorySlug | ""
+  >("");
+  const [selectedSubCategory, setSelectedSubCategory] = useState<
+    ProductSubCategorySlug | ""
+  >("");
   useEffect(() => {
-    setSelectedCategory(isProductCategorySlug(activeCategorySlug) ? activeCategorySlug : "");
-    setSelectedSubCategory(isProductSubCategorySlug(activeSubCategorySlug) ? activeSubCategorySlug : "");
+    setSelectedCategory(
+      isProductCategorySlug(activeCategorySlug) ? activeCategorySlug : "",
+    );
+    setSelectedSubCategory(
+      isProductSubCategorySlug(activeSubCategorySlug)
+        ? activeSubCategorySlug
+        : "",
+    );
   }, [activeCategorySlug, activeSubCategorySlug]);
 
+  const [priceMin, setPriceMin] = useState(PRICE_ABSOLUTE_MIN);
+  const [priceMax, setPriceMax] = useState(PRICE_ABSOLUTE_MAX);
   const [selectedSize, setSelectedSize] = useState("");
   const [selectedColor, setSelectedColor] = useState("");
   const [onlyOnSale, setOnlyOnSale] = useState(false);
@@ -198,8 +271,15 @@ export function ProductsCatalog({ products, activeCategorySlug, activeSubCategor
     return subscribeToWishlistChanges((items) => setWishlistItems(items));
   }, []);
 
-  const navigateForFilter = (category: ProductCategorySlug | "", subCategory: ProductSubCategorySlug | "") => {
-    const nextPath = subCategory ? `/products/${category}/${subCategory}` : category ? `/products/${category}` : "/products";
+  const navigateForFilter = (
+    category: ProductCategorySlug | "",
+    subCategory: ProductSubCategorySlug | "",
+  ) => {
+    const nextPath = subCategory
+      ? `/products/${category}/${subCategory}`
+      : category
+        ? `/products/${category}`
+        : "/products";
     if (pathname !== nextPath) {
       router.push(nextPath);
     }
@@ -210,7 +290,9 @@ export function ProductsCatalog({ products, activeCategorySlug, activeSubCategor
 
     async function loadFilterPayload() {
       try {
-        const response = await fetch("/api/catalog/filters", { cache: "no-store" });
+        const response = await fetch("/api/catalog/filters", {
+          cache: "no-store",
+        });
         if (!response.ok) {
           throw new Error("Failed to fetch filter metadata");
         }
@@ -262,7 +344,10 @@ export function ProductsCatalog({ products, activeCategorySlug, activeSubCategor
   };
 
   const availableCategories = useMemo(() => {
-    return PRODUCT_TAXONOMY.map((item) => ({ label: item.label, value: item.slug }));
+    return PRODUCT_TAXONOMY.map((item) => ({
+      label: item.label,
+      value: item.slug,
+    }));
   }, []);
 
   const availableSubCategories = useMemo(() => {
@@ -276,11 +361,17 @@ export function ProductsCatalog({ products, activeCategorySlug, activeSubCategor
   }, [selectedCategory]);
 
   const availableSizes = useMemo(() => {
-    return toUniqueSorted([...filterPayload.sizes, ...products.flatMap((item) => item.sizeOptions)]);
+    return toUniqueSorted([
+      ...filterPayload.sizes,
+      ...products.flatMap((item) => item.sizeOptions),
+    ]);
   }, [filterPayload.sizes, products]);
 
   const availableColors = useMemo(() => {
-    return toUniqueSorted([...filterPayload.colors, ...products.flatMap((item) => item.colorOptions)]);
+    return toUniqueSorted([
+      ...filterPayload.colors,
+      ...products.flatMap((item) => item.colorOptions),
+    ]);
   }, [filterPayload.colors, products]);
 
   useEffect(() => {
@@ -288,7 +379,9 @@ export function ProductsCatalog({ products, activeCategorySlug, activeSubCategor
       return;
     }
 
-    const exists = availableCategories.some((item) => item.value === selectedCategory);
+    const exists = availableCategories.some(
+      (item) => item.value === selectedCategory,
+    );
     if (!exists) {
       setSelectedCategory("");
       setSelectedSubCategory("");
@@ -300,7 +393,9 @@ export function ProductsCatalog({ products, activeCategorySlug, activeSubCategor
       return;
     }
 
-    const exists = availableSubCategories.some((item) => item.value === selectedSubCategory);
+    const exists = availableSubCategories.some(
+      (item) => item.value === selectedSubCategory,
+    );
     if (!exists) {
       setSelectedSubCategory("");
     }
@@ -318,11 +413,21 @@ export function ProductsCatalog({ products, activeCategorySlug, activeSubCategor
         return false;
       }
 
-      if (selectedSize && !product.sizeOptions.some((size) => normalizeValue(size) === normalizeValue(selectedSize))) {
+      if (
+        selectedSize &&
+        !product.sizeOptions.some(
+          (size) => normalizeValue(size) === normalizeValue(selectedSize),
+        )
+      ) {
         return false;
       }
 
-      if (selectedColor && !product.colorOptions.some((color) => normalizeValue(color) === normalizeValue(selectedColor))) {
+      if (
+        selectedColor &&
+        !product.colorOptions.some(
+          (color) => normalizeValue(color) === normalizeValue(selectedColor),
+        )
+      ) {
         return false;
       }
 
@@ -335,6 +440,14 @@ export function ProductsCatalog({ products, activeCategorySlug, activeSubCategor
       }
 
       if (onlyInStock && product.stockQty <= 0) {
+        return false;
+      }
+
+      const sellingPrice =
+        product.discountPrice > 0
+          ? product.discountPrice
+          : product.originalPrice;
+      if (sellingPrice < priceMin || sellingPrice > priceMax) {
         return false;
       }
 
@@ -359,6 +472,8 @@ export function ProductsCatalog({ products, activeCategorySlug, activeSubCategor
     onlyOnSale,
     onlyNew,
     onlyInStock,
+    priceMin,
+    priceMax,
   ]);
 
   const activeFilterCount = [
@@ -369,6 +484,9 @@ export function ProductsCatalog({ products, activeCategorySlug, activeSubCategor
     onlyOnSale ? "on-sale" : "",
     onlyNew ? "new" : "",
     onlyInStock ? "in-stock" : "",
+    priceMin > PRICE_ABSOLUTE_MIN || priceMax < PRICE_ABSOLUTE_MAX
+      ? "price"
+      : "",
   ].filter(Boolean).length;
 
   const toggleProductWishlist = (productId: string) => {
@@ -380,11 +498,16 @@ export function ProductsCatalog({ products, activeCategorySlug, activeSubCategor
       <section className="mx-auto w-full max-w-7xl">
         <div className="mb-3 flex items-end justify-between gap-3">
           <div className="mb-1 sm:mb-0">
-            <p className="text-[0.64rem] font-semibold uppercase tracking-[0.26em] text-primary/60">Products</p>
-            <h1 className="mt-1 font-display text-3xl leading-tight sm:text-4xl">Shop The Collection</h1>
+            <p className="text-[0.64rem] font-semibold uppercase tracking-[0.26em] text-primary/60">
+              Products
+            </p>
+            <h1 className="mt-1 font-display text-3xl leading-tight sm:text-4xl">
+              Shop The Collection
+            </h1>
           </div>
           <p className="hidden text-xs font-semibold uppercase tracking-[0.2em] text-primary/60 sm:block">
-            {filteredProducts.length} item{filteredProducts.length === 1 ? "" : "s"}
+            {filteredProducts.length} item
+            {filteredProducts.length === 1 ? "" : "s"}
           </p>
         </div>
 
@@ -393,7 +516,9 @@ export function ProductsCatalog({ products, activeCategorySlug, activeSubCategor
             <SelectDropdown
               label="Categories"
               placeholder="All Categories"
-              value={selectedCategory ? getCategoryLabelBySlug(selectedCategory) : ""}
+              value={
+                selectedCategory ? getCategoryLabelBySlug(selectedCategory) : ""
+              }
               options={availableCategories}
               clearable={true}
               open={categoryOpen}
@@ -427,7 +552,11 @@ export function ProductsCatalog({ products, activeCategorySlug, activeSubCategor
             <SelectDropdown
               label="Subcategories"
               placeholder="All Subcategories"
-              value={selectedSubCategory ? getSubCategoryLabelBySlug(selectedSubCategory) : ""}
+              value={
+                selectedSubCategory
+                  ? getSubCategoryLabelBySlug(selectedSubCategory)
+                  : ""
+              }
               options={availableSubCategories}
               clearable={true}
               open={subCategoryOpen}
@@ -444,7 +573,8 @@ export function ProductsCatalog({ products, activeCategorySlug, activeSubCategor
                   return;
                 }
 
-                const nextCategory = selectedCategory || getCategoryForSubCategory(value);
+                const nextCategory =
+                  selectedCategory || getCategoryForSubCategory(value);
                 setSelectedCategory(nextCategory);
                 setSelectedSubCategory(value);
                 navigateForFilter(nextCategory, value);
@@ -493,7 +623,12 @@ export function ProductsCatalog({ products, activeCategorySlug, activeSubCategor
               }}
               className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-primary/20 bg-secondary text-primary transition hover:border-primary/35"
             >
-              <DynamicHugeIcon name="FilterHorizontalIcon" className="h-4.5 w-4.5" iconStrokeWidth={1.9} aria-hidden={true} />
+              <DynamicHugeIcon
+                name="FilterHorizontalIcon"
+                className="h-4.5 w-4.5"
+                iconStrokeWidth={1.9}
+                aria-hidden={true}
+              />
               {activeFilterCount > 0 ? (
                 <span
                   className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[0.62rem] font-semibold leading-none text-secondary"
@@ -514,11 +649,15 @@ export function ProductsCatalog({ products, activeCategorySlug, activeSubCategor
                   className="absolute right-0 top-[calc(100%+8px)] z-20 w-[300px] max-h-[72vh] overflow-y-auto overscroll-contain rounded-xl border border-primary/16 bg-secondary p-3 shadow-[0_18px_36px_rgba(120,0,0,0.16)]"
                   onWheel={(event) => event.stopPropagation()}
                 >
-                  <p className="text-[0.62rem] font-semibold uppercase tracking-[0.22em] text-primary/62">Advanced Filters</p>
+                  <p className="text-[0.62rem] font-semibold uppercase tracking-[0.22em] text-primary/62">
+                    Advanced Filters
+                  </p>
 
                   <div className="mt-3 space-y-2.5">
                     <div className="block sm:hidden">
-                      <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-primary/65">Category</p>
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-primary/65">
+                        Category
+                      </p>
                       <select
                         aria-label="Filter by category"
                         value={selectedCategory}
@@ -545,7 +684,9 @@ export function ProductsCatalog({ products, activeCategorySlug, activeSubCategor
                     </div>
 
                     <div className="block sm:hidden">
-                      <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-primary/65">Subcategory</p>
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-primary/65">
+                        Subcategory
+                      </p>
                       <select
                         aria-label="Filter by subcategory"
                         value={selectedSubCategory}
@@ -561,7 +702,9 @@ export function ProductsCatalog({ products, activeCategorySlug, activeSubCategor
                             return;
                           }
 
-                          const nextCategory = selectedCategory || getCategoryForSubCategory(nextSubCategory);
+                          const nextCategory =
+                            selectedCategory ||
+                            getCategoryForSubCategory(nextSubCategory);
                           setSelectedCategory(nextCategory);
                           setSelectedSubCategory(nextSubCategory);
                           navigateForFilter(nextCategory, nextSubCategory);
@@ -577,12 +720,85 @@ export function ProductsCatalog({ products, activeCategorySlug, activeSubCategor
                       </select>
                     </div>
 
+                    {/* Price Range */}
                     <div>
-                      <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-primary/65">Size</p>
+                      <div className="mb-1.5 flex items-center justify-between">
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary/65">
+                          Price Range
+                        </p>
+                        <p className="text-[0.68rem] font-semibold text-primary/80">
+                          ₹{priceMin.toLocaleString("en-IN")} – ₹
+                          {priceMax.toLocaleString("en-IN")}
+                        </p>
+                      </div>
+                      <div className="relative h-5 flex items-center">
+                        {/* Track background */}
+                        <div className="absolute inset-x-0 h-1 rounded-full bg-primary/12" />
+                        {/* Active track */}
+                        <div
+                          className="absolute h-1 rounded-full bg-primary/70"
+                          style={{
+                            left: `${((priceMin - PRICE_ABSOLUTE_MIN) / (PRICE_ABSOLUTE_MAX - PRICE_ABSOLUTE_MIN)) * 100}%`,
+                            right: `${((PRICE_ABSOLUTE_MAX - priceMax) / (PRICE_ABSOLUTE_MAX - PRICE_ABSOLUTE_MIN)) * 100}%`,
+                          }}
+                        />
+                        {/* Min thumb */}
+                        <input
+                          type="range"
+                          min={PRICE_ABSOLUTE_MIN}
+                          max={PRICE_ABSOLUTE_MAX}
+                          step={100}
+                          value={priceMin}
+                          onChange={(e) => {
+                            const val = Math.min(
+                              Number(e.target.value),
+                              priceMax - 100,
+                            );
+                            setPriceMin(val);
+                          }}
+                          className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:bg-secondary [&::-webkit-slider-thumb]:shadow-[0_1px_6px_rgba(120,0,0,0.22)] [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-primary [&::-moz-range-thumb]:bg-secondary"
+                          style={{
+                            zIndex: priceMin > PRICE_ABSOLUTE_MAX - 200 ? 5 : 3,
+                          }}
+                        />
+                        {/* Max thumb */}
+                        <input
+                          type="range"
+                          min={PRICE_ABSOLUTE_MIN}
+                          max={PRICE_ABSOLUTE_MAX}
+                          step={100}
+                          value={priceMax}
+                          onChange={(e) => {
+                            const val = Math.max(
+                              Number(e.target.value),
+                              priceMin + 100,
+                            );
+                            setPriceMax(val);
+                          }}
+                          className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:bg-secondary [&::-webkit-slider-thumb]:shadow-[0_1px_6px_rgba(120,0,0,0.22)] [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-primary [&::-moz-range-thumb]:bg-secondary"
+                          style={{ zIndex: 4 }}
+                        />
+                      </div>
+                      <div className="mt-1 flex justify-between text-[0.6rem] text-primary/45">
+                        <span>
+                          ₹{PRICE_ABSOLUTE_MIN.toLocaleString("en-IN")}
+                        </span>
+                        <span>
+                          ₹{PRICE_ABSOLUTE_MAX.toLocaleString("en-IN")}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-primary/65">
+                        Size
+                      </p>
                       <select
                         aria-label="Filter by size"
                         value={selectedSize}
-                        onChange={(event) => setSelectedSize(event.target.value)}
+                        onChange={(event) =>
+                          setSelectedSize(event.target.value)
+                        }
                         className="h-10 w-full rounded-lg border border-primary/16 bg-paper px-2.5 text-sm text-primary outline-none"
                       >
                         <option value="">All sizes</option>
@@ -594,33 +810,97 @@ export function ProductsCatalog({ products, activeCategorySlug, activeSubCategor
                       </select>
                     </div>
 
-                    <div>
-                      <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-primary/65">Color</p>
-                      <select
-                        aria-label="Filter by color"
-                        value={selectedColor}
-                        onChange={(event) => setSelectedColor(event.target.value)}
-                        className="h-10 w-full rounded-lg border border-primary/16 bg-paper px-2.5 text-sm text-primary outline-none"
-                      >
-                        <option value="">All colors</option>
-                        {availableColors.map((color) => (
-                          <option key={color} value={color}>
-                            {color}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    {availableColors.length > 0 && (
+                      <div>
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-primary/65">
+                          Color
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {availableColors.map((color) => {
+                            const hex = getSwatchHex(color);
+                            const isSelected =
+                              normalizeValue(selectedColor) ===
+                              normalizeValue(color);
+                            const isLight = [
+                              "white",
+                              "cream",
+                              "beige",
+                              "silver",
+                              "lavender",
+                              "peach",
+                            ].includes(color.trim().toLowerCase());
+                            return (
+                              <button
+                                key={color}
+                                type="button"
+                                aria-label={`Filter by color ${color}`}
+                                aria-pressed={isSelected}
+                                title={color}
+                                onClick={() =>
+                                  setSelectedColor(isSelected ? "" : color)
+                                }
+                                className={`relative flex h-7 w-7 items-center justify-center rounded-full border-2 transition-all ${
+                                  isSelected
+                                    ? "border-primary shadow-[0_0_0_2px_rgba(120,0,0,0.22)]"
+                                    : isLight
+                                      ? "border-primary/20 hover:border-primary/50"
+                                      : "border-transparent hover:border-primary/40"
+                                }`}
+                                style={{ backgroundColor: hex }}
+                              >
+                                {isSelected && (
+                                  <span
+                                    className="h-2 w-2 rounded-full"
+                                    style={{
+                                      backgroundColor: isLight
+                                        ? "#1A1A1A"
+                                        : "#FFFFFF",
+                                    }}
+                                  />
+                                )}
+                              </button>
+                            );
+                          })}
+                          {selectedColor && (
+                            <button
+                              type="button"
+                              aria-label="Clear color filter"
+                              onClick={() => setSelectedColor("")}
+                              className="flex h-7 items-center gap-1 rounded-full border border-primary/20 px-2 text-[0.6rem] font-semibold uppercase tracking-wide text-primary/65 hover:border-primary/40"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     <label className="flex items-center gap-2 text-sm text-primary/86">
-                      <input type="checkbox" checked={onlyOnSale} onChange={(event) => setOnlyOnSale(event.target.checked)} />
+                      <input
+                        type="checkbox"
+                        checked={onlyOnSale}
+                        onChange={(event) =>
+                          setOnlyOnSale(event.target.checked)
+                        }
+                      />
                       On Sale
                     </label>
                     <label className="flex items-center gap-2 text-sm text-primary/86">
-                      <input type="checkbox" checked={onlyNew} onChange={(event) => setOnlyNew(event.target.checked)} />
+                      <input
+                        type="checkbox"
+                        checked={onlyNew}
+                        onChange={(event) => setOnlyNew(event.target.checked)}
+                      />
                       New Arrivals
                     </label>
                     <label className="flex items-center gap-2 text-sm text-primary/86">
-                      <input type="checkbox" checked={onlyInStock} onChange={(event) => setOnlyInStock(event.target.checked)} />
+                      <input
+                        type="checkbox"
+                        checked={onlyInStock}
+                        onChange={(event) =>
+                          setOnlyInStock(event.target.checked)
+                        }
+                      />
                       In Stock Only
                     </label>
 
@@ -633,6 +913,8 @@ export function ProductsCatalog({ products, activeCategorySlug, activeSubCategor
                         setOnlyOnSale(false);
                         setOnlyNew(false);
                         setOnlyInStock(false);
+                        setPriceMin(PRICE_ABSOLUTE_MIN);
+                        setPriceMax(PRICE_ABSOLUTE_MAX);
                       }}
                       className="inline-flex h-9 items-center justify-center rounded-lg border border-primary/18 px-3 text-xs font-semibold uppercase tracking-[0.14em] text-primary transition hover:border-primary/35"
                     >
@@ -649,12 +931,19 @@ export function ProductsCatalog({ products, activeCategorySlug, activeSubCategor
       <section className="mx-auto mt-5 w-full max-w-7xl">
         {filteredProducts.length === 0 ? (
           <div className="rounded-3xl border border-primary/15 bg-secondary/90 p-7 text-center text-primary shadow-[0_12px_30px_rgba(120,0,0,0.08)] sm:p-10">
-            <p className="text-xs font-semibold uppercase tracking-[0.26em] text-primary/65">No products found</p>
-            <h2 className="mt-3 text-3xl font-semibold leading-tight sm:text-4xl">Try another search or category</h2>
-            <p className="mt-3 text-sm text-primary/75 sm:text-base">No matching products are available right now.</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.26em] text-primary/65">
+              No products found
+            </p>
+            <h2 className="mt-3 text-3xl font-semibold leading-tight sm:text-4xl">
+              Try another search or category
+            </h2>
+            <p className="mt-3 text-sm text-primary/75 sm:text-base">
+              No matching products are available right now.
+            </p>
             {activeFilterCount > 0 ? (
               <p className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-primary/62">
-                {activeFilterCount} active filter{activeFilterCount === 1 ? "" : "s"} may be hiding results
+                {activeFilterCount} active filter
+                {activeFilterCount === 1 ? "" : "s"} may be hiding results
               </p>
             ) : null}
           </div>
@@ -666,8 +955,12 @@ export function ProductsCatalog({ products, activeCategorySlug, activeSubCategor
                 product={product}
                 quantity={cartItems[product.id] ?? 0}
                 onAddToCart={(productId) => updateCartQuantity(productId, 1)}
-                onIncreaseQuantity={(productId) => updateCartQuantity(productId, (cartItems[productId] ?? 0) + 1)}
-                onDecreaseQuantity={(productId) => updateCartQuantity(productId, (cartItems[productId] ?? 0) - 1)}
+                onIncreaseQuantity={(productId) =>
+                  updateCartQuantity(productId, (cartItems[productId] ?? 0) + 1)
+                }
+                onDecreaseQuantity={(productId) =>
+                  updateCartQuantity(productId, (cartItems[productId] ?? 0) - 1)
+                }
                 isWishlisted={Boolean(wishlistItems[product.id])}
                 onToggleWishlist={toggleProductWishlist}
               />

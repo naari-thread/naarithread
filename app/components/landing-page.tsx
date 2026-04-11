@@ -382,7 +382,7 @@ export function LandingPage() {
   }, [mobileCarouselInteracted, prefersReducedMotion]);
 
   return (
-    <main className="w-full pt-14 md:pt-0">
+    <main className="landing-page-main w-full pt-14 md:pt-0">
       <section className="w-full border-b border-secondary/25 bg-gradient-to-r from-primary via-primary/95 to-primary text-secondary md:hidden">
         <div className="mx-auto flex w-full max-w-7xl items-center justify-center px-4 py-3 sm:px-5 md:px-8 lg:px-12">
           <div
@@ -450,6 +450,52 @@ export function LandingPage() {
               From the heritage of the Saree to the edge of Western wear, discover
               fashion that speaks your language.
             </motion.p>
+
+            {/* Trust Badges — desktop only */}
+            <motion.div
+              variants={revealItem}
+              className="hidden sm:flex flex-wrap items-center gap-2.5"
+            >
+              {[
+                { icon: "★", label: "4.8/5 Rating" },
+                { icon: "♡", label: "10k+ Happy Customers" },
+                { icon: "✓", label: "COD Available" },
+              ].map((badge) => (
+                <span
+                  key={badge.label}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-secondary/80 px-3.5 py-1.5 text-[0.68rem] font-semibold tracking-wide text-primary/80 shadow-[0_2px_8px_rgba(120,0,0,0.06)] backdrop-blur-sm"
+                >
+                  <span className="text-primary/60 text-xs">{badge.icon}</span>
+                  {badge.label}
+                </span>
+              ))}
+            </motion.div>
+
+            {/* Micro-stat cards — desktop only */}
+            <motion.div
+              variants={revealItem}
+              className="hidden lg:flex items-center gap-3"
+            >
+              <div className="flex items-center gap-3 rounded-2xl border border-primary/12 bg-secondary/70 px-4 py-3 shadow-[0_4px_16px_rgba(120,0,0,0.06)] backdrop-blur-sm">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                  <span className="text-sm">🛍️</span>
+                </span>
+                <div>
+                  <p className="text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-primary/55">New this week</p>
+                  <p className="text-xs font-semibold text-primary">New Arrivals Every Friday</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 rounded-2xl border border-primary/12 bg-secondary/70 px-4 py-3 shadow-[0_4px_16px_rgba(120,0,0,0.06)] backdrop-blur-sm">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                  <span className="text-sm">🎉</span>
+                </span>
+                <div>
+                  <p className="text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-primary/55">Trending now</p>
+                  <p className="text-xs font-semibold text-primary">Festive Styles Now Live</p>
+                </div>
+              </div>
+            </motion.div>
+
             <motion.div variants={revealItem} className="hidden sm:block">
               <Link
                 href="/products"

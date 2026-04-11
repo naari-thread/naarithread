@@ -132,4 +132,10 @@
   .cta-thread-hero span {
     @apply relative z-10;
   }
+
+  @media (max-width: 768px) {
+    main:not(.landing-page-main) {
+      padding-top: 5rem !important; /* 80px space for navbar */
+    }
+  }
 }

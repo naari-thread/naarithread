@@ -111,9 +111,26 @@ export function AiChat() {
     }, 900);
   }, [baseId]);
 
-  if (pathname !== "/") {
-    return null;
-  }
+  useEffect(() => {
+    const handleOpen = () => {
+      setOpen(true);
+      setShowNudge(false);
+    };
+    window.addEventListener("open-saathi-chat", handleOpen);
+    
+    // Check for URL parameter ?chat=open
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("chat") === "open") {
+      handleOpen();
+      // Clean up the URL
+      const nextUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState({}, "", nextUrl);
+    }
+
+    return () => window.removeEventListener("open-saathi-chat", handleOpen);
+  }, []);
+
+  // Show floating button on all pages now, as requested indirectly by enabling AI everywhere
 
   return (
     <>
