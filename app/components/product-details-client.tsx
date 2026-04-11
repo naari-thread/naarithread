@@ -814,27 +814,30 @@ export function ProductDetailsClient({
                       />
                       <span>24/7 Premium Support Available</span>
                     </div>
-                  </div>
 
-                  {/* Urgency Trigger - Clean Direct Look */}
-                  <AnimatePresence>
-                    {urgencyVisible && (
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.99 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="mt-6 flex items-center justify-center rounded-2xl border border-primary/5 bg-primary/[0.02] px-6 py-4"
-                      >
-                        <motion.p
-                          key={liveViewers}
-                          initial={{ opacity: 0.5, y: 2 }}
+                    <AnimatePresence mode="wait">
+                      {urgencyVisible && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 5 }}
                           animate={{ opacity: 1, y: 0 }}
-                          className="text-[0.82rem] font-medium tracking-tight text-primary/70"
+                          className="flex items-center gap-2.5 text-[#a83232]"
                         >
-                          <span className="font-bold text-primary mr-1">{liveViewers} </span>  people checking out this
-                        </motion.p>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                          <DynamicHugeIcon
+                            name="UserIcon"
+                            className="h-4 w-4 opacity-70"
+                          />
+                          <motion.span
+                            key={liveViewers}
+                            initial={{ opacity: 0.5, y: 2 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="font-bold"
+                          >
+                            {liveViewers} people checking out this
+                          </motion.span>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
               </div>
             </div>

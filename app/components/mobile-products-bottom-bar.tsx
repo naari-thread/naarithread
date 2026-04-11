@@ -90,10 +90,10 @@ export function MobileProductsBottomBar() {
 
   return (
     <motion.div
-      initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 24 }}
+      initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 18 }}
       animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-      className="fixed inset-x-0 bottom-0 z-[88] px-3 pb-4 pt-2 md:hidden"
+      className="fixed inset-x-0 bottom-0 z-[88] border-t border-primary/14 bg-secondary/95 px-1.5 pb-2.5 pt-2 shadow-[0_-10px_30px_rgba(54,19,19,0.12)] backdrop-blur-md md:hidden"
       aria-label="Mobile quick actions"
     >
       <AnimatePresence>
@@ -112,7 +112,7 @@ export function MobileProductsBottomBar() {
 
       <nav
         aria-label="Bottom navigation"
-        className="pointer-events-auto relative z-10 mx-auto grid w-full max-w-sm grid-cols-4 gap-1.5 items-center rounded-[1.45rem] border border-primary/15 bg-secondary/95 p-1.5 shadow-[0_16px_40px_rgba(54,19,19,0.18)] backdrop-blur-lg"
+        className="pointer-events-auto relative z-10 grid w-full grid-cols-4 gap-1 items-center"
       >
         {mobileNavItems.map((item) => {
           const baseIsActive = item.id === "shop"

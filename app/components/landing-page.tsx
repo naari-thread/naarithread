@@ -451,49 +451,44 @@ export function LandingPage() {
               fashion that speaks your language.
             </motion.p>
 
-            {/* Trust Badges — desktop only */}
+            {/* Trust Badges — Luxury Refined Layout (Single Line) */}
             <motion.div
               variants={revealItem}
-              className="hidden sm:flex flex-wrap items-center gap-2.5"
+              className="hidden sm:flex flex-nowrap items-center gap-x-0"
             >
-              {[
-                { icon: "★", label: "4.8/5 Rating" },
-                { icon: "♡", label: "10k+ Happy Customers" },
-                { icon: "✓", label: "COD Available" },
-              ].map((badge) => (
-                <span
-                  key={badge.label}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-secondary/80 px-3.5 py-1.5 text-[0.68rem] font-semibold tracking-wide text-primary/80 shadow-[0_2px_8px_rgba(120,0,0,0.06)] backdrop-blur-sm"
-                >
-                  <span className="text-primary/60 text-xs">{badge.icon}</span>
-                  {badge.label}
-                </span>
-              ))}
-            </motion.div>
+              {/* Stat 1: Reviews */}
+              <div className="flex shrink-0 items-center gap-2.5 pr-6 md:pr-8 border-r border-primary/10">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/[0.03] text-primary/50">
+                  <DynamicHugeIcon name="StarIcon" className="h-3 w-3" iconStrokeWidth={2} />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[0.64rem] font-bold uppercase tracking-[0.1em] text-primary/90">2.5k+ Reviews</span>
+                  <span className="text-[0.54rem] font-medium uppercase tracking-[0.06em] text-primary/40 italic">4.8/5 Rating</span>
+                </div>
+              </div>
 
-            {/* Micro-stat cards — desktop only */}
-            <motion.div
-              variants={revealItem}
-              className="hidden lg:flex items-center gap-3"
-            >
-              <div className="flex items-center gap-3 rounded-2xl border border-primary/12 bg-secondary/70 px-4 py-3 shadow-[0_4px_16px_rgba(120,0,0,0.06)] backdrop-blur-sm">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                  <span className="text-sm">🛍️</span>
-                </span>
-                <div>
-                  <p className="text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-primary/55">New this week</p>
-                  <p className="text-xs font-semibold text-primary">New Arrivals Every Friday</p>
+              {/* Stat 2: Community */}
+              <div className="flex shrink-0 items-center gap-2.5 px-6 md:px-8 border-r border-primary/10">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/[0.03] text-primary/50">
+                  <DynamicHugeIcon name="UserIcon" className="h-3 w-3" iconStrokeWidth={2} />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[0.64rem] font-bold uppercase tracking-[0.12em] text-primary/90">10k+ Community</span>
+                  <span className="text-[0.54rem] font-medium uppercase tracking-[0.06em] text-primary/40 italic">Customers</span>
                 </div>
               </div>
-              <div className="flex items-center gap-3 rounded-2xl border border-primary/12 bg-secondary/70 px-4 py-3 shadow-[0_4px_16px_rgba(120,0,0,0.06)] backdrop-blur-sm">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                  <span className="text-sm">🎉</span>
-                </span>
-                <div>
-                  <p className="text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-primary/55">Trending now</p>
-                  <p className="text-xs font-semibold text-primary">Festive Styles Now Live</p>
+
+              {/* Stat 3: Payments */}
+              <div className="flex shrink-0 items-center gap-2.5 px-6 md:px-8">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/[0.03] text-primary/50">
+                  <DynamicHugeIcon name="ShoppingCart01Icon" className="h-3 w-3" iconStrokeWidth={2} />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[0.64rem] font-bold uppercase tracking-[0.12em] text-primary/90">Secure Pay</span>
+                  <span className="text-[0.54rem] font-medium uppercase tracking-[0.06em] text-primary/40 italic">All Methods</span>
                 </div>
               </div>
+
             </motion.div>
 
             <motion.div variants={revealItem} className="hidden sm:block">

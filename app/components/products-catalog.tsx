@@ -498,10 +498,7 @@ export function ProductsCatalog({
       <section className="mx-auto w-full max-w-7xl">
         <div className="mb-3 flex items-end justify-between gap-3">
           <div className="mb-1 sm:mb-0">
-            <p className="text-[0.64rem] font-semibold uppercase tracking-[0.26em] text-primary/60">
-              Products
-            </p>
-            <h1 className="mt-1 font-display text-3xl leading-tight sm:text-4xl">
+            <h1 className="mt-1 font-display text-2xl leading-tight sm:text-4xl">
               Shop The Collection
             </h1>
           </div>
