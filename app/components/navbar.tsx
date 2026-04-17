@@ -300,6 +300,21 @@ export function Navbar() {
       badgeCount: isMounted ? cartCount : 0,
     },
   ];
+const mobileQuickLinks = [
+    {
+      href: "/products",
+      label: "Shop",
+      icon: "ShoppingBag01Icon" as const,
+      isActive: isProductsRoute,
+    },
+    {
+      href: "/wishlist",
+      label: "Wishlist",
+      icon: "FavouriteIcon" as const,
+      isActive: pathname.startsWith("/wishlist"),
+      badgeCount: isMounted ? wishlistCount : 0,
+    },
+  ];
 
   const openDesktopDropdown = (categoryId: string) => {
     if (closeDropdownTimer.current) {
@@ -344,14 +359,14 @@ export function Navbar() {
                 width={80}
                 height={80}
                 priority
-                className="h-11 w-11 rounded-full border border-primary/20 object-cover transition duration-300 group-hover:border-primary/50 group-hover:shadow-[0_0_0_3px_rgba(120,0,0,0.09)] sm:h-12 sm:w-12"
+                className="h-10 w-10 rounded-full border border-primary/20 object-cover transition duration-300 group-hover:border-primary/50 group-hover:shadow-[0_0_0_3px_rgba(120,0,0,0.09)] sm:h-12 sm:w-12"
               />
               <Image
                 src="/logoname2.png"
                 alt="NaariThread logotype"
                 width={128}
                 height={128}
-                className="mb-1 block h-8 w-auto object-contain sm:mb-2 sm:h-auto sm:w-auto"
+                className="mb-1 block h-7 w-auto object-contain sm:mb-2 sm:h-auto sm:w-auto"
               />
             </Link>
 
@@ -453,7 +468,7 @@ export function Navbar() {
             </motion.nav>
 
             {/* Desktop: 3 Icon Buttons (always visible on landing page) */}
-            <nav aria-label="Quick actions" className="hidden items-center gap-2 md:flex">
+            <nav aria-label="Quick actions" className="hidden md:flex items-center gap-2">
               {desktopQuickLinks.map((item) => (
                 <Link
                   key={item.label}
@@ -495,6 +510,45 @@ export function Navbar() {
             </nav>
 
             {/* Mobile: Hamburger (landing page — opens category drawer) */}
+            <nav aria-label="Mobile quick actions" className="md:hidden flex items-center gap-2">
+              {mobileQuickLinks.map((item) => (
+                <Link
+                  key={item.label}
+                  href={item.href}
+                  aria-label={`Open ${item.label}`}
+                  aria-current={item.isActive ? "page" : undefined}
+                  className={`group relative inline-flex h-10 w-10 items-center justify-center rounded-full border transition ${
+                    item.isActive
+                      ? "border-transparent text-secondary"
+                      : "border-primary/20 bg-secondary text-primary/80 hover:border-primary/40 hover:text-primary"
+                  }`}
+                >
+                  {item.isActive && (
+                    <motion.div
+                      layoutId="active-landing-nav-icon"
+                      className="absolute inset-0 rounded-full bg-primary shadow-[0_4px_16px_rgba(120,0,0,0.18)]"
+                      initial={false}
+                      transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                      aria-hidden="true"
+                    />
+                  )}
+                  <DynamicHugeIcon
+                    name={item.icon}
+                    className="relative z-10 h-5 w-5"
+                    iconStrokeWidth={item.isActive ? 2.2 : 2}
+                  />
+                  {typeof item.badgeCount === "number" && item.badgeCount > 0 ? (
+                    <span
+                      className={`absolute right-0 top-0 -translate-y-[20%] translate-x-[20%] z-20 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full px-1 text-[0.54rem] font-bold leading-none ring-2 ring-secondary ${
+                        item.isActive ? "bg-secondary text-primary" : "bg-primary text-secondary"
+                      }`}
+                      aria-hidden={true}
+                    >
+                      {item.badgeCount > 9 ? "9+" : item.badgeCount}
+                    </span>
+                  ) : null}
+                </Link>
+              ))}
             <button
               type="button"
               aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
@@ -522,6 +576,7 @@ export function Navbar() {
                 />
               </span>
             </button>
+            </nav>
           </div>
         </header>
       )}
