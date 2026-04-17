@@ -151,10 +151,7 @@ export function Navbar() {
   const isLandingPage = pathname === "/";
   const [isMounted, setIsMounted] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const [isHeroInView, setIsHeroInView] = useState(pathname === "/");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  // Non-landing pages mobile drawer state
-  const [isQuickDrawerOpen, setIsQuickDrawerOpen] = useState(false);
   const [activeDesktopCategory, setActiveDesktopCategory] = useState<string | null>(null);
   const [activeMobileCategory, setActiveMobileCategory] = useState<string | null>(null);
   const [cartCount, setCartCount] = useState(0);
@@ -162,6 +159,7 @@ export function Navbar() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isContactPanelOpen, setIsContactPanelOpen] = useState(false);
   const [selectedAccountAction, setSelectedAccountAction] = useState<"account" | "wallet" | "orders" | null>(null);
   const [selectedNotification, setSelectedNotification] = useState<NotificationItem | null>(null);
   const closeDropdownTimer = useRef<number | null>(null);
@@ -187,7 +185,7 @@ export function Navbar() {
   }, []);
 
   useEffect(() => {
-    const overflow = isMobileMenuOpen || isQuickDrawerOpen;
+    const overflow = isMobileMenuOpen || isContactPanelOpen;
     if (!overflow) {
       document.body.style.overflow = "";
       return;
@@ -198,30 +196,7 @@ export function Navbar() {
     return () => {
       document.body.style.overflow = "";
     };
-  }, [isMobileMenuOpen, isQuickDrawerOpen]);
-
-  useEffect(() => {
-    if (pathname !== "/") return;
-
-    const heroSection = document.getElementById("hero");
-    if (!heroSection) return;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        setIsHeroInView(entry.isIntersecting);
-      },
-      {
-        threshold: 0.2,
-        rootMargin: "-88px 0px 0px 0px",
-      }
-    );
-
-    observer.observe(heroSection);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [pathname]);
+  }, [isMobileMenuOpen, isContactPanelOpen]);
 
   useEffect(() => {
     return subscribeToCartChanges((items) => {
@@ -264,7 +239,7 @@ export function Navbar() {
         setIsAccountMenuOpen(false);
         setSelectedNotification(null);
         setSelectedAccountAction(null);
-        setIsQuickDrawerOpen(false);
+        setIsContactPanelOpen(false);
       }
     };
 
@@ -805,43 +780,28 @@ const mobileQuickLinks = [
               </div>
             </nav>
 
-            {/* Mobile: Hamburger (non-landing page — opens Quick Drawer) */}
-            <button
-              type="button"
-              aria-label={isQuickDrawerOpen ? "Close menu" : "Open menu"}
-              aria-expanded={isQuickDrawerOpen}
-              aria-controls="mobile-quick-drawer"
-              onClick={() => setIsQuickDrawerOpen((prev) => !prev)}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-secondary text-primary transition hover:border-primary/40 md:hidden"
-            >
-              <span className="sr-only">Toggle navigation menu</span>
-              <span className="relative h-4 w-5">
-                <span
-                  className={`absolute left-0 top-0 block h-[2px] w-5 rounded-full bg-primary transition-all duration-300 ${
-                    isQuickDrawerOpen ? "translate-y-[7px] rotate-45" : ""
-                  }`}
-                />
-                <span
-                  className={`absolute left-0 top-[7px] block h-[2px] w-5 rounded-full bg-primary transition-all duration-300 ${
-                    isQuickDrawerOpen ? "opacity-0" : "opacity-100"
-                  }`}
-                />
-                <span
-                  className={`absolute left-0 top-[14px] block h-[2px] w-5 rounded-full bg-primary transition-all duration-300 ${
-                    isQuickDrawerOpen ? "-translate-y-[7px] -rotate-45" : ""
-                  }`}
-                />
-              </span>
-            </button>
+            {/* Mobile: Direct actions (non-landing page) */}
+            <div className="flex items-center gap-2 md:hidden">
+              <button
+                type="button"
+                aria-label="Open contact options"
+                aria-expanded={isContactPanelOpen}
+                onClick={() => setIsContactPanelOpen(true)}
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-secondary text-primary transition hover:border-primary/40"
+              >
+                <DynamicHugeIcon name="CallIcon" className="h-5.5 w-5.5" iconStrokeWidth={2.1} />
+              </button>
+              <button
+                type="button"
+                aria-label="Open Saathi chat"
+                onClick={() => window.dispatchEvent(new CustomEvent("open-saathi-chat"))}
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-secondary text-primary transition hover:border-primary/40"
+              >
+                <DynamicHugeIcon name="AiChat01Icon" className="h-5.5 w-5.5" iconStrokeWidth={1.8} />
+              </button>
+            </div>
           </div>
         </header>
-      )}
-
-      {/* ─── MOBILE QUICK DRAWER TRIGGER (non-landing pages, desktop-only fallback) ─── */}
-      {!isLandingPage && (
-        <div className="fixed top-3 right-3 z-[95] hidden">
-          {/* Retained for programmatic access; mobile now uses the navbar hamburger */}
-        </div>
       )}
 
       {/* ─── MODAL LAYER (notifications / account details) ─── */}
@@ -933,6 +893,69 @@ const mobileQuickLinks = [
                   </div>
                 ) : null}
               </div>
+            </motion.div>
+          </motion.div>
+        ) : null}
+
+        {!isLandingPage && isContactPanelOpen ? (
+          <motion.div
+            className="fixed inset-0 z-[160] flex items-end justify-center bg-black/35 p-4 pb-5 backdrop-blur-[2px] sm:items-center sm:pb-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsContactPanelOpen(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 16, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.98 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              className="w-full max-w-sm overflow-hidden rounded-3xl border border-primary/15 bg-secondary p-4 shadow-[0_20px_48px_rgba(120,0,0,0.2)] sm:p-5"
+              onClick={(event) => event.stopPropagation()}
+              role="dialog"
+              aria-modal={true}
+              aria-label="Contact NaariThread"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-primary/58">Contact</p>
+                  <h3 className="mt-1 text-base font-semibold text-primary">Talk to NaariThread</h3>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Close contact panel"
+                  onClick={() => setIsContactPanelOpen(false)}
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-primary/18 text-primary transition hover:border-primary/35"
+                >
+                  <DynamicHugeIcon name="Cancel01Icon" className="h-4.5 w-4.5" iconStrokeWidth={2.2} aria-hidden={true} />
+                </button>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-primary/12 bg-primary/[0.03] p-4">
+                <p className="text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-primary/55">Phone number</p>
+                <a
+                  href="tel:+918487849852"
+                  className="mt-2 block text-xl font-semibold tracking-wide text-primary"
+                  aria-label="Call NaariThread at +91 84878 49852"
+                >
+                  +91 84878 49852
+                </a>
+                <p className="mt-2 text-xs leading-relaxed text-primary/68">
+                  Prefer chat? Tap the WhatsApp button below and we will respond there.
+                </p>
+              </div>
+
+              <a
+                href="https://wa.me/918487849852?text=Hi%2C+I+have+this+query"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Chat with NaariThread on WhatsApp"
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#25D366] px-4 py-3 text-sm font-semibold text-white transition hover:brightness-95"
+                onClick={() => setIsContactPanelOpen(false)}
+              >
+                <DynamicHugeIcon name="WhatsappIcon" className="h-5 w-5" iconStrokeWidth={1.8} />
+                Chat on WhatsApp
+              </a>
             </motion.div>
           </motion.div>
         ) : null}
@@ -1123,134 +1146,6 @@ const mobileQuickLinks = [
           </motion.div>
         ) : null}
 
-        {/* ─── NON-LANDING MOBILE QUICK DRAWER ─── */}
-        {isQuickDrawerOpen && !isLandingPage ? (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            style={{ willChange: "opacity" }}
-            className="fixed inset-0 z-[120] bg-primary/35 md:hidden"
-            onClick={() => setIsQuickDrawerOpen(false)}
-          >
-            <motion.aside
-              initial={prefersReducedMotion ? { x: 0 } : { x: "100%" }}
-              animate={{ x: 0 }}
-              exit={prefersReducedMotion ? { x: 0 } : { x: "100%" }}
-              transition={
-                prefersReducedMotion
-                  ? { duration: 0 }
-                  : { duration: 0.2, ease: [0.16, 1, 0.3, 1] }
-              }
-              style={{ willChange: "transform" }}
-              className="ml-auto flex h-full w-[80%] max-w-[340px] flex-col overflow-hidden rounded-l-[2rem] border-l border-primary/15 bg-secondary shadow-[-8px_0_32px_rgba(120,0,0,0.18)]"
-              onClick={(event) => event.stopPropagation()}
-            >
-              {/* Drawer Header */}
-              <div className="flex items-center justify-between border-b border-primary/10 px-5 py-4">
-                <Link
-                  href="/"
-                  aria-label="NaariThread — return to homepage"
-                  className="group flex items-center gap-2"
-                  onClick={() => setIsQuickDrawerOpen(false)}
-                >
-                  <Image
-                    src="/logo4.png"
-                    alt="NaariThread logo mark"
-                    width={80}
-                    height={80}
-                    className="h-10 w-10 rounded-full border border-primary/20 object-cover"
-                  />
-                  <Image
-                    src="/logoname2.png"
-                    alt="NaariThread logotype"
-                    width={128}
-                    height={128}
-                    className="h-7 w-auto object-contain"
-                  />
-                </Link>
-                <button
-                  type="button"
-                  aria-label="Close menu"
-                  onClick={() => setIsQuickDrawerOpen(false)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-primary/20 text-primary transition hover:border-primary/40"
-                >
-                  <DynamicHugeIcon name="Cancel01Icon" className="h-4 w-4" iconStrokeWidth={2.2} />
-                </button>
-              </div>
-
-              {/* Drawer Body */}
-              <motion.div
-                variants={menuContainer}
-                initial="hidden"
-                animate="show"
-                className="flex flex-1 flex-col gap-3 px-5 py-6"
-              >
-                {/* Ask AI */}
-                <motion.button
-                  variants={menuItem}
-                  type="button"
-                  aria-label="Open AI Style Assistant"
-                  onClick={() => {
-                    setIsQuickDrawerOpen(false);
-                    window.dispatchEvent(new CustomEvent("open-saathi-chat"));
-                  }}
-                  className="group flex items-center gap-4 rounded-3xl border border-primary/15 bg-[#FDF8F1] px-4 py-5 text-left transition hover:border-primary/30 hover:bg-[#F9F1E6] shadow-[0_2px_12px_rgba(120,0,0,0.04)]"
-                >
-                  <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#F2E8DA] text-primary">
-                    <DynamicHugeIcon name="AiChat01Icon" className="h-6 w-6" iconStrokeWidth={1.5} />
-                  </span>
-                  <span className="block min-w-0">
-                    <span className="block text-[1.1rem] font-semibold text-primary">Ask AI</span>
-                    <span className="mt-0.5 block text-xs text-primary/60 leading-tight">Chat with Saathi, our style assistant</span>
-                  </span>
-                  <DynamicHugeIcon name="ArrowRight01Icon" className="ml-auto h-5 w-5 shrink-0 text-primary/30 transition group-hover:translate-x-0.5 group-hover:text-primary/70" iconStrokeWidth={1.5} />
-                </motion.button>
-
-                {/* Contact Us */}
-                <motion.a
-                  variants={menuItem}
-                  href="tel:+918487849852"
-                  aria-label="Call NaariThread support"
-                  className="group flex items-center gap-4 rounded-3xl border border-primary/15 bg-[#FDF8F1] px-4 py-5 text-left transition hover:border-primary/30 hover:bg-[#F9F1E6] shadow-[0_2px_12px_rgba(120,0,0,0.04)]"
-                  onClick={() => setIsQuickDrawerOpen(false)}
-                >
-                  <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#F2E8DA] text-primary">
-                    <DynamicHugeIcon name="CallIcon" className="h-6 w-6" iconStrokeWidth={1.5} />
-                  </span>
-                  <span className="block min-w-0">
-                    <span className="block text-[1.1rem] font-semibold text-primary">Contact Us</span>
-                    <span className="mt-0.5 block text-xs text-primary/60 leading-tight">+91 84878 49852</span>
-                  </span>
-                  <DynamicHugeIcon name="ArrowRight01Icon" className="ml-auto h-5 w-5 shrink-0 text-primary/30 transition group-hover:translate-x-0.5 group-hover:text-primary/70" iconStrokeWidth={1.5} />
-                </motion.a>
-
-                {/* WhatsApp */}
-                <motion.a
-                  variants={menuItem}
-                  href="https://wa.me/918487849852?text=Hi%2C+I+have+this+query"
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label="Chat with NaariThread on WhatsApp"
-                  className="group flex items-center gap-4 rounded-3xl border border-[#25D366]/20 bg-[#F2FAF5] px-4 py-5 text-left transition hover:border-[#25D366]/40 hover:bg-[#E8F5EE] shadow-[0_2px_12px_rgba(37,211,102,0.06)]"
-                  onClick={() => setIsQuickDrawerOpen(false)}
-                >
-                  <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#E1F3E8] text-[#128C35]">
-                    <DynamicHugeIcon name="WhatsappIcon" className="h-6 w-6" iconStrokeWidth={1.5} />
-                  </span>
-                  <span className="block min-w-0">
-                    <span className="block text-[1.1rem] font-semibold text-primary">Chat on WhatsApp</span>
-                    <span className="mt-0.5 block text-xs text-primary/60 leading-tight">Tap to open a conversation</span>
-                  </span>
-                  <DynamicHugeIcon name="ArrowRight01Icon" className="ml-auto h-5 w-5 shrink-0 text-primary/30 transition group-hover:translate-x-0.5 group-hover:text-primary/70" iconStrokeWidth={1.5} />
-                </motion.a>
-
-
-              </motion.div>
-            </motion.aside>
-          </motion.div>
-        ) : null}
       </AnimatePresence>
 
       <AuthModal
