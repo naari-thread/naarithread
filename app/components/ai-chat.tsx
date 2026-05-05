@@ -146,7 +146,7 @@ export function AiChat() {
   return (
     <>
       {showFloatingButton && (
-        <div className={`fixed ${isProductsPage ? "bottom-24 sm:bottom-8" : "bottom-5 sm:bottom-8"} right-5 z-[105] sm:bottom-8 sm:right-8`}>
+        <div className={`fixed ${isProductsPage || pathname === "/" ? "bottom-24 sm:bottom-8" : "bottom-5 sm:bottom-8"} right-5 z-[105] sm:bottom-8 sm:right-8`}>
         <AnimatePresence>
           {!open && showNudge ? (
             <motion.div

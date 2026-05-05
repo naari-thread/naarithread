@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { AuthModal } from "@/app/components/auth-modal";
 import { useAuth } from "@/app/components/auth-provider";
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
@@ -147,11 +147,14 @@ const menuItem = {
 export function Navbar() {
   const { isAuthenticated, isLoading, logout, isAdmin } = useAuth();
   const pathname = usePathname();
+  const router = useRouter();
   const prefersReducedMotion = useReducedMotion();
   const isLandingPage = pathname === "/";
   const [isMounted, setIsMounted] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
+  const [mobileSearchText, setMobileSearchText] = useState("");
   const [activeDesktopCategory, setActiveDesktopCategory] = useState<string | null>(null);
   const [activeMobileCategory, setActiveMobileCategory] = useState<string | null>(null);
   const [cartCount, setCartCount] = useState(0);
@@ -165,6 +168,7 @@ export function Navbar() {
   const closeDropdownTimer = useRef<number | null>(null);
   const notificationPanelRef = useRef<HTMLDivElement | null>(null);
   const accountPanelRef = useRef<HTMLDivElement | null>(null);
+  const mobileSearchInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -197,6 +201,20 @@ export function Navbar() {
       document.body.style.overflow = "";
     };
   }, [isMobileMenuOpen, isContactPanelOpen]);
+
+  useEffect(() => {
+    if (!isMobileSearchOpen) {
+      return;
+    }
+
+    const focusTimer = window.setTimeout(() => {
+      mobileSearchInputRef.current?.focus();
+    }, 120);
+
+    return () => {
+      window.clearTimeout(focusTimer);
+    };
+  }, [isMobileSearchOpen]);
 
   useEffect(() => {
     return subscribeToCartChanges((items) => {
@@ -275,7 +293,7 @@ export function Navbar() {
       badgeCount: isMounted ? cartCount : 0,
     },
   ];
-const mobileQuickLinks = [
+  const mobileQuickLinks = [
     {
       href: "/products",
       label: "Shop",
@@ -283,13 +301,24 @@ const mobileQuickLinks = [
       isActive: isProductsRoute,
     },
     {
-      href: "/wishlist",
-      label: "Wishlist",
-      icon: "FavouriteIcon" as const,
-      isActive: pathname.startsWith("/wishlist"),
-      badgeCount: isMounted ? wishlistCount : 0,
+      href: "/cart",
+      label: "Cart",
+      icon: "ShoppingCart02Icon" as const,
+      isActive: pathname.startsWith("/cart"),
+      badgeCount: isMounted ? cartCount : 0,
     },
   ];
+
+  const submitMobileSearch = (): void => {
+    const query = mobileSearchText.trim();
+    if (!query) {
+      mobileSearchInputRef.current?.focus();
+      return;
+    }
+
+    setIsMobileSearchOpen(false);
+    router.push(`/products?q=${encodeURIComponent(query)}`);
+  };
 
   const openDesktopDropdown = (categoryId: string) => {
     if (closeDropdownTimer.current) {
@@ -484,8 +513,26 @@ const mobileQuickLinks = [
               ))}
             </nav>
 
-            {/* Mobile: Hamburger (landing page — opens category drawer) */}
             <nav aria-label="Mobile quick actions" className="md:hidden flex items-center gap-2">
+              <button
+                type="button"
+                role="button"
+                aria-label={isMobileSearchOpen ? "Close product search" : "Open product search"}
+                aria-expanded={isMobileSearchOpen}
+                aria-controls="mobile-product-search"
+                onClick={() => {
+                  setIsMobileSearchOpen((current) => !current);
+                  setIsMobileMenuOpen(false);
+                }}
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-secondary text-primary transition hover:border-primary/40"
+              >
+                <DynamicHugeIcon
+                  name={isMobileSearchOpen ? "Cancel01Icon" : "Search01Icon"}
+                  className="h-5 w-5"
+                  iconStrokeWidth={2.1}
+                  aria-hidden={true}
+                />
+              </button>
               {mobileQuickLinks.map((item) => (
                 <Link
                   key={item.label}
@@ -524,35 +571,48 @@ const mobileQuickLinks = [
                   ) : null}
                 </Link>
               ))}
-            <button
-              type="button"
-              aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
-              aria-expanded={isMobileMenuOpen}
-              aria-controls="mobile-sidebar-menu"
-              onClick={() => setIsMobileMenuOpen((prev) => !prev)}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-secondary text-primary transition hover:border-primary/40 md:hidden"
-            >
-              <span className="sr-only">Toggle navigation menu</span>
-              <span className="relative h-4 w-5">
-                <span
-                  className={`absolute left-0 top-0 block h-[2px] w-5 rounded-full bg-primary transition-all duration-300 ${
-                    isMobileMenuOpen ? "translate-y-[7px] rotate-45" : ""
-                  }`}
-                />
-                <span
-                  className={`absolute left-0 top-[7px] block h-[2px] w-5 rounded-full bg-primary transition-all duration-300 ${
-                    isMobileMenuOpen ? "opacity-0" : "opacity-100"
-                  }`}
-                />
-                <span
-                  className={`absolute left-0 top-[14px] block h-[2px] w-5 rounded-full bg-primary transition-all duration-300 ${
-                    isMobileMenuOpen ? "-translate-y-[7px] -rotate-45" : ""
-                  }`}
-                />
-              </span>
-            </button>
             </nav>
           </div>
+          <AnimatePresence>
+            {isMobileSearchOpen ? (
+              <motion.form
+                id="mobile-product-search"
+                role="search"
+                aria-label="Search products"
+                initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: -8 }}
+                transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  submitMobileSearch();
+                }}
+                className="mx-auto flex w-full max-w-7xl items-center gap-2 border-t border-primary/10 px-3 pb-3 pt-2 md:hidden"
+              >
+                <label htmlFor="mobile-product-search-input" className="sr-only">
+                  Search products
+                </label>
+                <input
+                  ref={mobileSearchInputRef}
+                  id="mobile-product-search-input"
+                  type="search"
+                  aria-label="Enter product search"
+                  value={mobileSearchText}
+                  onChange={(event) => setMobileSearchText(event.target.value)}
+                  placeholder="Search products"
+                  className="h-11 min-w-0 flex-1 rounded-full border border-primary/18 bg-secondary px-4 text-sm text-primary outline-none placeholder:text-primary/55 focus:border-primary/45"
+                />
+                <button
+                  type="submit"
+                  role="button"
+                  aria-label="Search products"
+                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-secondary transition hover:bg-primary/90"
+                >
+                  <DynamicHugeIcon name="Search01Icon" className="h-5 w-5" iconStrokeWidth={2.1} aria-hidden={true} />
+                </button>
+              </motion.form>
+            ) : null}
+          </AnimatePresence>
         </header>
       )}
 

@@ -86,12 +86,10 @@ export function DynamicHugeIcon({
   "aria-hidden": ariaHidden = true,
   ...rest
 }: DynamicHugeIconProps) {
-  const [mounted, setMounted] = useState(false);
   const [iconData, setIconData] = useState<HugeIconData | null>(() => iconCache.get(name) ?? null);
   const resolvedIconData = iconCache.get(name) ?? iconData;
 
   useEffect(() => {
-    setMounted(true);
     let mountedLocal = true;
 
     if (iconCache.has(name)) {
@@ -133,7 +131,7 @@ export function DynamicHugeIcon({
     };
   }, [name]);
 
-  if (!mounted || !resolvedIconData) {
+  if (!resolvedIconData) {
     return <span className={className} aria-hidden={ariaHidden} />;
   }
 

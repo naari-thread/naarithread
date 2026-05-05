@@ -79,6 +79,7 @@ export function MobileProductsBottomBar() {
   }, [isAuthenticated]);
 
   const shouldShowBar =
+    pathname === "/" ||
     pathname === "/products" ||
     pathname.startsWith("/products/") ||
     pathname === "/cart" ||

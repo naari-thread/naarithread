@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
 import { ProductCard } from "@/app/components/product-card";
@@ -225,6 +225,7 @@ export function ProductsCatalog({
 }: ProductsCatalogProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [searchText, setSearchText] = useState("");
   const [cartItems, setCartItems] = useState<CartItemsMap>({});
   const [wishlistItems, setWishlistItems] = useState<WishlistItemsMap>({});
@@ -270,6 +271,10 @@ export function ProductsCatalog({
     setWishlistItems(readWishlistItems());
     return subscribeToWishlistChanges((items) => setWishlistItems(items));
   }, []);
+
+  useEffect(() => {
+    setSearchText(searchParams.get("q") ?? "");
+  }, [searchParams]);
 
   const navigateForFilter = (
     category: ProductCategorySlug | "",

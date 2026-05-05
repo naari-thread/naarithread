@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { CloudinaryImage } from "@/app/components/cloudinary-image";
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
@@ -50,8 +50,42 @@ type AnnouncementItem = {
   text: string;
 };
 
+type MobileTestimonial = {
+  name: string;
+  location: string;
+  quote: string;
+  product: string;
+};
+
 const heroImage = "https://res.cloudinary.com/dueruzfoq/image/upload/v1774145271/heroimage_eirhec.png";
 const storyImage = "https://res.cloudinary.com/dueruzfoq/image/upload/v1774145316/1_x6veq2.png";
+
+const mobileHeroSlides = [
+  {
+    title: "Grace in Every Thread",
+    eyebrow: "Signature Edit",
+    image: heroImage,
+    alt: "NaariThread hero model in premium maroon and cream outfit",
+  },
+  {
+    title: "Festive Drapes",
+    eyebrow: "Saree Edit",
+    image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774153450/pomelli-image-3_fik7m0.png",
+    alt: "Woman in premium saree styling for a festive event",
+  },
+  {
+    title: "Wedding Guest Ready",
+    eyebrow: "Occasion Wear",
+    image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146198/5_et1rmm.png",
+    alt: "Indian woman in elegant maroon occasion wear",
+  },
+  {
+    title: "Modern Heirlooms",
+    eyebrow: "Fusion Edit",
+    image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146266/pomelli-image-1_3_rf3glc.png",
+    alt: "Woman in an indo-western contemporary silhouette",
+  },
+] as const;
 
 const mostLovedSlides: SkiperImage[] = [
   {
@@ -125,6 +159,27 @@ const mobileBestSellerProducts: MobileBestSellerProduct[] = [
     price: "Rs. 2,199",
     image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146266/pomelli-image-1_3_rf3glc.png",
     alt: "Woman in indo-western contemporary silhouette",
+  },
+];
+
+const mobileTestimonials: MobileTestimonial[] = [
+  {
+    name: "Aarohi Mehta",
+    location: "Ahmedabad",
+    quote: "The saree felt premium without being heavy. I wore it through a full family function and still felt comfortable.",
+    product: "Occasion Saree Edit",
+  },
+  {
+    name: "Nisha Kapoor",
+    location: "Jaipur",
+    quote: "Loved how quickly the outfit arrived. The embroidery looked even richer in person and the fit was easy to style.",
+    product: "Signature Bridal Lehenga",
+  },
+  {
+    name: "Meera Iyer",
+    location: "Bengaluru",
+    quote: "The fusion set became my go-to for festive office days. Elegant, modern, and not overdone.",
+    product: "Modern Heirlooms",
   },
 ];
 
@@ -281,9 +336,8 @@ export function LandingPage() {
   const prefersReducedMotion = useReducedMotion();
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [activeAnnouncementIndex, setActiveAnnouncementIndex] = useState(0);
-  const [mobileCarouselInteracted, setMobileCarouselInteracted] = useState(false);
-  const mobileCarouselRef = useRef<HTMLDivElement | null>(null);
-  const mobileTouchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const [activeMobileHeroIndex, setActiveMobileHeroIndex] = useState(0);
+  const [activeMobileBestSellerIndex, setActiveMobileBestSellerIndex] = useState(0);
 
   useEffect(() => {
     const onScroll = () => {
@@ -310,76 +364,41 @@ export function LandingPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (prefersReducedMotion) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setActiveMobileHeroIndex((previousIndex) =>
+        previousIndex === mobileHeroSlides.length - 1 ? 0 : previousIndex + 1,
+      );
+    }, 3600);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [prefersReducedMotion]);
+
+  useEffect(() => {
+    if (prefersReducedMotion) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setActiveMobileBestSellerIndex((previousIndex) =>
+        previousIndex === mobileBestSellerProducts.length - 1 ? 0 : previousIndex + 1,
+      );
+    }, 3200);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [prefersReducedMotion]);
+
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
-
-  const handleMobileCarouselTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
-    if (event.touches.length !== 1) {
-      return;
-    }
-
-    const touch = event.touches[0];
-    mobileTouchStartRef.current = { x: touch.clientX, y: touch.clientY };
-  };
-
-  const handleMobileCarouselTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
-    if (mobileCarouselInteracted || event.touches.length !== 1) {
-      return;
-    }
-
-    const startPoint = mobileTouchStartRef.current;
-    if (!startPoint) {
-      return;
-    }
-
-    const touch = event.touches[0];
-    const deltaX = Math.abs(touch.clientX - startPoint.x);
-    const deltaY = Math.abs(touch.clientY - startPoint.y);
-
-    // Stop autoplay only when swipe intent is clearly horizontal.
-    if (deltaX > 16 && deltaX > deltaY * 1.1) {
-      setMobileCarouselInteracted(true);
-    }
-  };
-
-  const handleMobileCarouselTouchEnd = () => {
-    mobileTouchStartRef.current = null;
-  };
-
-  useEffect(() => {
-    if (prefersReducedMotion || mobileCarouselInteracted) {
-      return;
-    }
-
-    const track = mobileCarouselRef.current;
-    if (!track) {
-      return;
-    }
-
-    let animationFrameId = 0;
-    let lastTimestamp = performance.now();
-    const pxPerMs = 0.045;
-
-    const animate = (timestamp: number) => {
-      const elapsed = timestamp - lastTimestamp;
-      lastTimestamp = timestamp;
-      track.scrollLeft += elapsed * pxPerMs;
-
-      const loopWidth = track.scrollWidth / 2;
-      if (track.scrollLeft >= loopWidth) {
-        track.scrollLeft -= loopWidth;
-      }
-
-      animationFrameId = window.requestAnimationFrame(animate);
-    };
-
-    animationFrameId = window.requestAnimationFrame(animate);
-
-    return () => {
-      window.cancelAnimationFrame(animationFrameId);
-    };
-  }, [mobileCarouselInteracted, prefersReducedMotion]);
 
   return (
     <main className="landing-page-main w-full pt-14 md:pt-0">
@@ -507,20 +526,75 @@ export function LandingPage() {
             whileInView={prefersReducedMotion ? undefined : { opacity: 1, scale: 1, y: 0 }}
             viewport={{ once: true, amount: 0.25 }}
             transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-            className="relative isolate mx-auto h-[50vh] min-h-[340px] w-full max-w-2xl overflow-hidden rounded-t-[6.5rem] rounded-b-[1.7rem] border border-primary/20 bg-primary/5 sm:h-[66vh] sm:min-h-[430px] sm:rounded-t-[6.5rem] sm:rounded-b-[2rem]"
+            className="relative isolate mx-auto w-full max-w-2xl"
           >
-            <div className="absolute inset-0 bg-gradient-to-tr from-primary/20 via-transparent to-secondary/50" />
-            <CloudinaryImage
-              src={heroImage}
-              alt="NaariThread hero model in premium maroon and cream outfit"
-              fill
-              priority
-              sizes={CLOUDINARY_SIZES.hero}
-              className="image-fade-enter object-cover object-top"
-            />
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-primary/70 to-transparent p-4 text-secondary sm:p-6">
-              <p className="text-xs uppercase tracking-[0.24em]">Signature Edit</p>
-              <p className="mt-2 text-lg font-semibold sm:text-2xl">Grace in Every Thread</p>
+            <div
+              aria-roledescription="carousel"
+              aria-label="Featured NaariThread styles"
+              className="relative h-[45vh] min-h-[340px] w-full max-w-xs mx-auto overflow-hidden rounded-[1.7rem] border border-primary/20 bg-primary/5 sm:hidden"
+            >
+              <motion.div
+                className="flex h-full"
+                animate={{ x: `-${activeMobileHeroIndex * 100}%` }}
+                transition={
+                  prefersReducedMotion
+                    ? { duration: 0 }
+                    : { duration: 0.55, ease: [0.22, 1, 0.36, 1] }
+                }
+              >
+                {mobileHeroSlides.map((slide, index) => (
+                  <div
+                    key={slide.title}
+                    className="relative h-full min-w-full"
+                    aria-hidden={activeMobileHeroIndex !== index}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-tr from-primary/20 via-transparent to-secondary/50" />
+                    <CloudinaryImage
+                      src={slide.image}
+                      alt={slide.alt}
+                      fill
+                      priority={index === 0}
+                      sizes={CLOUDINARY_SIZES.hero}
+                      className="image-fade-enter object-cover object-top"
+                    />
+                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-primary/70 to-transparent p-4 text-secondary pb-10">
+                      <p className="text-xs uppercase tracking-[0.24em]">{slide.eyebrow}</p>
+                      <p className="mt-2 text-lg font-semibold">{slide.title}</p>
+                    </div>
+                  </div>
+                ))}
+              </motion.div>
+              <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-secondary/75 px-2 py-1 backdrop-blur-sm">
+                {mobileHeroSlides.map((slide, index) => (
+                  <button
+                    key={`${slide.title}-dot`}
+                    type="button"
+                    role="button"
+                    aria-label={`Show ${slide.title}`}
+                    aria-current={activeMobileHeroIndex === index ? "true" : undefined}
+                    onClick={() => setActiveMobileHeroIndex(index)}
+                    className={`h-1.5 rounded-full transition-all ${
+                      activeMobileHeroIndex === index ? "w-6 bg-primary" : "w-2 bg-primary/25"
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="relative hidden h-[66vh] min-h-[430px] w-full overflow-hidden rounded-b-[2rem] border border-primary/20 bg-primary/5 sm:block">
+              <div className="absolute inset-0 bg-gradient-to-tr from-primary/20 via-transparent to-secondary/50" />
+              <CloudinaryImage
+                src={heroImage}
+                alt="NaariThread hero model in premium maroon and cream outfit"
+                fill
+                priority
+                sizes={CLOUDINARY_SIZES.hero}
+                className="image-fade-enter object-cover object-top"
+              />
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-primary/70 to-transparent p-6 text-secondary">
+                <p className="text-xs uppercase tracking-[0.24em]">Signature Edit</p>
+                <p className="mt-2 text-2xl font-semibold">Grace in Every Thread</p>
+              </div>
             </div>
           </motion.div>
           <motion.div variants={revealItem} className="sm:hidden flex items-center justify-center w-full mx-auto mt-4">
@@ -571,51 +645,78 @@ export function LandingPage() {
             className="py-1"
           >
             <div className="sm:hidden">
-              <div
-                ref={mobileCarouselRef}
-                aria-label="Swipeable best seller products"
-                onTouchStart={handleMobileCarouselTouchStart}
-                onTouchMove={handleMobileCarouselTouchMove}
-                onTouchEnd={handleMobileCarouselTouchEnd}
-                onTouchCancel={handleMobileCarouselTouchEnd}
-                className="relative -mx-1 flex touch-manipulation overscroll-y-auto gap-4 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-              >
-                {[...mobileBestSellerProducts, ...mobileBestSellerProducts].map((product, index) => (
-                  <Link
-                    key={`${product.name}-${index}`}
-                    href="/products?sort=popular"
-                    aria-label={`Shop ${product.name}`}
-                    tabIndex={index >= mobileBestSellerProducts.length ? -1 : 0}
-                    className="w-[72vw] max-w-[292px] shrink-0 overflow-hidden rounded-2xl border border-secondary/35 bg-secondary/10 select-none"
-                  >
-                    <div className="relative h-[45vh] aspect-[3/4] w-full overflow-hidden">
-                      <CloudinaryImage
-                        src={product.image}
-                        alt={product.alt}
-                        fill
-                        loading="lazy"
-                        sizes={CLOUDINARY_SIZES.card}
-                        className="object-cover object-top"
-                      />
-                    </div>
-                    <div className="border-t border-secondary/25 bg-primary/45 px-4 py-3.5 text-left">
-                      <p className="text-[1rem] font-semibold leading-tight text-secondary">{product.name}</p>
-                      <p className="mt-1 truncate text-[0.7rem] leading-relaxed text-secondary/80">{product.description}</p>
-                      <div className="mt-2.5 flex items-center justify-between gap-2">
-                        <div className="inline-flex items-center rounded-full border border-secondary/45 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-secondary">
-                          {product.price}
-                        </div>
-                        <span className="inline-flex items-center text-secondary/90" aria-hidden={true}>
-                          <DynamicHugeIcon
-                            name="ArrowUpRight01Icon"
-                            className="h-3.5 w-3.5"
-                            iconStrokeWidth={2}
-                            aria-hidden={true}
-                          />
-                        </span>
-                      </div>
-                    </div>
-                  </Link>
+              <div aria-label="Best seller product carousel" aria-live="polite" className="relative min-h-[64vh]">
+                <AnimatePresence mode="wait" initial={false}>
+                  {mobileBestSellerProducts.map((product, index) =>
+                    index === activeMobileBestSellerIndex ? (
+                      <motion.div
+                        key={product.name}
+                        initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 12, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -10, scale: 0.98 }}
+                        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                        className="mx-auto w-full max-w-[312px]"
+                      >
+                        <Link
+                          href="/products?sort=popular"
+                          aria-label={`Shop ${product.name}`}
+                          className="block overflow-hidden rounded-2xl border border-secondary/35 bg-secondary/10"
+                        >
+                          <div className="relative h-[45vh] aspect-[3/4] w-full overflow-hidden">
+                            <motion.div
+                              key={`${product.name}-image`}
+                              initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              transition={{ duration: 0.5, ease: "easeOut" }}
+                              className="absolute inset-0"
+                            >
+                              <CloudinaryImage
+                                src={product.image}
+                                alt={product.alt}
+                                fill
+                                loading="lazy"
+                                sizes={CLOUDINARY_SIZES.card}
+                                className="object-cover object-top"
+                              />
+                            </motion.div>
+                          </div>
+                          <div className="border-t border-secondary/25 bg-primary/45 px-4 py-3.5 text-left">
+                            <p className="text-[1rem] font-semibold leading-tight text-secondary">{product.name}</p>
+                            <p className="mt-1 truncate text-[0.7rem] leading-relaxed text-secondary/80">{product.description}</p>
+                            <div className="mt-2.5 flex items-center justify-between gap-2">
+                              <div className="inline-flex items-center rounded-full border border-secondary/45 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-secondary">
+                                {product.price}
+                              </div>
+                              <span className="inline-flex items-center text-secondary/90" aria-hidden={true}>
+                                <DynamicHugeIcon
+                                  name="ArrowUpRight01Icon"
+                                  className="h-3.5 w-3.5"
+                                  iconStrokeWidth={2}
+                                  aria-hidden={true}
+                                />
+                              </span>
+                            </div>
+                          </div>
+                        </Link>
+                      </motion.div>
+                    ) : null,
+                  )}
+                </AnimatePresence>
+              </div>
+
+              <div className="mt-4 flex items-center justify-center gap-1.5">
+                {mobileBestSellerProducts.map((product, index) => (
+                  <button
+                    key={`${product.name}-best-seller-dot`}
+                    type="button"
+                    role="button"
+                    aria-label={`Show ${product.name}`}
+                    aria-current={activeMobileBestSellerIndex === index ? "true" : undefined}
+                    onClick={() => setActiveMobileBestSellerIndex(index)}
+                    className={`h-1.5 rounded-full transition-all ${
+                      activeMobileBestSellerIndex === index ? "w-7 bg-secondary" : "w-2 bg-secondary/40"
+                    }`}
+                  />
                 ))}
               </div>
 
@@ -643,6 +744,8 @@ export function LandingPage() {
           </motion.div>
         </div>
       </section>
+
+      
 
       {categories.map((category, index) => {
         const isMaroon = category.sectionTone === "maroon";
@@ -785,6 +888,63 @@ export function LandingPage() {
           </section>
         );
       })}
+
+      <section className="section-shell bg-secondary text-primary sm:hidden">
+        <div className="mx-auto w-full max-w-7xl px-4 py-12">
+          <motion.div
+            variants={revealContainer}
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, amount: 0.2 }}
+            className="text-center"
+          >
+            <motion.p variants={revealItem} className="text-[0.66rem] font-semibold uppercase tracking-[0.24em] text-primary/62">
+              Customer Notes
+            </motion.p>
+            <motion.h2 variants={revealItem} className="font-display mt-3 text-[2rem] font-semibold leading-[1.04]">
+              Loved in Real Closets
+            </motion.h2>
+          </motion.div>
+
+          <motion.div
+            variants={revealContainer}
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, amount: 0.18 }}
+            className="mt-7 grid gap-3"
+          >
+            {mobileTestimonials.map((testimonial) => (
+              <motion.article
+                key={testimonial.name}
+                variants={revealItem}
+                className="rounded-2xl border border-primary/14 bg-primary/[0.035] p-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-primary">{testimonial.name}</p>
+                    <p className="mt-0.5 text-[0.66rem] uppercase tracking-[0.16em] text-primary/52">{testimonial.location}</p>
+                  </div>
+                  <div className="flex items-center gap-0.5 text-primary" aria-label="Five star rating">
+                    {Array.from({ length: 5 }).map((_, index) => (
+                      <DynamicHugeIcon
+                        key={`${testimonial.name}-star-${index}`}
+                        name="StarIcon"
+                        className="h-3.5 w-3.5 fill-primary"
+                        iconStrokeWidth={1.8}
+                        aria-hidden={true}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <p className="mt-4 text-[0.95rem] leading-relaxed text-primary/82">&quot;{testimonial.quote}&quot;</p>
+                <p className="mt-4 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-primary/56">
+                  Bought {testimonial.product}
+                </p>
+              </motion.article>
+            ))}
+          </motion.div>
+        </div>
+      </section>
 
       <section id="story" className="section-shell bg-secondary">
         <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-8 px-4 py-10 sm:px-5 sm:py-16 md:px-8 lg:grid-cols-2 lg:gap-12 lg:px-12">
