@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback, useId } from "react";
 // useCallback and useId are used for stable send function and unique IDs
 import { motion, AnimatePresence } from "framer-motion";
+import { usePathname } from "next/navigation";
 
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
 import Image from "next/image";
@@ -45,6 +46,7 @@ function getBotReply(input: string): string {
 }
 
 export function AiChat() {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [showNudge, setShowNudge] = useState(false);
   const baseId = useId();
@@ -109,9 +111,42 @@ export function AiChat() {
     }, 900);
   }, [baseId]);
 
+  const [isDesktop, setIsDesktop] = useState(false);
+
+  useEffect(() => {
+    const handleOpen = () => {
+      setOpen(true);
+      setShowNudge(false);
+    };
+    window.addEventListener("open-saathi-chat", handleOpen);
+    
+    // Check for URL parameter ?chat=open
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("chat") === "open") {
+      handleOpen();
+      // Clean up the URL
+      const nextUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState({}, "", nextUrl);
+    }
+
+    const checkScreen = () => setIsDesktop(window.innerWidth >= 768);
+    checkScreen();
+    window.addEventListener("resize", checkScreen);
+
+    return () => {
+      window.removeEventListener("open-saathi-chat", handleOpen);
+      window.removeEventListener("resize", checkScreen);
+    };
+  }, []);
+
+  const isAdminPage = pathname.startsWith("/admin");
+  const showFloatingButton = (pathname === "/" || open || isDesktop) && !isAdminPage;
+  const isProductsPage = pathname.startsWith("/products") || pathname === "/cart" || pathname === "/wishlist";
+
   return (
     <>
-      <div className="fixed bottom-5 right-5 z-[105] sm:bottom-8 sm:right-8">
+      {showFloatingButton && (
+        <div className={`fixed ${isProductsPage ? "bottom-24 sm:bottom-8" : "bottom-5 sm:bottom-8"} right-5 z-[105] sm:bottom-8 sm:right-8`}>
         <AnimatePresence>
           {!open && showNudge ? (
             <motion.div
@@ -187,6 +222,7 @@ export function AiChat() {
           </AnimatePresence>
         </motion.button>
       </div>
+      )}
 
       {/* Chat panel */}
       <AnimatePresence>
@@ -196,7 +232,7 @@ export function AiChat() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 28, scale: 0.94 }}
             transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] }}
-            className="fixed bottom-24 right-2 z-[105] flex w-[340px] max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-[1.5rem] border border-primary/15 bg-paper shadow-[0_24px_60px_rgba(120,0,0,0.18)] sm:bottom-28 sm:right-8 sm:max-w-[calc(100vw-4rem)]"
+            className={`fixed ${isProductsPage ? "bottom-[5.4rem]" : "bottom-24"} right-2 z-[105] flex w-[340px] max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-[1.5rem] border border-primary/15 bg-paper shadow-[0_24px_60px_rgba(120,0,0,0.18)] sm:bottom-28 sm:right-8 sm:max-w-[calc(100vw-4rem)]`}
           >
             {/* Header */}
             <div className="flex items-center gap-3 bg-primary px-5 py-4">
@@ -211,6 +247,16 @@ export function AiChat() {
                 className="ml-auto h-2.5 w-2.5 shrink-0 rounded-full bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.7)]"
                 aria-label="Online"
               />
+              {pathname !== "/" && !isDesktop && (
+                <button
+                  type="button"
+                  aria-label="Close chat"
+                  onClick={() => setOpen(false)}
+                  className="ml-2 flex h-8 w-8 items-center justify-center rounded-full bg-secondary/15 text-secondary transition hover:bg-secondary/30"
+                >
+                  <DynamicHugeIcon name="Cancel01Icon" className="h-4.5 w-4.5" iconStrokeWidth={2.2} />
+                </button>
+              )}
             </div>
 
             {/* Messages */}

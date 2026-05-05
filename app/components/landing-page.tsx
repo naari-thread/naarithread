@@ -1,12 +1,24 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { CloudinaryImage } from "@/app/components/cloudinary-image";
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
-import { Skiper54, type SkiperImage } from "@/app/components/skiper54";
+import type { SkiperImage } from "@/app/components/skiper54";
+import { CLOUDINARY_SIZES } from "@/lib/cloudinary";
+
+const Skiper54 = dynamic(() => import("@/app/components/skiper54").then((module) => module.Skiper54), {
+  loading: () => (
+    <div className="mx-auto w-full overflow-hidden rounded-2xl border border-secondary/30 bg-secondary/10 p-4">
+      <div className="h-[420px] w-full animate-pulse rounded-xl bg-secondary/20" />
+    </div>
+  ),
+  ssr: false,
+});
 
 type SubCategory = {
   name: string;
@@ -25,51 +37,101 @@ type CategorySection = {
   subCategories: SubCategory[];
 };
 
-const heroImage = "https://sgp.cloud.appwrite.io/v1/storage/buckets/69b62102002adbcc6ea5/files/69b6221f000dc6e5e5c4/view?project=69b157b700001de139fe&mode=admin";
-const storyImage = "/images/story/1.png";
+type MobileBestSellerProduct = {
+  name: string;
+  description: string;
+  price: string;
+  image: string;
+  alt: string;
+};
+
+type AnnouncementItem = {
+  id: string;
+  text: string;
+};
+
+const heroImage = "https://res.cloudinary.com/dueruzfoq/image/upload/v1774145271/heroimage_eirhec.png";
+const storyImage = "https://res.cloudinary.com/dueruzfoq/image/upload/v1774145316/1_x6veq2.png";
 
 const mostLovedSlides: SkiperImage[] = [
   {
     title: "Signature Bridal Lehenga",
     alt: "Indian woman in a red and navy embroidered bridal lehenga",
-    src: "/images/bestseller/1.png",
+    src: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146155/3_ktinir.png",
   },
   {
     title: "Signature Festive Kurta",
     alt: "Indian woman in maroon and cream festive kurta set",
-    src: "/images/bestseller/2.png",
+    src: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146139/2_qhkrc8.png",
   },
   {
     title: "Occasion Saree Edit",
     alt: "Woman in premium saree styling for festive event",
-    src: "/images/bestseller/4.png",
+    src: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146179/4_vfmdf4.png",
   },
   {
     title: "Wedding Guest Edit",
     alt: "Indian woman in elegant maroon occasion wear",
-    src: "/images/bestseller/5.png",
+    src: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146198/5_et1rmm.png",
   },
   {
     title: "Signature Veil Lehenga",
     alt: "Indian woman in a purple embroidered lehenga with a sheer embellished veil",
-    src: "/images/bestseller/3.png",
+    src: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146155/3_ktinir.png",
   },
   {
     title: "Everyday Premium Line",
     alt: "Indian woman in premium daily wear ethnic set",
-    src: "/images/bestseller/7.png",
+    src: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146223/6_euy4pm.png",
   },
   
   {
     title: "Statement Embroidery",
     alt: "Indian woman in embroidered maroon kurta and palazzo",
-    src: "/images/bestseller/6.png",
+    src: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146198/5_et1rmm.png",
   },
   {
     title: "Contemporary Fusion",
     alt: "Woman in indo-western contemporary silhouette",
-    src: "/images/pomelli-image-3%20(3).png",
+    src: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146266/pomelli-image-1_3_rf3glc.png",
   },
+];
+
+const mobileBestSellerProducts: MobileBestSellerProduct[] = [
+  {
+    name: "Signature Bridal Lehenga",
+    description: "Hand-embroidered bridal edit with heirloom detailing.",
+    price: "Rs. 2,499",
+    image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774153423/pomelli-image-2_oq8pji.png",
+    alt: "Indian woman in a red and navy embroidered bridal lehenga",
+  },
+  {
+    name: "Occasion Saree Edit",
+    description: "Festive drape in premium silk-inspired texture.",
+    price: "Rs. 1,999",
+    image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774153450/pomelli-image-3_fik7m0.png",
+    alt: "Woman in premium saree styling for festive event",
+  },
+  {
+    name: "Statement Embroidery",
+    description: "Contemporary maroon set with elevated craftsmanship.",
+    price: "Rs. 1,799",
+    image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774153460/pomelli-image-3_poe51d.png",
+    alt: "Indian woman in embroidered maroon kurta and palazzo",
+  },
+  {
+    name: "Contemporary Fusion",
+    description: "Indo-western silhouette for modern celebrations.",
+    price: "Rs. 2,199",
+    image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146266/pomelli-image-1_3_rf3glc.png",
+    alt: "Woman in indo-western contemporary silhouette",
+  },
+];
+
+const topAnnouncements: AnnouncementItem[] = [
+  { id: "offer-1", text: "Flat 20% OFF on Festive Styles | Code: NAARI20" },
+  { id: "offer-2", text: "Free Shipping on orders above Rs. 1,499" },
+  { id: "offer-3", text: "New Arrival Drop every Friday at 7 PM" },
 ];
 
 const categories: CategorySection[] = [
@@ -84,19 +146,19 @@ const categories: CategorySection[] = [
       {
         name: "Saree",
         slug: "saree",
-        image: "/images/saree/1.png",
+        image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146299/2_uecv6t.png",
         alt: "Model wearing an embroidered maroon saree",
       },
       {
         name: "Lehenga",
         slug: "lehenga",
-        image: "/images/lehnga/1.png",
+        image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146319/1_byc5lz.png",
         alt: "Woman in lehenga-inspired festive silhouette",
       },
       {
         name: "Anarkali",
         slug: "anarkali",
-        image: "/images/anarkali/1.png",
+        image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146333/1_pl4iyu.png",
         alt: "Woman in flowy anarkali-style festive wear",
       },
     ],
@@ -112,19 +174,19 @@ const categories: CategorySection[] = [
       {
         name: "Dresses",
         slug: "dresses",
-        image: "/images/dresses/1.png",
+        image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146385/1_ccdhb3.png",
         alt: "Woman in contemporary maroon dress-inspired look",
       },
       {
         name: "Tops",
         slug: "tops",
-        image: "/images/tops/1.png",
+        image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146393/1_upqovg.png",
         alt: "Woman styling a premium embroidered top",
       },
       {
         name: "Skirts",
         slug: "skirts",
-        image: "/images/skirts/1.png",
+        image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146400/1_vi5avd.png",
         alt: "Woman in skirt-led modern fusion styling",
       },
     ],
@@ -140,19 +202,19 @@ const categories: CategorySection[] = [
       {
         name: "Jeans",
         slug: "jeans",
-        image: "/images/jeans/1.png",
+        image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146443/1_agnfvy.png",
         alt: "Woman styled in clean premium bottom-focused silhouette",
       },
       {
         name: "Trousers",
         slug: "trousers-pants",
-        image: "/images/trousers/1.png",
+        image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146454/1_knncmz.png",
         alt: "Model wearing tailored cream trousers",
       },
       {
         name: "Palazzo",
         slug: "palazzo",
-        image: "/images/palazzo/1.png",
+        image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146467/1_j6sc3d.png",
         alt: "Woman in wide-leg palazzo styling",
       },
     ],
@@ -168,19 +230,19 @@ const categories: CategorySection[] = [
       {
         name: "Indo-Western Dresses",
         slug: "indo-western-dresses",
-        image: "/images/fusion-indowestern/1.png",
+        image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146500/1_ye6smw.png",
         alt: "Woman in premium indo-western dress styling",
       },
       {
         name: "Crop Top + Skirt",
         slug: "crop-top-skirt",
-        image: "/images/fusion-croptopskirt/1.png",
+        image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146509/1_vj7ms1.png",
         alt: "Woman in crop top and skirt-inspired fusion set",
       },
       {
         name: "Kurti + Jeans",
         slug: "kurti-jeans",
-        image: "/images/fusion-kurtijeans/1.png",
+        image: "https://res.cloudinary.com/dueruzfoq/image/upload/v1774146521/1_hpruxs.png",
         alt: "Woman styling kurti with contemporary bottom wear",
       },
     ],
@@ -218,6 +280,10 @@ function categoryHref(category: string, subcategory?: string) {
 export function LandingPage() {
   const prefersReducedMotion = useReducedMotion();
   const [showBackToTop, setShowBackToTop] = useState(false);
+  const [activeAnnouncementIndex, setActiveAnnouncementIndex] = useState(0);
+  const [mobileCarouselInteracted, setMobileCarouselInteracted] = useState(false);
+  const mobileCarouselRef = useRef<HTMLDivElement | null>(null);
+  const mobileTouchStartRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     const onScroll = () => {
@@ -232,24 +298,148 @@ export function LandingPage() {
     };
   }, []);
 
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setActiveAnnouncementIndex((previousIndex) =>
+        previousIndex === topAnnouncements.length - 1 ? 0 : previousIndex + 1,
+      );
+    }, 4500);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const handleMobileCarouselTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (event.touches.length !== 1) {
+      return;
+    }
+
+    const touch = event.touches[0];
+    mobileTouchStartRef.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleMobileCarouselTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (mobileCarouselInteracted || event.touches.length !== 1) {
+      return;
+    }
+
+    const startPoint = mobileTouchStartRef.current;
+    if (!startPoint) {
+      return;
+    }
+
+    const touch = event.touches[0];
+    const deltaX = Math.abs(touch.clientX - startPoint.x);
+    const deltaY = Math.abs(touch.clientY - startPoint.y);
+
+    // Stop autoplay only when swipe intent is clearly horizontal.
+    if (deltaX > 16 && deltaX > deltaY * 1.1) {
+      setMobileCarouselInteracted(true);
+    }
+  };
+
+  const handleMobileCarouselTouchEnd = () => {
+    mobileTouchStartRef.current = null;
+  };
+
+  useEffect(() => {
+    if (prefersReducedMotion || mobileCarouselInteracted) {
+      return;
+    }
+
+    const track = mobileCarouselRef.current;
+    if (!track) {
+      return;
+    }
+
+    let animationFrameId = 0;
+    let lastTimestamp = performance.now();
+    const pxPerMs = 0.045;
+
+    const animate = (timestamp: number) => {
+      const elapsed = timestamp - lastTimestamp;
+      lastTimestamp = timestamp;
+      track.scrollLeft += elapsed * pxPerMs;
+
+      const loopWidth = track.scrollWidth / 2;
+      if (track.scrollLeft >= loopWidth) {
+        track.scrollLeft -= loopWidth;
+      }
+
+      animationFrameId = window.requestAnimationFrame(animate);
+    };
+
+    animationFrameId = window.requestAnimationFrame(animate);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrameId);
+    };
+  }, [mobileCarouselInteracted, prefersReducedMotion]);
+
   return (
-    <main className="w-full">
-      <section id="hero" className="section-shell bg-secondary">
-        <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-8 px-4 py-14 sm:px-5 sm:py-16 md:px-8 lg:grid-cols-2 lg:items-center lg:gap-14 lg:px-12 mt-6 sm:mt-0">
+    <main className="landing-page-main w-full pt-14 md:pt-0">
+      <section className="w-full border-b border-secondary/25 bg-gradient-to-r from-primary via-primary/95 to-primary text-secondary md:hidden">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-center px-4 py-3 sm:px-5 md:px-8 lg:px-12">
+          <div
+            aria-live="polite"
+            aria-atomic={true}
+            className="relative w-full overflow-hidden text-center pt-1 sm:pt-0"
+          >
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.p
+                key={topAnnouncements[activeAnnouncementIndex]?.id}
+                initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 8 }}
+                animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+                transition={{ duration: prefersReducedMotion ? 0 : 0.35, ease: [0.22, 1, 0.36, 1] }}
+                className="text-[0.64rem] font-semibold uppercase tracking-[0.16em] text-secondary sm:text-[0.72rem] sm:tracking-[0.22em]"
+              >
+                {topAnnouncements[activeAnnouncementIndex]?.text}
+              </motion.p>
+            </AnimatePresence>
+          </div>
+        </div>
+      </section>
+
+      <section id="hero" className="section-shell bg-secondary md:min-h-[calc(100vh-4.5rem)]">
+        <div
+          aria-live="polite"
+          aria-atomic={true}
+          className="pointer-events-none absolute inset-x-0 top-[4.5rem] z-10 hidden border-b border-secondary/25 bg-primary text-secondary md:block"
+        >
+          <div className="mx-auto flex w-full max-w-7xl items-center justify-center px-4 py-2 md:px-8 lg:px-12">
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.p
+                key={`desktop-${topAnnouncements[activeAnnouncementIndex]?.id}`}
+                initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 6 }}
+                animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -6 }}
+                transition={{ duration: prefersReducedMotion ? 0 : 0.3, ease: [0.22, 1, 0.36, 1] }}
+                className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-secondary"
+              >
+                {topAnnouncements[activeAnnouncementIndex]?.text}
+              </motion.p>
+            </AnimatePresence>
+          </div>
+        </div>
+
+        <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-2 px-4 py-10 sm:px-5 md:px-8 md:py-14 lg:grid-cols-2 lg:items-center lg:gap-14 lg:px-12">
+           
           <motion.div
             variants={revealContainer}
             initial="hidden"
             whileInView="show"
             viewport={{ once: true, amount: 0.3 }}
-            className="space-y-6 sm:space-y-7"
+            className="space-y-4 sm:space-y-7"
           >
             <motion.h1
               variants={revealItem}
-              className="font-display max-w-xl text-[2.1rem] font-semibold leading-[0.94] text-primary sm:text-[3.5rem] sm:leading-[0.92] lg:text-[4.5rem]"
+              className="font-display max-w-xl text-[2.15rem] font-semibold leading-[0.94] text-primary sm:text-[3.5rem] lg:text-[4rem]"
             >
               Wear Your Story.
             </motion.h1>
@@ -260,11 +450,52 @@ export function LandingPage() {
               From the heritage of the Saree to the edge of Western wear, discover
               fashion that speaks your language.
             </motion.p>
-            <motion.div variants={revealItem}>
+
+            {/* Trust Badges — Luxury Refined Layout (Single Line) */}
+            <motion.div
+              variants={revealItem}
+              className="hidden sm:flex flex-nowrap items-center gap-x-0"
+            >
+              {/* Stat 1: Reviews */}
+              <div className="flex shrink-0 items-center gap-2.5 pr-6 md:pr-8 border-r border-primary/10">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/[0.03] text-primary/50">
+                  <DynamicHugeIcon name="StarIcon" className="h-3 w-3" iconStrokeWidth={2} />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[0.64rem] font-bold uppercase tracking-[0.1em] text-primary/90">2.5k+ Reviews</span>
+                  <span className="text-[0.54rem] font-medium uppercase tracking-[0.06em] text-primary/40 italic">4.8/5 Rating</span>
+                </div>
+              </div>
+
+              {/* Stat 2: Community */}
+              <div className="flex shrink-0 items-center gap-2.5 px-6 md:px-8 border-r border-primary/10">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/[0.03] text-primary/50">
+                  <DynamicHugeIcon name="UserIcon" className="h-3 w-3" iconStrokeWidth={2} />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[0.64rem] font-bold uppercase tracking-[0.12em] text-primary/90">10k+ Community</span>
+                  <span className="text-[0.54rem] font-medium uppercase tracking-[0.06em] text-primary/40 italic">Customers</span>
+                </div>
+              </div>
+
+              {/* Stat 3: Payments */}
+              <div className="flex shrink-0 items-center gap-2.5 px-6 md:px-8">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/[0.03] text-primary/50">
+                  <DynamicHugeIcon name="ShoppingCart01Icon" className="h-3 w-3" iconStrokeWidth={2} />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[0.64rem] font-bold uppercase tracking-[0.12em] text-primary/90">Secure Pay</span>
+                  <span className="text-[0.54rem] font-medium uppercase tracking-[0.06em] text-primary/40 italic">All Methods</span>
+                </div>
+              </div>
+
+            </motion.div>
+
+            <motion.div variants={revealItem} className="hidden sm:block">
               <Link
                 href="/products"
                 aria-label="Shop the NaariThread collection"
-                className="cta-thread-hero w-full justify-center sm:w-auto"
+                className="cta-thread-hero w-auto justify-center sm:w-auto mx-auto"
               >
                 <span>Shop the Collection</span>
               </Link>
@@ -276,15 +507,15 @@ export function LandingPage() {
             whileInView={prefersReducedMotion ? undefined : { opacity: 1, scale: 1, y: 0 }}
             viewport={{ once: true, amount: 0.25 }}
             transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-            className="relative isolate mx-auto h-[52vh] min-h-[340px] w-full max-w-2xl overflow-hidden rounded-t-[6.5rem] rounded-b-[1.7rem] border border-primary/20 bg-primary/5 sm:h-[66vh] sm:min-h-[430px] sm:rounded-t-[6.5rem] sm:rounded-b-[2rem]"
+            className="relative isolate mx-auto h-[50vh] min-h-[340px] w-full max-w-2xl overflow-hidden rounded-t-[6.5rem] rounded-b-[1.7rem] border border-primary/20 bg-primary/5 sm:h-[66vh] sm:min-h-[430px] sm:rounded-t-[6.5rem] sm:rounded-b-[2rem]"
           >
             <div className="absolute inset-0 bg-gradient-to-tr from-primary/20 via-transparent to-secondary/50" />
-            <Image
+            <CloudinaryImage
               src={heroImage}
               alt="NaariThread hero model in premium maroon and cream outfit"
               fill
               priority
-              sizes="(max-width: 1024px) 100vw, 50vw"
+              sizes={CLOUDINARY_SIZES.hero}
               className="image-fade-enter object-cover object-top"
             />
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-primary/70 to-transparent p-4 text-secondary sm:p-6">
@@ -292,31 +523,40 @@ export function LandingPage() {
               <p className="mt-2 text-lg font-semibold sm:text-2xl">Grace in Every Thread</p>
             </div>
           </motion.div>
+          <motion.div variants={revealItem} className="sm:hidden flex items-center justify-center w-full mx-auto mt-4">
+              <Link
+                href="/products"
+                aria-label="Shop the NaariThread collection"
+                className="cta-thread-hero w-auto justify-center sm:w-auto mx-auto"
+              >
+                <span>Shop the Collection</span>
+              </Link>
+            </motion.div>
         </div>
       </section>
 
       <section className="section-shell bg-primary text-secondary">
-        <div className="mx-auto w-full max-w-7xl px-5 py-20 md:px-8 lg:px-12">
+        <div className="mx-auto w-full max-w-7xl px-4 py-11 sm:px-5 sm:py-20 md:px-8 lg:px-12">
           <motion.div
             variants={revealContainer}
             initial="hidden"
             whileInView="show"
             viewport={{ once: true, amount: 0.2 }}
-            className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between"
+            className="mb-8 flex flex-col gap-4 text-center md:flex-row md:items-end md:justify-between md:text-left"
           >
             <motion.div variants={revealItem}>
               <p className="text-[0.68rem] uppercase tracking-[0.28em] text-secondary/80 sm:text-xs sm:tracking-[0.34em]">
                 Most Loved
               </p>
-              <h2 className="font-display mt-3 text-[1.85rem] font-semibold sm:text-4xl lg:text-5xl">
+              <h2 className="font-display mt-3 text-[2rem] font-semibold leading-[1.04] sm:text-4xl lg:text-5xl">
                 Best Sellers
               </h2>
             </motion.div>
-            <motion.div variants={revealItem}>
+            <motion.div variants={revealItem} className="hidden md:block">
               <Link
                 href="/products?sort=popular"
                 aria-label="Explore all best selling products"
-                className="thread-underline text-sm font-semibold uppercase tracking-[0.2em] text-secondary"
+                className="thread-underline text-[0.72rem] font-semibold uppercase tracking-[0.2em] text-secondary sm:text-sm"
               >
                 Explore Best Sellers
               </Link>
@@ -330,14 +570,76 @@ export function LandingPage() {
             transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
             className="py-1"
           >
-            <Skiper54
-              images={mostLovedSlides}
-              className="mx-auto"
-              autoplay={true}
-              loop={true}
-              showNavigation={true}
-              showPagination={true}
-            />
+            <div className="sm:hidden">
+              <div
+                ref={mobileCarouselRef}
+                aria-label="Swipeable best seller products"
+                onTouchStart={handleMobileCarouselTouchStart}
+                onTouchMove={handleMobileCarouselTouchMove}
+                onTouchEnd={handleMobileCarouselTouchEnd}
+                onTouchCancel={handleMobileCarouselTouchEnd}
+                className="relative -mx-1 flex touch-manipulation overscroll-y-auto gap-4 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+              >
+                {[...mobileBestSellerProducts, ...mobileBestSellerProducts].map((product, index) => (
+                  <Link
+                    key={`${product.name}-${index}`}
+                    href="/products?sort=popular"
+                    aria-label={`Shop ${product.name}`}
+                    tabIndex={index >= mobileBestSellerProducts.length ? -1 : 0}
+                    className="w-[72vw] max-w-[292px] shrink-0 overflow-hidden rounded-2xl border border-secondary/35 bg-secondary/10 select-none"
+                  >
+                    <div className="relative h-[45vh] aspect-[3/4] w-full overflow-hidden">
+                      <CloudinaryImage
+                        src={product.image}
+                        alt={product.alt}
+                        fill
+                        loading="lazy"
+                        sizes={CLOUDINARY_SIZES.card}
+                        className="object-cover object-top"
+                      />
+                    </div>
+                    <div className="border-t border-secondary/25 bg-primary/45 px-4 py-3.5 text-left">
+                      <p className="text-[1rem] font-semibold leading-tight text-secondary">{product.name}</p>
+                      <p className="mt-1 truncate text-[0.7rem] leading-relaxed text-secondary/80">{product.description}</p>
+                      <div className="mt-2.5 flex items-center justify-between gap-2">
+                        <div className="inline-flex items-center rounded-full border border-secondary/45 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-secondary">
+                          {product.price}
+                        </div>
+                        <span className="inline-flex items-center text-secondary/90" aria-hidden={true}>
+                          <DynamicHugeIcon
+                            name="ArrowUpRight01Icon"
+                            className="h-3.5 w-3.5"
+                            iconStrokeWidth={2}
+                            aria-hidden={true}
+                          />
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+
+              <div className="mt-6 flex justify-center">
+                <Link
+                  href="/products?sort=popular"
+                  aria-label="Explore all best selling products"
+                  className="inline-flex items-center justify-center rounded-full border border-secondary/55 bg-secondary px-5 py-2.5 text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-primary transition-all duration-300 hover:-translate-y-0.5 hover:bg-transparent hover:text-secondary"
+                >
+                  Explore Best Sellers
+                </Link>
+              </div>
+            </div>
+
+            <div className="hidden sm:block">
+              <Skiper54
+                images={mostLovedSlides}
+                className="mx-auto"
+                autoplay={true}
+                loop={true}
+                showNavigation={true}
+                showPagination={true}
+              />
+            </div>
           </motion.div>
         </div>
       </section>
@@ -357,9 +659,9 @@ export function LandingPage() {
                 initial="hidden"
                 whileInView="show"
                 viewport={{ once: true, amount: 0.15 }}
-                className="relative mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between"
+                className="relative mb-8 flex flex-col gap-5 text-center md:flex-row md:items-end md:justify-between md:text-left"
               >
-                <motion.div variants={revealItem} className="max-w-3xl pr-[8.6rem] md:pr-0">
+                <motion.div variants={revealItem} className="mx-auto max-w-3xl md:mx-0 md:pr-0">
                   <p
                     className={`text-[0.62rem] uppercase tracking-[0.2em] sm:text-xs sm:tracking-[0.3em] ${
                       isMaroon ? "text-secondary/80" : "text-primary/70"
@@ -367,12 +669,12 @@ export function LandingPage() {
                   >
                     {category.eyebrow}
                   </p>
-                  <h2 className="font-display mt-2.5 text-[1.85rem] font-semibold leading-[1.03] sm:mt-3 sm:text-[2.4rem] md:text-5xl lg:text-6xl">{category.title}</h2>
-                  <p className={`mt-3 text-[1.05rem] leading-relaxed sm:mt-4 sm:text-lg ${isMaroon ? "text-secondary/85" : "text-primary/80"}`}>
+                  <h2 className="font-display mt-2.5 text-[1.72rem] font-semibold leading-[1.03] sm:mt-3 sm:text-[2.35rem] md:text-5xl lg:text-6xl">{category.title}</h2>
+                  <p className={`mx-auto mt-3 max-w-xl text-[0.95rem] leading-relaxed sm:mt-4 sm:text-lg md:mx-0 md:max-w-none ${isMaroon ? "text-secondary/85" : "text-primary/80"}`}>
                     {category.body}
                   </p>
                 </motion.div>
-                <motion.div variants={revealItem} className="absolute right-0 top-12 pt-0.5 md:static md:pt-0">
+                <motion.div variants={revealItem} className="hidden md:block md:pt-0">
                   <Link
                     href={categoryHref(category.slug)}
                     aria-label={`View all ${category.title} products`}
@@ -392,7 +694,7 @@ export function LandingPage() {
                 initial="hidden"
                 whileInView="show"
                 viewport={{ once: true, amount: 0.2 }}
-                className={`grid grid-cols-1 gap-6 md:grid-cols-2 ${
+                className={`grid grid-cols-2 gap-3.5 sm:gap-6 md:grid-cols-2 ${
                   category.subCategories.length === 4 ? "xl:grid-cols-4" : "xl:grid-cols-3"
                 }`}
               >
@@ -412,13 +714,13 @@ export function LandingPage() {
                       aria-label={`Browse ${sub.name} in ${category.title}`}
                       className="block"
                     >
-                      <div className="relative h-[56vh] min-h-[320px] w-full overflow-hidden sm:h-[62vh] sm:min-h-[420px] lg:h-[68vh] lg:min-h-[460px]">
-                        <Image
+                      <div className="relative h-[40vh] aspect-[3/4] w-full overflow-hidden sm:aspect-auto sm:h-[62vh] sm:min-h-[420px] lg:h-[68vh] lg:min-h-[460px]">
+                        <CloudinaryImage
                           src={sub.image}
                           alt={sub.alt}
                           fill
                           loading="lazy"
-                          sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 25vw"
+                          sizes={CLOUDINARY_SIZES.card}
                           className="image-fade-enter object-cover object-top transition duration-700 group-hover:scale-[1.04]"
                         />
                         <div className="absolute inset-0 flex items-center justify-center bg-primary/55 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
@@ -428,14 +730,14 @@ export function LandingPage() {
                         </div>
                       </div>
                       <div
-                        className={`border-t px-5 py-4 ${
+                        className={`border-t px-3.5 py-3 sm:px-5 sm:py-4 ${
                           isMaroon
                             ? "border-secondary/25 bg-primary/50"
                             : "border-primary/15 bg-secondary/70"
                         }`}
                       >
-                        <h3 className="text-[1.65rem] font-semibold tracking-wide sm:text-xl">{sub.name}</h3>
-                        <p className={`mt-1 text-[0.68rem] uppercase tracking-[0.16em] sm:text-xs sm:tracking-[0.2em] ${isMaroon ? "text-secondary/75" : "text-primary/70"}`}>
+                        <h3 className="text-[0.9rem] font-semibold leading-tight tracking-wide sm:text-xl">{sub.name}</h3>
+                        <p className={`mt-1 text-[0.5rem] uppercase tracking-[0.14em] sm:text-xs sm:tracking-[0.2em] ${isMaroon ? "text-secondary/75" : "text-primary/70"}`}>
                           Curated in the {category.title} edit
                         </p>
                       </div>
@@ -444,13 +746,27 @@ export function LandingPage() {
                 ))}
               </motion.div>
 
+              <motion.div variants={revealItem} className="mt-6 flex justify-center md:hidden">
+                <Link
+                  href={categoryHref(category.slug)}
+                  aria-label={`View all ${category.title} products`}
+                  className={`inline-flex items-center justify-center border px-4 py-2.5 text-[0.66rem] font-semibold uppercase tracking-[0.22em] transition-all duration-300 hover:-translate-y-0.5 sm:text-xs sm:tracking-[0.24em] rounded-full md:px-5 ${
+                    isMaroon
+                      ? "border-secondary/45 text-secondary hover:bg-secondary hover:text-primary"
+                      : "border-primary/35 text-primary hover:bg-primary hover:text-secondary"
+                  }`}
+                >
+                  View All
+                </Link>
+              </motion.div>
+
               {index === categories.length - 1 ? (
                 <motion.div
                   variants={revealItem}
                   initial="hidden"
                   whileInView="show"
                   viewport={{ once: true, amount: 0.3 }}
-                  className="mt-10"
+                  className="mt-10 sm:block hidden "
                 >
                   <Link
                     href="/products"
@@ -471,7 +787,7 @@ export function LandingPage() {
       })}
 
       <section id="story" className="section-shell bg-secondary">
-        <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-8 px-4 py-14 sm:px-5 sm:py-16 md:px-8 lg:grid-cols-2 lg:gap-12 lg:px-12">
+        <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-8 px-4 py-10 sm:px-5 sm:py-16 md:px-8 lg:grid-cols-2 lg:gap-12 lg:px-12">
           <motion.div
             variants={revealContainer}
             initial="hidden"
@@ -485,23 +801,23 @@ export function LandingPage() {
             >
               The Story
             </motion.p>
-            <motion.h2 variants={revealItem} className="text-[1.9rem] font-semibold text-primary sm:text-5xl">
+            <motion.h2 variants={revealItem} className="text-[2.02rem] font-semibold text-primary sm:text-5xl">
               <span className="font-display">The Unbroken Thread</span>
             </motion.h2>
-            <motion.p variants={revealItem} className="text-[0.96rem] leading-relaxed text-primary/85 sm:text-lg">
+            <motion.p variants={revealItem} className="text-[0.92rem] leading-relaxed text-primary/85 sm:text-lg">
               At NaariThread, we believe a woman&apos;s wardrobe is more than fabric;
               it is a story of where she comes from and where she is going. We
               started with a simple vision: create a space where the timeless grace
               of the Saree meets the effortless cool of the Jumpsuit.
             </motion.p>
-            <motion.p variants={revealItem} className="text-[0.96rem] leading-relaxed text-primary/85 sm:text-lg">
+            <motion.p variants={revealItem} className="text-[0.92rem] leading-relaxed text-primary/85 sm:text-lg">
               Our name represents the thread that connects generations, from the
               artisan&apos;s hand to the modern woman&apos;s hustle. Whether you are draped
               in six yards of tradition or stepping out in fusion wear,
               NaariThread ensures your style is as resilient and beautiful as the
               thread that binds us all.
             </motion.p>
-            <motion.div variants={revealItem} className="pt-2">
+            <motion.div variants={revealItem} className="pt-2 hidden sm:block">
               <Link href="/products" aria-label="Start shopping NaariThread products" className="cta-thread">
                 Start Shopping
               </Link>
@@ -515,16 +831,21 @@ export function LandingPage() {
             transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
             className="relative h-[56vh] min-h-[320px] overflow-hidden rounded-[1.7rem] border border-primary/20 sm:h-[62vh] sm:min-h-[420px] sm:rounded-[2rem] lg:h-[68vh] lg:min-h-[460px]"
           >
-            <Image
+            <CloudinaryImage
               src={storyImage}
               alt="Indian woman symbolizing tradition and modern ambition"
               fill
               loading="lazy"
-              sizes="(max-width: 1024px) 100vw, 50vw"
+              sizes={CLOUDINARY_SIZES.story}
               className="image-fade-enter object-cover object-top"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-primary/60 to-transparent" />
           </motion.div>
+          <motion.div variants={revealItem} className="pt-2 w-full items-center mx-auto flex justify-center md:justify-start sm:hidden">
+              <Link href="/products" aria-label="Start shopping NaariThread products" className="cta-thread">
+                Shop All Products
+              </Link>
+            </motion.div>
         </div>
       </section>
 
@@ -596,7 +917,8 @@ export function LandingPage() {
               </a>
             </div>
           </div>
-
+          
+          
           <FooterLinks
             title="Shop"
             links={[
@@ -626,6 +948,7 @@ export function LandingPage() {
               { label: "Cancellation Policy", href: "/policies/cancellation-and-refund" },
             ]}
           />
+          
         </div>
         <div className="border-t border-secondary/20 px-4 py-5 text-left text-xs text-secondary/70 sm:px-5 md:px-8 md:text-center lg:px-12">
           Copyright {new Date().getFullYear()} NaariThread. All rights reserved.

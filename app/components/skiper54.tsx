@@ -1,10 +1,11 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import Image from "next/image";
 import React, { useEffect, useMemo, useState } from "react";
 
+import { CloudinaryImage } from "@/app/components/cloudinary-image";
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
+import { CLOUDINARY_SIZES } from "@/lib/cloudinary";
 
 export type SkiperImage = {
   src: string;
@@ -45,9 +46,9 @@ function visibleSlides(images: SkiperImage[], current: number) {
 }
 
 const slotClasses: Record<number, string> = {
-  [-1]: "left-[1%] w-[38%] md:left-[2%] md:w-[30%] lg:left-[3%] lg:w-[26%]",
-  0: "left-1/2 w-[58%] -translate-x-1/2 md:w-[46%] lg:w-[42%]",
-  1: "right-[1%] w-[38%] md:right-[2%] md:w-[30%] lg:right-[3%] lg:w-[26%]",
+  [-1]: "left-[1%] w-[34%] md:left-[2%] md:w-[30%] lg:left-[3%] lg:w-[26%]",
+  0: "left-1/2 w-[64%] -translate-x-1/2 md:w-[46%] lg:w-[42%]",
+  1: "right-[1%] w-[34%] md:right-[2%] md:w-[30%] lg:right-[3%] lg:w-[26%]",
 };
 
 const scaleBySlot: Record<number, number> = {
@@ -121,7 +122,7 @@ const Skiper54 = ({
 
   return (
     <div className={`w-full ${className}`}>
-      <div className="relative h-[72vh] min-h-[560px] w-full overflow-hidden">
+      <div className="relative h-[86vw] min-h-[400px] max-h-[560px] w-full overflow-hidden sm:h-[72vh] sm:min-h-[560px] sm:max-h-none">
         <AnimatePresence mode="popLayout" initial={false}>
           {slides.map((slide) => (
             <motion.div
@@ -134,20 +135,20 @@ const Skiper54 = ({
               }}
               exit={{ opacity: 0, scale: 0.9, y: 18 }}
               transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-              className={`absolute top-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-secondary/30 ${slide.slot === 0 ? "h-[94%]" : "h-[82%]"} ${slotClasses[slide.slot]} ${zClassBySlot[slide.slot]}`}
+              className={`absolute top-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-secondary/30 ${slide.slot === 0 ? "h-[88%] sm:h-[94%]" : "h-[74%] sm:h-[82%]"} ${slotClasses[slide.slot]} ${zClassBySlot[slide.slot]}`}
             >
-              <Image
+              <CloudinaryImage
                 src={slide.image.src}
                 alt={slide.image.alt}
                 fill
-                priority={slide.slot === 0}
-                sizes="(max-width: 768px) 56vw, (max-width: 1200px) 42vw, 34vw"
+                loading="lazy"
+                sizes={CLOUDINARY_SIZES.carousel}
                 className="object-cover object-top"
               />
               <div className="absolute inset-x-0 bottom-0 p-4 text-center">
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-secondary/70 to-transparent p-8 text-secondary">
-                <p className="text-xs uppercase tracking-[0.2em] text-secondary/85 [text-shadow:0_2px_10px_rgba(0,0,0,0.6)]">Most Loved</p>
-                <p className="mt-1 text-sm font-semibold text-secondary [text-shadow:0_2px_10px_rgba(0,0,0,0.68)] md:text-base">{slide.image.title}</p>
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-secondary/70 to-transparent p-5 text-secondary sm:p-8">
+                <p className="text-[0.62rem] uppercase tracking-[0.18em] text-secondary/85 [text-shadow:0_2px_10px_rgba(0,0,0,0.6)] sm:text-xs sm:tracking-[0.2em]">Most Loved</p>
+                <p className="mt-1 text-[0.95rem] font-semibold text-secondary [text-shadow:0_2px_10px_rgba(0,0,0,0.68)] md:text-base">{slide.image.title}</p>
                 </div>
               </div>
             </motion.div>

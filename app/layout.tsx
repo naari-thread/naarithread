@@ -1,23 +1,30 @@
 import type { Metadata } from "next";
-import localFont from "next/font/local";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import Script from "next/script";
+import { Lora, Plus_Jakarta_Sans } from "next/font/google";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/react";
+import { Toaster } from "sonner";
 import { SmoothScrollProvider } from "@/app/components/smooth-scroll-provider";
 import { Navbar } from "@/app/components/navbar";
 import { AiChat } from "@/app/components/ai-chat";
+import { MobileProductsBottomBar } from "@/app/components/mobile-products-bottom-bar";
+import { AuthProvider } from "@/app/components/auth-provider";
 import "./globals.css";
 
-const samarkanDisplay = localFont({
-  src: "../public/font/samarkan/samarn.ttf",
+const loraDisplay = Lora({
   variable: "--font-display",
+  subsets: ["latin"],
   display: "swap",
+  preload: true,
+  weight: ["400", "500", "600", "700"],
+  style: ["normal", "italic"],
 });
 
 const plusJakartaSans = Plus_Jakarta_Sans({
   variable: "--font-body",
   subsets: ["latin"],
   display: "swap",
+  preload: true,
   weight: ["400", "500", "600", "700"],
 });
 
@@ -78,12 +85,49 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${samarkanDisplay.variable} ${plusJakartaSans.variable} bg-paper text-primary antialiased`}>
-        <Navbar />
-        <SmoothScrollProvider>{children}</SmoothScrollProvider>
-        <AiChat />
-        <SpeedInsights />
-        <Analytics />
+      <head>
+        <link
+          rel="preload"
+          as="image"
+          href="https://res.cloudinary.com/dueruzfoq/image/upload/v1774145271/heroimage_eirhec.png"
+          fetchPriority="high"
+        />
+        <Script
+          src="https://cdn.databuddy.cc/databuddy.js"
+          strategy="afterInteractive"
+          data-client-id="f660a715-6ce7-4265-a431-ced32672bca1"
+          data-track-outgoing-links="true"
+          data-track-interactions="true"
+          data-track-performance="false"
+          crossOrigin="anonymous"
+          async
+        />
+      </head>
+      <body className={`${loraDisplay.variable} ${plusJakartaSans.variable} bg-paper text-primary antialiased`}>
+        <AuthProvider>
+          <Navbar />
+          <SmoothScrollProvider>{children}</SmoothScrollProvider>
+          <MobileProductsBottomBar />
+          <AiChat />
+          <Toaster
+            position="top-right"
+            richColors
+            expand
+            visibleToasts={4}
+            toastOptions={{
+              classNames: {
+                toast:
+                  "font-body rounded-2xl border border-primary/20 !bg-primary !text-secondary shadow-[0_14px_35px_rgba(42,15,15,0.30)]",
+                title: "font-body text-sm font-semibold tracking-[0.01em] text-secondary",
+                description: "font-body text-[0.82rem] leading-relaxed text-secondary/88",
+                actionButton: "font-body !h-8 !rounded-lg !bg-secondary !px-3 !text-xs !font-semibold !text-primary !border !border-secondary/30",
+                cancelButton: "font-body !h-8 !rounded-lg !bg-secondary/20 !px-3 !text-xs !font-semibold !text-secondary",
+              },
+            }}
+          />
+          <SpeedInsights />
+          <Analytics />
+        </AuthProvider>
       </body>
     </html>
   );

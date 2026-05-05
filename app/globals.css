@@ -53,7 +53,7 @@
   }
 
   .section-shell {
-    @apply relative flex min-h-screen w-full items-center overflow-hidden;
+    @apply relative flex min-h-0 w-full items-start overflow-hidden md:min-h-screen md:items-center;
   }
 
   .marquee-left {
@@ -83,8 +83,8 @@
   }
 
   .font-display {
-    font-family: var(--font-display), "Times New Roman", serif;
-    letter-spacing: 0.02em;
+    font-family: var(--font-display), "Lora", "Times New Roman", serif;
+    /* letter-spacing: 0.01em; */
   }
 
   .font-body {
@@ -106,7 +106,7 @@
   }
 
   .cta-thread-hero {
-    @apply relative inline-flex items-center justify-center overflow-hidden rounded-full border border-primary bg-primary px-8 py-3.5 text-sm font-semibold uppercase tracking-[0.2em] text-secondary transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-[0_12px_32px_rgba(120,0,0,0.30)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary;
+    @apply relative inline-flex items-center justify-center overflow-hidden rounded-full border border-primary bg-primary px-6 py-3 sm:px-8 sm:py-3 text-xs sm:text-sm font-semibold uppercase tracking-[0.2em] text-secondary transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-[0_12px_32px_rgba(120,0,0,0.30)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary;
   }
 
   .cta-thread-hero::before {
@@ -131,5 +131,11 @@
 
   .cta-thread-hero span {
     @apply relative z-10;
+  }
+
+  @media (max-width: 768px) {
+    main:not(.landing-page-main) {
+      padding-top: 5rem !important; /* 80px space for navbar */
+    }
   }
 }
