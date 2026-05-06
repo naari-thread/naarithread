@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { AuthModal } from "@/app/components/auth-modal";
@@ -10,9 +11,11 @@ import { CloudinaryImage } from "@/app/components/cloudinary-image";
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
 import { upsertUserCartMap } from "@/lib/appwrite/shop-sync";
 import {
+  type CartItemsMap,
   readCartItems,
   writeCartItemSelection,
   writeCartItems,
+  subscribeToCartChanges,
 } from "@/lib/cart-state";
 import type { ProductRecord } from "@/lib/appwrite/products";
 import {
@@ -33,6 +36,17 @@ type ProductDetailsClientProps = {
   categoryLabel: string;
   subCategoryLabel: string;
   relatedProducts: ProductRecord[];
+};
+
+type ReviewSpotlightItem = {
+  id: string;
+  title: string;
+  comment: string;
+  author: string;
+  dateLabel: string;
+  rating: number;
+  verified: boolean;
+  isAggregate: boolean;
 };
 
 function formatPrice(value: number) {
@@ -82,6 +96,7 @@ export function ProductDetailsClient({
   subCategoryLabel,
   relatedProducts,
 }: ProductDetailsClientProps) {
+  const router = useRouter();
   const { isAuthenticated, isLoading, user, createAuthJwt, normalizeError } =
     useAuth();
 
@@ -125,6 +140,7 @@ export function ProductDetailsClient({
 
   const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
   const [supportsHover, setSupportsHover] = useState(false);
+  const [isReviewsSectionVisible, setIsReviewsSectionVisible] = useState(false);
 
   // Zoom state (desktop hover zoom)
   const [zoomPos, setZoomPos] = useState({ x: 50, y: 50 });
@@ -134,15 +150,12 @@ export function ProductDetailsClient({
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
 
-  // Pinch zoom for mobile lightbox
+  // Mobile carousel state
+  const [mobileCarouselIndex, setMobileCarouselIndex] = useState(0);
+  const mobileCarouselRef = useRef<HTMLDivElement>(null);
+
+  // Mobile viewer state
   const [pinchScale, setPinchScale] = useState(1);
-  const [pinchOrigin, setPinchOrigin] = useState({ x: 50, y: 50 });
-  const pinchStartDistRef = useRef<number | null>(null);
-  const pinchStartScaleRef = useRef(1);
-  const [pinchPan, setPinchPan] = useState({ x: 0, y: 0 });
-  const lastPanRef = useRef({ x: 0, y: 0 });
-  const panStartRef = useRef({ x: 0, y: 0 });
-  const isDraggingRef = useRef(false);
   const lastTapRef = useRef<number>(0);
   const swipeStartRef = useRef<number | null>(null);
 
@@ -152,10 +165,12 @@ export function ProductDetailsClient({
   // Review image upload state
   const [reviewImages, setReviewImages] = useState<File[]>([]);
   const [reviewImagePreviews, setReviewImagePreviews] = useState<string[]>([]);
+  const [reviewSpotlightIndex, setReviewSpotlightIndex] = useState(0);
 
   const [wishlistItems, setWishlistItems] = useState<WishlistItemsMap>(() =>
     readWishlistItems(),
   );
+
   useEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
       setWishlistItems(readWishlistItems());
@@ -169,7 +184,25 @@ export function ProductDetailsClient({
     };
   }, []);
 
+  const [cartItems, setCartItems] = useState<CartItemsMap>(() =>
+    readCartItems(),
+  );
+
+  useEffect(() => {
+    const frameId = window.requestAnimationFrame(() => {
+      setCartItems(readCartItems());
+    });
+
+    const unsubscribe = subscribeToCartChanges(setCartItems);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      unsubscribe();
+    };
+  }, []);
+
   const isWishlisted = !!wishlistItems[product.id];
+  const isAddedToCart = !!cartItems[product.id] && cartItems[product.id] > 0;
 
   // Urgency numbers — deterministic per product id
   const urgencyViewersBase = deterministicInt(product.id, 1, 5, 15);
@@ -216,6 +249,72 @@ export function ProductDetailsClient({
       : 0;
   const reviewCount = reviews.length > 0 ? reviews.length : product.ratingCount;
 
+  const reviewSpotlightItems = useMemo<ReviewSpotlightItem[]>(() => {
+    if (reviews.length > 0) {
+      return reviews.slice(0, 4).map((review) => ({
+        id: review.id,
+        title: review.title.trim() || "Customer review",
+        comment: review.comment.trim() || "Shared from a verified buyer.",
+        author: review.userName.trim() || "Guest",
+        dateLabel: formatReviewDate(review.createdAt),
+        rating: review.rating,
+        verified: review.isVerifiedPurchase,
+        isAggregate: false,
+      }));
+    }
+
+    if (product.ratingCount > 0) {
+      return [
+        {
+          id: "aggregate-review-spotlight",
+          title: `${averageRating.toFixed(1)} average rating`,
+          comment: `Based on ${reviewCount} ${reviewCount === 1 ? "review" : "reviews"} from customers who already bought this piece.`,
+          author: product.name,
+          dateLabel: "Customer rating",
+          rating: product.rating,
+          verified: true,
+          isAggregate: true,
+        },
+      ];
+    }
+
+    return [
+      {
+        id: "no-review-spotlight",
+        title: `Be the first to review ${product.name}`,
+        comment:
+          "The spotlight will rotate through customer feedback here once approved reviews are available.",
+        author: "NaariThread",
+        dateLabel: "Reviews",
+        rating: 0,
+        verified: false,
+        isAggregate: true,
+      },
+    ];
+  }, [averageRating, product.name, product.rating, product.ratingCount, reviewCount, reviews]);
+
+  useEffect(() => {
+    setReviewSpotlightIndex(0);
+  }, [reviewSpotlightItems.length]);
+
+  useEffect(() => {
+    if (reviewSpotlightItems.length <= 1) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      setReviewSpotlightIndex((previous) => {
+        const next = previous + 1;
+        return next >= reviewSpotlightItems.length ? 0 : next;
+      });
+    }, 5000);
+
+    return () => window.clearInterval(interval);
+  }, [reviewSpotlightItems.length]);
+
+  const activeReviewSpotlight =
+    reviewSpotlightItems[reviewSpotlightIndex] ?? reviewSpotlightItems[0];
+
   useEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
       const media = window.matchMedia("(hover: hover) and (pointer: fine)");
@@ -232,6 +331,24 @@ export function ProductDetailsClient({
     const t = window.setTimeout(() => setUrgencyVisible(true), 1100);
     return () => window.clearTimeout(t);
   }, []);
+
+  // Track mobile carousel scroll position for indicator
+  useEffect(() => {
+    const carousel = mobileCarouselRef.current;
+    if (!carousel) return;
+
+    const handleScroll = () => {
+      const scrollLeft = carousel.scrollLeft;
+      const itemWidth = carousel.scrollWidth / galleryImages.length;
+      const index = Math.round(scrollLeft / itemWidth);
+      const nextIndex = Math.max(0, Math.min(index, galleryImages.length - 1));
+      setMobileCarouselIndex(nextIndex);
+      setActiveImage(galleryImages[nextIndex] ?? galleryImages[0] ?? "/logo4.png");
+    };
+
+    carousel.addEventListener("scroll", handleScroll);
+    return () => carousel.removeEventListener("scroll", handleScroll);
+  }, [galleryImages, galleryImages.length]);
 
   useEffect(() => {
     let alive = true;
@@ -378,6 +495,23 @@ export function ProductDetailsClient({
     }
   };
 
+  useEffect(() => {
+    const el = document.getElementById("reviews");
+    if (!el) return;
+
+    const handleScroll = () => {
+      const rect = el.getBoundingClientRect();
+      // Show when the top of the reviews section goes above the middle of the viewport
+      // Adjust this as needed for the desired "half part is gone" effect
+      setIsReviewsSectionVisible(rect.top < -20);
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    handleScroll(); // Check initially
+
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
   const handleAddToCart = async () => {
     if (product.sizeOptions.length > 0 && !activeSize) {
       setCartActionError("Select a size to add to cart.");
@@ -418,7 +552,7 @@ export function ProductDetailsClient({
           {/* Breadcrumbs - Moved to top, usable links */}
           <nav
             aria-label="Breadcrumb"
-            className="mb-5 hidden md:flex items-center gap-2.5 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-primary/50 px-4"
+            className="mb-5 hidden items-center gap-2.5 px-4 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-primary/50 md:flex"
           >
             <Link
               href="/products"
@@ -444,36 +578,47 @@ export function ProductDetailsClient({
           </nav>
 
           {/* Product Inner Grid */}
+          {reviews.length > 0 && (
+            <div className="mb-4 overflow-hidden rounded-[1.35rem] border border-primary/10 bg-secondary/80 shadow-[0_14px_30px_rgba(80,30,20,0.06)] md:mb-6">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeReviewSpotlight.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                  className="flex items-start gap-3 px-4 py-4 sm:px-5 sm:py-4"
+                >
+                  <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-secondary shadow-[0_8px_18px_rgba(113,12,9,0.16)]">
+                    <DynamicHugeIcon
+                      name="StarIcon"
+                      className="h-4.5 w-4.5"
+                      fill="currentColor"
+                    />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-sm font-semibold text-primary sm:text-[0.95rem]">
+                        {Math.max(0, activeReviewSpotlight.rating).toFixed(1)}
+                      </span>
+                      <span className="shrink-0 text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-primary/40 sm:text-[0.65rem]">
+                        {activeReviewSpotlight.author}
+                      </span>
+                    </div>
+
+                    <p className="mt-1 line-clamp-2 text-[0.8rem] leading-snug text-primary/78 sm:text-sm sm:leading-relaxed">
+                      {activeReviewSpotlight.comment}
+                    </p>
+                  </div>
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          )}
+
           <section className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)] md:items-start md:gap-7 lg:gap-10">
             {/* Left: Gallery Stack */}
             <div className="relative">
-              {/* Mobile Breadcrumbs (shows on top of mobile layout) */}
-              <nav
-                aria-label="Breadcrumb"
-                className="mb-5 flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.15em] text-primary/50 md:hidden px-4"
-              >
-                <Link
-                  href="/products"
-                  className="hover:text-primary transition-colors"
-                >
-                  Shop
-                </Link>
-                <DynamicHugeIcon
-                  name="ArrowRight01Icon"
-                  className="h-3 w-3 opacity-80"
-                />
-                <Link
-                  href={`/products/${category}`}
-                  className="hover:text-primary transition-colors"
-                >
-                  {categoryLabel}
-                </Link>
-                <DynamicHugeIcon
-                  name="ArrowRight01Icon"
-                  className="h-3 w-3 opacity-80"
-                />
-                <span className="text-primary">{subCategoryLabel}</span>
-              </nav>
 
               {/* Desktop Main Image & Thumbnails */}
               <div className="hidden md:flex max-w-[31rem] flex-col gap-3">
@@ -489,7 +634,8 @@ export function ProductDetailsClient({
                   onMouseEnter={() => setIsZooming(true)}
                   onMouseLeave={() => setIsZooming(false)}
                   onClick={() => {
-                    setLightboxIndex(galleryImages.indexOf(activeImage));
+                    const nextIndex = galleryImages.indexOf(activeImage);
+                    setLightboxIndex(nextIndex >= 0 ? nextIndex : 0);
                     setLightboxOpen(true);
                   }}
                 >
@@ -543,27 +689,126 @@ export function ProductDetailsClient({
                 </div>
               </div>
 
-              {/* Mobile Snap Carousel */}
-              <div className="relative -mx-4 flex overflow-x-auto snap-x snap-mandatory gap-1.5 px-4 pb-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden sm:-mx-6 sm:px-6 md:hidden">
-                {galleryImages.map((src, index) => (
-                  <div
-                    key={src}
-                    className="relative aspect-[4/5] w-[72vw] max-w-[320px] shrink-0 snap-center overflow-hidden rounded-3xl border border-primary/10 bg-secondary min-[380px]:w-[75vw] cursor-pointer"
-                    onClick={() => {
-                      setLightboxIndex(index);
-                      setLightboxOpen(true);
-                    }}
+              {/* Mobile Snap Carousel - Full Width */}
+              <div className="relative -mx-4 sm:-mx-6 md:hidden">
+                <div className="flex overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden" ref={mobileCarouselRef}>
+                  {galleryImages.map((src, index) => (
+                    <div
+                      key={src}
+                      className="relative min-h-[82vw] w-full shrink-0 snap-start overflow-hidden border-y border-primary/10 bg-secondary cursor-pointer"
+                      onClick={() => {
+                        setActiveImage(src);
+                        setLightboxIndex(index);
+                        setLightboxOpen(true);
+                      }}
+                    >
+                      <CloudinaryImage
+                        src={src}
+                        alt={`${product.name} image ${index + 1}`}
+                        fill
+                        sizes="100vw"
+                        className="object-cover object-center"
+                        priority={index === 0}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                {/* Floating Action Button - Back */}
+                <div className="pointer-events-none absolute left-3 top-3 z-20 flex">
+                  <button
+                    type="button"
+                    onClick={() => router.back()}
+                    aria-label="Go back"
+                    className="pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-full border border-secondary/35 bg-black/45 text-secondary shadow-[0_10px_20px_rgba(0,0,0,0.18)] backdrop-blur-md transition hover:bg-black/55"
                   >
-                    <CloudinaryImage
-                      src={src}
-                      alt={`${product.name} image ${index + 1}`}
-                      fill
-                      sizes="(max-width: 380px) 72vw, 75vw"
-                      className="object-cover"
-                      priority={index === 0}
+                    <DynamicHugeIcon
+                      name="ArrowLeft01Icon"
+                      className="h-4.5 w-4.5"
+                      aria-hidden={true}
                     />
+                  </button>
+                </div>
+
+                {/* Floating Action Buttons - Share & Wishlist */}
+                <div className="pointer-events-none absolute right-3 top-3 z-20 flex flex-col items-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => toggleWishlistItem(product.id)}
+                    aria-label={`${isWishlisted ? "Remove from" : "Add to"} wishlist`}
+                    className="pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-full border border-secondary/35 bg-black/45 text-secondary shadow-[0_10px_20px_rgba(0,0,0,0.18)] backdrop-blur-md transition hover:bg-black/55"
+                  >
+                    <DynamicHugeIcon
+                      name="FavouriteIcon"
+                      className={`h-4.5 w-4.5 transition-colors ${isWishlisted ? "fill-secondary" : "fill-none"}`}
+                      aria-hidden={true}
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleShare}
+                    aria-label="Share product"
+                    className="pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-full border border-secondary/35 bg-black/45 text-secondary shadow-[0_10px_20px_rgba(0,0,0,0.18)] backdrop-blur-md transition hover:bg-black/55"
+                  >
+                    <DynamicHugeIcon
+                      name="Share01Icon"
+                      className="h-4.5 w-4.5"
+                      aria-hidden={true}
+                    />
+                  </button>
+                </div>
+
+                {/* Subtle Image Indicator Dots */}
+                {galleryImages.length > 1 && (
+                  <div className="pointer-events-none absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1.5">
+                    {galleryImages.map((_, index) => (
+                      <div
+                        key={index}
+                        className={`transition-all ${
+                          mobileCarouselIndex === index
+                            ? "h-1.5 w-6 rounded-full bg-secondary/80"
+                            : "h-1 w-1 rounded-full bg-secondary/40"
+                        }`}
+                        aria-hidden={true}
+                      />
+                    ))}
                   </div>
-                ))}
+                )}
+
+                <div className="mt-3 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                  {galleryImages.map((src, index) => (
+                    <button
+                      key={`${src}-mobile-thumb`}
+                      type="button"
+                      aria-label={`Open image ${index + 1}`}
+                      onClick={() => {
+                        setActiveImage(src);
+                        setMobileCarouselIndex(index);
+                        const carousel = mobileCarouselRef.current;
+                        if (carousel) {
+                          const width = carousel.clientWidth;
+                          carousel.scrollTo({
+                            left: index * width,
+                            behavior: "smooth",
+                          });
+                        }
+                      }}
+                      className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border ${
+                        activeImage === src
+                          ? "border-primary ring-1 ring-primary/35"
+                          : "border-primary/20"
+                      }`}
+                    >
+                      <CloudinaryImage
+                        src={src}
+                        alt={`${product.name} thumbnail ${index + 1}`}
+                        fill
+                        sizes="64px"
+                        className="object-cover"
+                      />
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -572,13 +817,13 @@ export function ProductDetailsClient({
               <div className="flex flex-col items-start md:sticky md:top-26">
                 <div className="w-full">
                   <div className="flex items-start justify-between gap-3">
-                    <h1 className="font-display text-[1.68rem] leading-[1.08] tracking-tight max-[359px]:text-[1.55rem] sm:text-[1.85rem] md:text-[2.45rem] md:leading-[1.06] lg:text-[2.85rem]">
+                    <h1 className="font-display text-[1.45rem] leading-[1.05] tracking-tight max-[359px]:text-[1.35rem] sm:text-[1.85rem] md:text-[2.45rem] md:leading-[1.06] lg:text-[2.85rem]">
                       {product.name}
                     </h1>
                     <button
                       type="button"
                       onClick={handleShare}
-                      className="group mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-primary/20 transition-all hover:border-primary/40 hover:bg-primary/5 active:scale-95"
+                      className="group mt-1 hidden h-8 w-8 shrink-0 items-center justify-center rounded-full border border-primary/20 transition-all hover:border-primary/40 hover:bg-primary/5 active:scale-95 md:flex"
                       aria-label="Share product"
                     >
                       <DynamicHugeIcon
@@ -767,7 +1012,7 @@ export function ProductDetailsClient({
                   </p>
 
                   {/* Actions */}
-                  <div className="relative z-10 flex w-full gap-2.5 flex-row">
+                  <div className="relative z-10 mt-4 flex w-full flex-row gap-2.5 md:mt-0">
                     <button
                       type="button"
                       onClick={() => {
@@ -842,6 +1087,8 @@ export function ProductDetailsClient({
               </div>
             </div>
           </section>
+
+
 
           {/* Full Details & Reviews Section */}
           <section
@@ -1129,6 +1376,42 @@ export function ProductDetailsClient({
         </div>
       </main>
 
+      {/* Floating Action Bar Overlay for Reviews Section on Mobile */}
+      <AnimatePresence>
+        {isReviewsSectionVisible && !isAddedToCart && !isWishlisted && (
+          <motion.div
+            initial={{ y: "100%", opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: "100%", opacity: 0 }}
+            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            className="fixed bottom-0 left-0 right-0 z-[150] bg-paper px-4 py-5 shadow-[0_-8px_30px_rgba(0,0,0,0.12)] sm:hidden"
+          >
+            <div className="flex gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  void handleAddToCart();
+                }}
+                className="flex h-11 flex-1 items-center justify-center rounded-full bg-primary px-2 text-[0.65rem] font-bold uppercase tracking-widest text-secondary active:scale-95 transition-transform"
+              >
+                Add to Cart
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleWishlistItem(product.id)}
+                className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-full border border-primary/30 bg-transparent px-2 text-[0.65rem] font-bold uppercase tracking-widest text-primary active:scale-95 transition-transform"
+              >
+                <DynamicHugeIcon
+                  name="FavouriteIcon"
+                  className="h-3.5 w-3.5 fill-none"
+                />
+                Wishlist
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AuthModal
         open={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
@@ -1145,7 +1428,7 @@ export function ProductDetailsClient({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.22 }}
-            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/92 p-4"
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-white p-4"
             onClick={() => {
               setLightboxOpen(false);
               setPinchScale(1);
@@ -1160,7 +1443,7 @@ export function ProductDetailsClient({
                 setLightboxOpen(false);
                 setPinchScale(1);
               }}
-              className="absolute right-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+              className="absolute right-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-primary/30 bg-white text-primary transition hover:bg-primary/5"
             >
               <DynamicHugeIcon name="Cancel01Icon" className="h-5 w-5" />
             </button>
@@ -1176,10 +1459,8 @@ export function ProductDetailsClient({
                       (i - 1 + galleryImages.length) % galleryImages.length,
                   );
                   setPinchScale(1);
-                  setPinchPan({ x: 0, y: 0 });
-                  lastPanRef.current = { x: 0, y: 0 };
                 }}
-                className="absolute left-3 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 sm:left-6"
+                className="absolute left-3 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-primary/30 bg-white text-primary transition hover:bg-primary/5 sm:left-6"
               >
                 <DynamicHugeIcon name="ArrowLeft01Icon" className="h-6 w-6" />
               </button>
@@ -1193,10 +1474,8 @@ export function ProductDetailsClient({
                   e.stopPropagation();
                   setLightboxIndex((i) => (i + 1) % galleryImages.length);
                   setPinchScale(1);
-                  setPinchPan({ x: 0, y: 0 });
-                  lastPanRef.current = { x: 0, y: 0 };
                 }}
-                className="absolute right-3 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 sm:right-6"
+                className="absolute right-3 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-primary/30 bg-white text-primary transition hover:bg-primary/5 sm:right-6"
               >
                 <DynamicHugeIcon name="ArrowRight01Icon" className="h-6 w-6" />
               </button>
@@ -1209,7 +1488,7 @@ export function ProductDetailsClient({
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.96, opacity: 0 }}
                 transition={{ duration: 0.18 }}
-                className="relative flex items-center justify-center touch-none select-none"
+                className="relative flex items-center justify-center select-none"
                 onClick={(e) => {
                   e.stopPropagation();
                   const now = Date.now();
@@ -1217,8 +1496,6 @@ export function ProductDetailsClient({
                     // Double tap logic
                     if (pinchScale > 1) {
                       setPinchScale(1);
-                      setPinchPan({ x: 0, y: 0 });
-                      lastPanRef.current = { x: 0, y: 0 };
                     } else {
                       setPinchScale(2.5);
                     }
@@ -1227,66 +1504,8 @@ export function ProductDetailsClient({
                     lastTapRef.current = now;
                   }
                 }}
-                onTouchStart={(e) => {
-                  if (e.touches.length === 2) {
-                    isDraggingRef.current = false;
-                    const dx = e.touches[0].clientX - e.touches[1].clientX;
-                    const dy = e.touches[0].clientY - e.touches[1].clientY;
-                    pinchStartDistRef.current = Math.hypot(dx, dy);
-                    pinchStartScaleRef.current = pinchScale;
-
-                    const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-                    const my = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    setPinchOrigin({
-                      x: ((mx - rect.left) / rect.width) * 100,
-                      y: ((my - rect.top) / rect.height) * 100,
-                    });
-                  } else if (e.touches.length === 1) {
-                    isDraggingRef.current = true;
-                    panStartRef.current = {
-                      x: e.touches[0].clientX - lastPanRef.current.x,
-                      y: e.touches[0].clientY - lastPanRef.current.y,
-                    };
-                    // Store for swipe
-                    if (pinchScale === 1) {
-                      swipeStartRef.current = e.touches[0].clientX;
-                    }
-                  }
-                }}
-                onTouchMove={(e) => {
-                  if (
-                    e.touches.length === 2 &&
-                    pinchStartDistRef.current !== null
-                  ) {
-                    e.preventDefault();
-                    const dx = e.touches[0].clientX - e.touches[1].clientX;
-                    const dy = e.touches[0].clientY - e.touches[1].clientY;
-                    const dist = Math.hypot(dx, dy);
-                    const next = Math.min(
-                      4.5,
-                      Math.max(
-                        1,
-                        pinchStartScaleRef.current *
-                          (dist / pinchStartDistRef.current),
-                      ),
-                    );
-                    setPinchScale(next);
-                  } else if (
-                    e.touches.length === 1 &&
-                    isDraggingRef.current
-                  ) {
-                    if (pinchScale > 1) {
-                      e.preventDefault();
-                      const nx = e.touches[0].clientX - panStartRef.current.x;
-                      const ny = e.touches[0].clientY - panStartRef.current.y;
-                      setPinchPan({ x: nx, y: ny });
-                      lastPanRef.current = { x: nx, y: ny };
-                    } else if (swipeStartRef.current !== null) {
-                      // Visual feedback for swipe could be added here
-                    }
-                  }
-                }}
+                onTouchStart={() => {}}
+                onTouchMove={() => {}}
                 onTouchEnd={(e) => {
                   if (pinchScale === 1 && swipeStartRef.current !== null) {
                     const deltaX = e.changedTouches[0].clientX - swipeStartRef.current;
@@ -1298,30 +1517,23 @@ export function ProductDetailsClient({
                         // Swipe Left -> Next
                         setLightboxIndex((i) => (i + 1) % galleryImages.length);
                       }
-                      setPinchPan({ x: 0, y: 0 });
-                      lastPanRef.current = { x: 0, y: 0 };
                     }
                   }
-                  pinchStartDistRef.current = null;
-                  isDraggingRef.current = false;
                   swipeStartRef.current = null;
                 }}
                 style={{
-                  scale: pinchScale,
-                  x: pinchPan.x,
-                  y: pinchPan.y,
-                  transformOrigin:
-                    pinchScale > 1
-                      ? `${pinchOrigin.x}% ${pinchOrigin.y}%`
-                      : "center center",
-                  transition:
-                    pinchStartDistRef.current || isDraggingRef.current
-                      ? "none"
-                      : "transform 0.25s ease-out, scale 0.25s ease-out",
+                  scale: 1,
+                  x: 0,
+                  y: 0,
+                  transformOrigin: "center center",
                 }}
               >
                 <img
-                  src={galleryImages[lightboxIndex] ?? ""}
+                  src={
+                    galleryImages[lightboxIndex] ??
+                    galleryImages[0] ??
+                    "/logo4.png"
+                  }
                   alt={`${product.name} image ${lightboxIndex + 1}`}
                   className="max-h-[85vh] max-w-[95vw] rounded-xl object-contain shadow-[0_0_80px_rgba(0,0,0,0.6)]"
                   draggable={false}
@@ -1340,8 +1552,6 @@ export function ProductDetailsClient({
                       e.stopPropagation();
                       setLightboxIndex(i);
                       setPinchScale(1);
-                      setPinchPan({ x: 0, y: 0 });
-                      lastPanRef.current = { x: 0, y: 0 };
                     }}
                     className={`h-1.5 rounded-full transition-all ${i === lightboxIndex ? "w-5 bg-white" : "w-1.5 bg-white/40"}`}
                   />

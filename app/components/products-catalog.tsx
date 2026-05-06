@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
@@ -96,7 +96,33 @@ const COLOR_SWATCH_MAP: Record<string, string> = {
 };
 
 function getSwatchHex(colorName: string): string {
-  return COLOR_SWATCH_MAP[colorName.trim().toLowerCase()] ?? "#CCCCCC";
+  const normalized = colorName.trim().toLowerCase();
+  if (COLOR_SWATCH_MAP[normalized]) {
+    return COLOR_SWATCH_MAP[normalized];
+  }
+
+  const keywordMap: Array<{ key: string; hex: string }> = [
+    { key: "gold", hex: "#B8860B" },
+    { key: "bronze", hex: "#CD7F32" },
+    { key: "berry", hex: "#8E3A59" },
+    { key: "wine", hex: "#722F37" },
+    { key: "beige", hex: "#F5ECD7" },
+    { key: "cream", hex: "#FFF0D6" },
+    { key: "maroon", hex: "#7B1D1D" },
+    { key: "red", hex: "#C62828" },
+    { key: "black", hex: "#1A1A1A" },
+    { key: "white", hex: "#FFFFFF" },
+    { key: "blue", hex: "#1565C0" },
+    { key: "green", hex: "#2E7D32" },
+    { key: "pink", hex: "#E91E8C" },
+    { key: "purple", hex: "#6A1B9A" },
+    { key: "gray", hex: "#757575" },
+    { key: "grey", hex: "#757575" },
+    { key: "brown", hex: "#5D4037" },
+  ];
+
+  const match = keywordMap.find((item) => normalized.includes(item.key));
+  return match?.hex ?? "#CCCCCC";
 }
 
 function toUniqueSorted(values: string[]) {
@@ -115,6 +141,27 @@ type SelectDropdownProps = {
   onSelect: (value: string) => void;
   clearable?: boolean;
   onClear?: () => void;
+  className?: string;
+  wrapperClassName?: string;
+  renderOption?: (option: { label: string; value: string }) => ReactNode;
+  isActive?: boolean;
+  alignRightOnMobile?: boolean;
+};
+
+type CategoryAccordionDropdownProps = {
+  open: boolean;
+  value: string;
+  categories: typeof PRODUCT_TAXONOMY;
+  expandedCategory: ProductCategorySlug | "";
+  onToggle: () => void;
+  onToggleCategory: (value: ProductCategorySlug) => void;
+  onSelectCategory: (value: ProductCategorySlug | "") => void;
+  onSelectSubCategory: (
+    category: ProductCategorySlug,
+    subCategory: ProductSubCategorySlug,
+  ) => void;
+  onClear: () => void;
+  isActive?: boolean;
 };
 
 function SelectDropdown({
@@ -127,18 +174,27 @@ function SelectDropdown({
   onSelect,
   clearable = false,
   onClear,
+  className,
+  wrapperClassName,
+  renderOption,
+  isActive = false,
+  alignRightOnMobile = false,
 }: SelectDropdownProps) {
   return (
-    <div className="relative">
+    <div className={`relative z-60 ${wrapperClassName ?? ""}`}>
       <button
         type="button"
         aria-label={`Open ${label} dropdown`}
         aria-expanded={open}
         onClick={onToggle}
-        className="inline-flex h-11 min-w-[170px] items-center justify-between gap-2 rounded-xl border border-primary/18 bg-secondary px-3 text-sm text-primary/88 transition hover:border-primary/35"
+        className={`inline-flex h-9 w-auto items-center justify-between gap-1.5 rounded-lg border px-2.5 text-[0.98rem] transition sm:text-xs ${
+          isActive
+            ? "border-primary bg-primary text-secondary"
+            : "border-primary/18 bg-secondary text-primary/88 hover:border-primary/35"
+        } ${className ?? ""}`}
       >
         <span className="truncate">{value || placeholder}</span>
-        <span className="inline-flex items-center gap-1.5">
+        <span className="inline-flex items-center gap-1">
           {clearable && value ? (
             <span
               role="button"
@@ -155,28 +211,20 @@ function SelectDropdown({
                   onClear?.();
                 }
               }}
-              className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-primary/14 text-primary/66 transition hover:border-primary/28 hover:text-primary"
+              className={`inline-flex h-6 w-6 items-center justify-center rounded-full border transition ${
+                isActive
+                  ? "border-secondary/45 text-secondary"
+                  : "border-primary/14 text-primary/66 hover:border-primary/28 hover:text-primary"
+              }`}
             >
               <DynamicHugeIcon
                 name="Cancel01Icon"
-                className="h-3.5 w-3.5"
+                className="h-3 w-3"
                 iconStrokeWidth={2}
                 aria-hidden={true}
               />
             </span>
           ) : null}
-
-          <motion.span
-            animate={{ rotate: open ? 90 : 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            <DynamicHugeIcon
-              name="ArrowRight01Icon"
-              className="h-4 w-4 text-primary/65"
-              iconStrokeWidth={2}
-              aria-hidden={true}
-            />
-          </motion.span>
         </span>
       </button>
 
@@ -187,15 +235,17 @@ function SelectDropdown({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 6, scale: 0.98 }}
             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-            className="absolute left-0 top-[calc(100%+8px)] z-20 w-full min-w-[210px] overflow-hidden rounded-xl border border-primary/16 bg-secondary shadow-[0_18px_36px_rgba(120,0,0,0.16)]"
+            className={`absolute top-[calc(100%+6px)] z-[100] min-w-[190px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-primary/16 bg-secondary shadow-[0_18px_36px_rgba(120,0,0,0.16)] ${
+              alignRightOnMobile ? "right-0 sm:left-0 sm:right-auto" : "left-0"
+            }`}
           >
             <button
               type="button"
               onClick={() => onSelect("")}
-              className="block w-full border-b border-primary/8 px-3 py-2.5 text-left text-sm text-primary/72 transition hover:bg-primary/[0.05] hover:text-primary"
-            >
-              All
-            </button>
+                className="block w-full border-b border-primary/8 px-2.5 py-2 text-left text-[0.98rem] text-primary/72 transition hover:bg-primary/[0.05] hover:text-primary sm:text-xs"
+              >
+                All
+              </button>
             <div
               className="max-h-56 overflow-y-auto overscroll-contain"
               onWheel={(event) => event.stopPropagation()}
@@ -205,10 +255,95 @@ function SelectDropdown({
                   key={option.value}
                   type="button"
                   onClick={() => onSelect(option.value)}
-                  className="block w-full px-3 py-2.5 text-left text-sm text-primary/82 transition hover:bg-primary/[0.05] hover:text-primary"
-                >
-                  {option.label}
-                </button>
+                    className="block w-full px-2.5 py-2 text-left text-[0.98rem] text-primary/82 transition hover:bg-primary/[0.05] hover:text-primary sm:text-xs"
+                  >
+                    {renderOption ? renderOption(option) : option.label}
+                  </button>
+              ))}
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function CategoryAccordionDropdown({
+  open,
+  value,
+  categories,
+  expandedCategory,
+  onToggle,
+  onToggleCategory,
+  onSelectCategory,
+  onSelectSubCategory,
+  onClear,
+  isActive = false,
+}: CategoryAccordionDropdownProps) {
+  return (
+    <div className="relative z-60">
+      <button
+        type="button"
+        aria-label="Open Categories dropdown"
+        aria-expanded={open}
+        onClick={onToggle}
+        className={`inline-flex h-9 w-auto items-center gap-1.5 rounded-lg border px-2.5 text-[0.98rem] transition sm:text-xs ${
+          isActive
+            ? "border-primary bg-primary text-secondary"
+            : "border-primary/18 bg-secondary text-primary/88 hover:border-primary/35"
+        }`}
+      >
+        <span className="truncate">{value || "All Categories"}</span>
+        {isActive ? (
+          <span
+            role="button"
+            tabIndex={0}
+            aria-label="Clear category selection"
+            onClick={(event) => {
+              event.stopPropagation();
+              onClear();
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                event.stopPropagation();
+                onClear();
+              }
+            }}
+            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-secondary/45 text-secondary"
+          >
+            <DynamicHugeIcon name="Cancel01Icon" className="h-3 w-3" />
+          </span>
+        ) : null}
+      </button>
+      <AnimatePresence>
+        {open ? (
+          <motion.div
+            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 6, scale: 0.98 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            className="absolute left-0 top-[calc(100%+6px)] z-[100] min-w-[220px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-primary/16 bg-secondary shadow-[0_18px_36px_rgba(120,0,0,0.16)]"
+          >
+            <button onClick={onClear} type="button" className="block w-full border-b border-primary/8 px-2.5 py-2 text-left text-[0.98rem] text-primary/72 hover:bg-primary/[0.05] sm:text-xs">All</button>
+            <div className="max-h-64 overflow-y-auto">
+              {categories.map((category) => (
+                <div key={category.slug} className="border-b border-primary/8 last:border-b-0">
+                  <button type="button" aria-label={`Toggle ${category.label} options`} onClick={() => onToggleCategory(category.slug)} className="flex w-full items-center justify-between px-2.5 py-2 text-left text-[0.98rem] text-primary/85 hover:bg-primary/[0.04] sm:text-xs">
+                    <span>{category.label}</span>
+                    <span className="text-[10px]">{expandedCategory === category.slug ? "−" : "+"}</span>
+                  </button>
+                  {expandedCategory === category.slug ? (
+                    <div className="pb-1">
+                      <button type="button" aria-label={`Show all ${category.label}`} onClick={() => onSelectCategory(category.slug)} className="block w-full px-4 py-1.5 text-left text-[0.98rem] text-primary/75 hover:bg-primary/[0.04] sm:text-xs">All {category.label}</button>
+                      {category.subCategories.map((subCategory) => (
+                        <button key={subCategory.slug} type="button" aria-label={`Filter by ${subCategory.label}`} onClick={() => onSelectSubCategory(category.slug, subCategory.slug)} className="block w-full px-4 py-1.5 text-left text-[0.98rem] text-primary/75 hover:bg-primary/[0.04] sm:text-xs">
+                          {subCategory.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
               ))}
             </div>
           </motion.div>
@@ -254,13 +389,18 @@ export function ProductsCatalog({
   const [priceMax, setPriceMax] = useState(PRICE_ABSOLUTE_MAX);
   const [selectedSize, setSelectedSize] = useState("");
   const [selectedColor, setSelectedColor] = useState("");
+  const [selectedPriceRange, setSelectedPriceRange] = useState("");
   const [onlyOnSale, setOnlyOnSale] = useState(false);
   const [onlyNew, setOnlyNew] = useState(false);
   const [onlyInStock, setOnlyInStock] = useState(false);
 
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [subCategoryOpen, setSubCategoryOpen] = useState(false);
+  const [priceOpen, setPriceOpen] = useState(false);
+  const [sizeOpen, setSizeOpen] = useState(false);
+  const [colorOpen, setColorOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [expandedCategory, setExpandedCategory] = useState<ProductCategorySlug | "">("");
 
   useEffect(() => {
     setCartItems(readCartItems());
@@ -364,7 +504,6 @@ export function ProductsCatalog({
       .flatMap((item) => item.subCategories)
       .map((item) => ({ label: item.label, value: item.slug }));
   }, [selectedCategory]);
-
   const availableSizes = useMemo(() => {
     return toUniqueSorted([
       ...filterPayload.sizes,
@@ -378,6 +517,19 @@ export function ProductsCatalog({
       ...products.flatMap((item) => item.colorOptions),
     ]);
   }, [filterPayload.colors, products]);
+  const mobileColorOptions = useMemo(
+    () => availableColors.slice(0, 5),
+    [availableColors],
+  );
+
+  const priceOptions = useMemo(
+    () => [
+      { label: "₹499 - ₹1,499", value: "499-1499" },
+      { label: "₹1,500 - ₹2,999", value: "1500-2999" },
+      { label: "₹3,000 - ₹5,000", value: "3000-5000" },
+    ],
+    [],
+  );
 
   useEffect(() => {
     if (!selectedCategory) {
@@ -501,46 +653,84 @@ export function ProductsCatalog({
   return (
     <>
       <section className="mx-auto w-full max-w-7xl">
-        <div className="mb-3 flex items-end justify-between gap-3">
+        <div className="mb-3 hidden items-end justify-between gap-3 sm:flex">
           <div className="mb-1 sm:mb-0">
             <h1 className="mt-1 font-display text-2xl leading-tight sm:text-4xl">
               Shop The Collection
             </h1>
           </div>
-          <p className="hidden text-xs font-semibold uppercase tracking-[0.2em] text-primary/60 sm:block">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/60">
             {filteredProducts.length} item
             {filteredProducts.length === 1 ? "" : "s"}
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 border-b border-primary/12 pb-4 sm:gap-3">
-          <div className="hidden items-center gap-3 sm:flex">
-            <SelectDropdown
-              label="Categories"
-              placeholder="All Categories"
+        <div className="relative z-40 flex flex-col gap-3 border-b border-primary/12 pb-4 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+          <div className="flex w-full items-center gap-2 sm:w-auto sm:min-w-[220px] sm:flex-1">
+            <button
+              onClick={() => router.back()}
+              type="button"
+              aria-label="Go back"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-primary/12 bg-secondary text-primary sm:hidden"
+            >
+              <DynamicHugeIcon name="ArrowLeft01Icon" className="h-5 w-5" />
+            </button>
+            <label
+              htmlFor="products-search"
+              className="group flex h-11 w-full items-center gap-2.5 rounded-xl border border-primary/12 bg-secondary px-3.5 sm:w-auto sm:flex-1"
+            >
+              <DynamicHugeIcon
+                name="Search01Icon"
+                className="h-4.5 w-4.5 shrink-0 text-primary/68"
+                iconStrokeWidth={1.9}
+                aria-hidden={true}
+              />
+              <input
+                id="products-search"
+                type="search"
+                aria-label="Search for any product"
+                value={searchText}
+                onChange={(event) => setSearchText(event.target.value)}
+                placeholder="Search by name, category, or subcategory"
+                className="w-full bg-transparent text-[0.98rem] text-primary placeholder:text-primary/62 outline-none"
+              />
+            </label>
+          </div>
+
+          <div className="relative z-50 flex w-full flex-wrap items-center gap-2 pb-1 sm:w-auto sm:flex-none sm:gap-3 sm:pb-0">
+            <CategoryAccordionDropdown
               value={
-                selectedCategory ? getCategoryLabelBySlug(selectedCategory) : ""
+                selectedSubCategory
+                  ? getSubCategoryLabelBySlug(selectedSubCategory)
+                  : selectedCategory
+                    ? getCategoryLabelBySlug(selectedCategory)
+                    : ""
               }
-              options={availableCategories}
-              clearable={true}
+              categories={PRODUCT_TAXONOMY}
+              expandedCategory={expandedCategory}
+              isActive={Boolean(selectedCategory || selectedSubCategory)}
               open={categoryOpen}
               onToggle={() => {
                 setCategoryOpen((prev) => !prev);
                 setSubCategoryOpen(false);
+                setPriceOpen(false);
+                setSizeOpen(false);
+                setColorOpen(false);
                 setFilterOpen(false);
               }}
-              onSelect={(value) => {
-                if (!isProductCategorySlug(value)) {
-                  setSelectedCategory("");
-                  setSelectedSubCategory("");
-                  navigateForFilter("", "");
-                  setCategoryOpen(false);
-                  return;
-                }
-
+              onToggleCategory={(value) => {
+                setExpandedCategory((previous) => (previous === value ? "" : value));
+              }}
+              onSelectCategory={(value) => {
                 setSelectedCategory(value);
                 setSelectedSubCategory("");
                 navigateForFilter(value, "");
+                setCategoryOpen(false);
+              }}
+              onSelectSubCategory={(category, subCategory) => {
+                setSelectedCategory(category);
+                setSelectedSubCategory(subCategory);
+                navigateForFilter(category, subCategory);
                 setCategoryOpen(false);
               }}
               onClear={() => {
@@ -561,10 +751,14 @@ export function ProductsCatalog({
               }
               options={availableSubCategories}
               clearable={true}
+              wrapperClassName="hidden lg:block"
               open={subCategoryOpen}
               onToggle={() => {
                 setSubCategoryOpen((prev) => !prev);
                 setCategoryOpen(false);
+                setPriceOpen(false);
+                setSizeOpen(false);
+                setColorOpen(false);
                 setFilterOpen(false);
               }}
               onSelect={(value) => {
@@ -588,32 +782,123 @@ export function ProductsCatalog({
                 setSubCategoryOpen(false);
               }}
             />
+
+            <SelectDropdown
+              label="Price"
+              placeholder="Price"
+              value={
+                selectedPriceRange
+                  ? (priceOptions.find((item) => item.value === selectedPriceRange)
+                      ?.label ?? "")
+                  : ""
+              }
+              options={priceOptions}
+              clearable={true}
+              className="w-auto"
+              isActive={Boolean(selectedPriceRange)}
+              open={priceOpen}
+              onToggle={() => {
+                setPriceOpen((prev) => !prev);
+                setCategoryOpen(false);
+                setSubCategoryOpen(false);
+                setSizeOpen(false);
+                setColorOpen(false);
+                setFilterOpen(false);
+              }}
+              onSelect={(value) => {
+                setSelectedPriceRange(value);
+                if (value) {
+                  const [nextMinRaw, nextMaxRaw] = value.split("-");
+                  const nextMin = Number(nextMinRaw);
+                  const nextMax = Number(nextMaxRaw);
+                  if (Number.isFinite(nextMin) && Number.isFinite(nextMax)) {
+                    setPriceMin(nextMin);
+                    setPriceMax(nextMax);
+                  }
+                } else {
+                  setPriceMin(PRICE_ABSOLUTE_MIN);
+                  setPriceMax(PRICE_ABSOLUTE_MAX);
+                }
+                setPriceOpen(false);
+              }}
+              onClear={() => {
+                setSelectedPriceRange("");
+                setPriceMin(PRICE_ABSOLUTE_MIN);
+                setPriceMax(PRICE_ABSOLUTE_MAX);
+                setPriceOpen(false);
+              }}
+            />
+
+            <SelectDropdown
+              label="Size"
+              placeholder="Size"
+              value={selectedSize}
+              options={availableSizes.map((item) => ({ label: item, value: item }))}
+              clearable={true}
+              className="w-auto"
+              isActive={Boolean(selectedSize)}
+              open={sizeOpen}
+              onToggle={() => {
+                setSizeOpen((prev) => !prev);
+                setCategoryOpen(false);
+                setSubCategoryOpen(false);
+                setPriceOpen(false);
+                setColorOpen(false);
+                setFilterOpen(false);
+              }}
+              onSelect={(value) => {
+                setSelectedSize(value);
+                setSizeOpen(false);
+              }}
+              onClear={() => {
+                setSelectedSize("");
+                setSizeOpen(false);
+              }}
+            />
+
+            <SelectDropdown
+              label="Color"
+              placeholder="Color"
+              value={selectedColor}
+              options={mobileColorOptions.map((item) => ({
+                label: item,
+                value: item,
+              }))}
+              clearable={true}
+              className="w-auto"
+              isActive={Boolean(selectedColor)}
+              alignRightOnMobile={true}
+              open={colorOpen}
+              onToggle={() => {
+                setColorOpen((prev) => !prev);
+                setCategoryOpen(false);
+                setSubCategoryOpen(false);
+                setPriceOpen(false);
+                setSizeOpen(false);
+                setFilterOpen(false);
+              }}
+              onSelect={(value) => {
+                setSelectedColor(value);
+                setColorOpen(false);
+              }}
+              onClear={() => {
+                setSelectedColor("");
+                setColorOpen(false);
+              }}
+              renderOption={(option) => (
+                <span className="inline-flex items-center gap-2">
+                  <span
+                    aria-hidden={true}
+                    className="h-3.5 w-3.5 rounded-full border border-primary/20"
+                    style={{ backgroundColor: getSwatchHex(option.value) }}
+                  />
+                  <span>{option.label}</span>
+                </span>
+              )}
+            />
           </div>
 
-          <div className="min-w-[220px] flex-1">
-            <label
-              htmlFor="products-search"
-              className="group flex h-11 w-full items-center gap-2.5 rounded-xl border border-primary/12 bg-secondary px-3.5"
-            >
-              <DynamicHugeIcon
-                name="Search01Icon"
-                className="h-4.5 w-4.5 shrink-0 text-primary/68"
-                iconStrokeWidth={1.9}
-                aria-hidden={true}
-              />
-              <input
-                id="products-search"
-                type="search"
-                aria-label="Search for any product"
-                value={searchText}
-                onChange={(event) => setSearchText(event.target.value)}
-                placeholder="Search by name, category, or subcategory"
-                className="w-full bg-transparent text-[0.98rem] text-primary placeholder:text-primary/62 outline-none"
-              />
-            </label>
-          </div>
-
-          <div className="relative">
+          <div className="relative hidden">
             <button
               type="button"
               aria-label="Open product filters"

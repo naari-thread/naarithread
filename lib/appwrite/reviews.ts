@@ -67,6 +67,32 @@ async function resolveReviewsCollectionId(jwt?: string) {
   return null;
 }
 
+async function fetchServerReviews(matchValues: string[]) {
+  if (matchValues.length === 0) {
+    return [] as ProductReview[];
+  }
+
+  try {
+    const params = new URLSearchParams({
+      productId: matchValues[0],
+      aliases: matchValues.slice(1).join(","),
+    });
+    const response = await fetch(`/api/catalog/reviews?${params.toString()}`, {
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      return [] as ProductReview[];
+    }
+    const payload = await response.json();
+    if (!payload || !Array.isArray(payload.reviews)) {
+      return [] as ProductReview[];
+    }
+    return payload.reviews as ProductReview[];
+  } catch {
+    return [] as ProductReview[];
+  }
+}
+
 export async function listProductReviews(productId: string, jwt?: string, aliases: string[] = []) {
   const matchValues = Array.from(new Set([productId, ...aliases].map((value) => value.trim()).filter(Boolean)));
   if (matchValues.length === 0) {
@@ -103,7 +129,12 @@ export async function listProductReviews(productId: string, jwt?: string, aliase
     );
   }
 
-  return response.documents.map(toReviewRecord);
+  const records = response.documents.map(toReviewRecord);
+  if (records.length > 0) {
+    return records;
+  }
+
+  return fetchServerReviews(matchValues);
 }
 
 export async function createProductReview(input: {

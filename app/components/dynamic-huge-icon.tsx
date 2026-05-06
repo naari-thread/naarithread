@@ -1,6 +1,6 @@
 "use client";
 
-import { createElement, useEffect, useState, type SVGProps } from "react";
+import { createElement, useEffect, useState, useSyncExternalStore, type SVGProps } from "react";
 
 type HugeIconName =
   | "AiChat01Icon"
@@ -86,8 +86,13 @@ export function DynamicHugeIcon({
   "aria-hidden": ariaHidden = true,
   ...rest
 }: DynamicHugeIconProps) {
-  const [iconData, setIconData] = useState<HugeIconData | null>(() => iconCache.get(name) ?? null);
-  const resolvedIconData = iconCache.get(name) ?? iconData;
+  const [iconData, setIconData] = useState<HugeIconData | null>(null);
+  const hasMounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
+  const resolvedIconData = hasMounted ? iconCache.get(name) ?? iconData : null;
 
   useEffect(() => {
     let mountedLocal = true;

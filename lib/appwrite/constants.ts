@@ -17,7 +17,10 @@ function normalizeEnv(value: string | undefined) {
 export const appwritePublicConfig = {
   endpoint: normalizeEnv(process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT) || "https://cloud.appwrite.io/v1",
   projectId: normalizeEnv(process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID),
-  databaseId: normalizeEnv(process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID),
+  databaseId:
+    normalizeEnv(process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID) ||
+    normalizeEnv(process.env.APPWRITE_DATABASE_ID) ||
+    "naarithread",
   usersCollectionId: normalizeEnv(process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID) || "users",
   adminEmails:
     normalizeEnv(process.env.NEXT_PUBLIC_ADMIN_EMAILS)
