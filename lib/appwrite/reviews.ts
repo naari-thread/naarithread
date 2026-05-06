@@ -101,12 +101,12 @@ export async function listProductReviews(productId: string, jwt?: string, aliase
 
   const databases = getBrowserDatabases(jwt);
   if (!databases || !appwritePublicConfig.databaseId) {
-    return [] as ProductReview[];
+    return fetchServerReviews(matchValues);
   }
 
   const collectionId = await resolveReviewsCollectionId(jwt);
   if (!collectionId) {
-    return [] as ProductReview[];
+    return fetchServerReviews(matchValues);
   }
 
   let response;
@@ -122,11 +122,15 @@ export async function listProductReviews(productId: string, jwt?: string, aliase
       ]
     );
   } catch {
-    response = await databases.listDocuments<ReviewDocument>(
-      appwritePublicConfig.databaseId,
-      collectionId,
-      [Query.equal("productId", matchValues), Query.orderDesc("$createdAt"), Query.limit(50)]
-    );
+    try {
+      response = await databases.listDocuments<ReviewDocument>(
+        appwritePublicConfig.databaseId,
+        collectionId,
+        [Query.equal("productId", matchValues), Query.orderDesc("$createdAt"), Query.limit(50)]
+      );
+    } catch {
+      return fetchServerReviews(matchValues);
+    }
   }
 
   const records = response.documents.map(toReviewRecord);
@@ -140,6 +144,7 @@ export async function listProductReviews(productId: string, jwt?: string, aliase
 export async function createProductReview(input: {
   jwt: string;
   productId: string;
+  productAliases?: string[];
   userId: string;
   userName: string;
   userEmail: string;
@@ -164,8 +169,12 @@ export async function createProductReview(input: {
 
   const safeUserId = input.userId.trim();
   const safeProductId = input.productId.trim();
+  const safeProductAliases = Array.from(
+    new Set((input.productAliases ?? []).map((value) => value.trim()).filter(Boolean))
+  );
+  const canonicalProductId = safeProductAliases[0] ?? safeProductId;
 
-  if (!safeUserId || !safeProductId) {
+  if (!safeUserId || (!safeProductId && safeProductAliases.length === 0)) {
     throw new Error("Missing user or product reference.");
   }
 
@@ -173,7 +182,7 @@ export async function createProductReview(input: {
   const safeTitle = input.title?.trim() ?? "";
 
   const payload: Record<string, unknown> = {
-    productId: safeProductId,
+    productId: canonicalProductId,
     userId: safeUserId,
     userName: input.userName.trim() || "Customer",
     userEmail: input.userEmail.trim().toLowerCase(),

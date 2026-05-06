@@ -362,8 +362,8 @@ export function ProductDetailsClient({
       try {
         const jwt = isAuthenticated ? await createAuthJwt() : undefined;
         const response = await listProductReviews(product.id, jwt, [
-          product.slug,
           product.sku,
+          product.slug,
         ]);
         if (!alive) {
           return;
@@ -422,6 +422,7 @@ export function ProductDetailsClient({
       const createdReview = await createProductReview({
         jwt,
         productId: product.id,
+        productAliases: [product.sku, product.slug, product.id],
         userId: user.$id,
         userName: user.name?.trim() || user.email.split("@")[0] || "Customer",
         userEmail: user.email,
@@ -547,7 +548,7 @@ export function ProductDetailsClient({
 
   return (
     <>
-      <main className="min-h-screen bg-paper pb-32 pt-7 text-primary sm:pt-16 md:pb-14 md:pt-24">
+      <main className="min-h-screen bg-paper pb-32 pt- text-primary sm:pt-16 md:pb-14 md:pt-24">
         <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
           {/* Breadcrumbs - Moved to top, usable links */}
           <nav
@@ -579,35 +580,47 @@ export function ProductDetailsClient({
 
           {/* Product Inner Grid */}
           {reviews.length > 0 && (
-            <div className="mb-4 overflow-hidden rounded-[1.35rem] border border-primary/10 bg-secondary/80 shadow-[0_14px_30px_rgba(80,30,20,0.06)] md:mb-6">
+            <div className=" mb-4 overflow-hidden rounded-2xl border border-primary/10 bg-secondary/70 shadow-[0_8px_18px_rgba(80,30,20,0.05)] md:mb-4">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={activeReviewSpotlight.id}
-                  initial={{ opacity: 0, y: 8 }}
+                  initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-                  className="flex items-start gap-3 px-4 py-4 sm:px-5 sm:py-4"
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                  className="flex items-start gap-2.5 px-3.5 py-3 sm:px-4 sm:py-3"
                 >
-                  <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-secondary shadow-[0_8px_18px_rgba(113,12,9,0.16)]">
-                    <DynamicHugeIcon
-                      name="StarIcon"
-                      className="h-4.5 w-4.5"
-                      fill="currentColor"
-                    />
-                  </div>
-
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-3">
-                      <span className="text-sm font-semibold text-primary sm:text-[0.95rem]">
-                        {Math.max(0, activeReviewSpotlight.rating).toFixed(1)}
-                      </span>
-                      <span className="shrink-0 text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-primary/40 sm:text-[0.65rem]">
+                      <div className="inline-flex items-center gap-2">
+                        <div
+                          className="inline-flex items-center gap-0.5"
+                          aria-label={`Rated ${Math.max(0, activeReviewSpotlight.rating).toFixed(1)} out of 5`}
+                        >
+                          {Array.from({ length: 5 }, (_, index) => (
+                            <DynamicHugeIcon
+                              key={`${activeReviewSpotlight.id}-spotlight-star-${index}`}
+                              name="StarIcon"
+                              className={`h-3 w-3 ${
+                                index < Math.floor(Math.max(0, activeReviewSpotlight.rating))
+                                  ? "text-primary"
+                                  : "text-primary/25"
+                              }`}
+                              fill="currentColor"
+                              aria-hidden={true}
+                            />
+                          ))}
+                        </div>
+                        <span className="text-[0.78rem] font-semibold text-primary sm:text-[0.82rem]">
+                          {Math.max(0, activeReviewSpotlight.rating).toFixed(1)}
+                        </span>
+                      </div>
+                      <span className="shrink-0 text-[0.56rem] font-semibold uppercase tracking-[0.14em] text-primary/40 sm:text-[0.6rem]">
                         {activeReviewSpotlight.author}
                       </span>
                     </div>
 
-                    <p className="mt-1 line-clamp-2 text-[0.8rem] leading-snug text-primary/78 sm:text-sm sm:leading-relaxed">
+                    <p className="mt-0.5 line-clamp-1 text-[0.72rem] leading-snug text-primary/75 sm:line-clamp-2 sm:text-[0.78rem] sm:leading-snug">
                       {activeReviewSpotlight.comment}
                     </p>
                   </div>
