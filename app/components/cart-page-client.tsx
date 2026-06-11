@@ -445,6 +445,32 @@ export function CartPageClient() {
     };
   }, [createAuthJwt, isAuthenticated, user?.$id]);
 
+  // Auto-remove stale cart entries (IDs not in the catalog) once the catalog
+  // finishes loading. Silently clears leftover dev/test data without scaring
+  // the user with "Product unavailable" error cards.
+  useEffect(() => {
+    if (!hasCompletedCatalogSync || products.length === 0) return;
+
+    const byId = new Set(products.map((p) => p.id));
+    const staleIds = Object.keys(cartItems).filter((id) => !byId.has(id));
+    if (staleIds.length === 0) return;
+
+    const next = { ...cartItems };
+    for (const id of staleIds) {
+      delete next[id];
+    }
+
+    setCartItems(next);
+    writeCartItems(next);
+
+    toast.info(
+      staleIds.length === 1
+        ? "1 item was removed from your cart (no longer available)."
+        : `${staleIds.length} items were removed from your cart (no longer available).`
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasCompletedCatalogSync]);
+
   const { lines, missingLines } = useMemo(() => {
     const byId = new Map(products.map((item) => [item.id, item] as const));
     const resolvedLines: CartLine[] = [];
@@ -777,24 +803,7 @@ export function CartPageClient() {
             </p>
           </header>
 
-          {!isLoading && !isAuthenticated ? (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-              className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-y border-primary/15 py-5 text-sm text-primary/80"
-            >
-              <span>You are using local cart storage. Sign in to keep your cart synced and safe across devices.</span>
-              <button
-                type="button"
-                aria-label="Sign in to sync cart"
-                onClick={() => setIsAuthModalOpen(true)}
-                className="shrink-0 inline-flex h-9 items-center justify-center rounded-lg border border-primary bg-primary px-4 text-xs font-semibold uppercase tracking-[0.16em] text-secondary transition hover:bg-primary/90"
-              >
-                Sign in
-              </button>
-            </motion.div>
-          ) : null}
+          {/* No banner for unauthenticated users — checkout sidebar handles the sign-in gate */}
 
           <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start lg:gap-12">
             {/* ─── Cart items ──────────────────────────────────── */}
@@ -937,7 +946,7 @@ export function CartPageClient() {
             </div>
 
             {/* ─── Order summary sidebar ────────────────────────── */}
-            <aside className="rounded-2xl border border-primary/15 bg-secondary p-5 sm:p-6 lg:sticky lg:top-28">
+            <aside className="relative overflow-hidden rounded-2xl border border-primary/15 bg-secondary p-5 sm:p-6 lg:sticky lg:top-28">
               <h3 className="text-lg font-semibold">Amount Breakup</h3>
 
               {/* Shipping address */}
@@ -1167,6 +1176,42 @@ export function CartPageClient() {
                 <p className="mt-3 text-center text-[0.67rem] text-primary/50">
                   Free delivery on orders above ₹2,999
                 </p>
+              ) : null}
+
+              {/* ── Sign-in gate overlay ── */}
+              {!isLoading && !isAuthenticated ? (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.2 }}
+                  className="absolute inset-0 z-20 flex flex-col items-center justify-end rounded-2xl"
+                  style={{
+                    background: "linear-gradient(to top, var(--color-secondary, #fdf6ee) 55%, transparent 100%)",
+                  }}
+                >
+                  <div className="flex w-full flex-col items-center gap-3 px-6 pb-7 pt-12 text-center">
+                    <span className="flex h-11 w-11 items-center justify-center rounded-full border border-primary/18 bg-paper">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-primary/60" aria-hidden="true">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                      </svg>
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-primary">Sign in to checkout</p>
+                      <p className="mt-1 text-xs leading-relaxed text-primary/60">
+                        Create an account or sign in to place your order securely.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsAuthModalOpen(true)}
+                      className="mt-1 inline-flex h-11 w-full items-center justify-center rounded-xl border border-primary bg-primary px-4 text-xs font-semibold uppercase tracking-[0.2em] text-secondary transition hover:bg-primary/90"
+                    >
+                      Sign in / Create Account
+                    </button>
+                    <p className="text-[0.65rem] text-primary/45">Free · No spam · OTP login</p>
+                  </div>
+                </motion.div>
               ) : null}
             </aside>
           </div>
