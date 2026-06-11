@@ -175,7 +175,7 @@ export function EmailOtpAuthForm({ title, description, onSuccess }: EmailOtpAuth
       <h2 className="mt-2 text-2xl font-semibold sm:text-3xl">{title}</h2>
       <p className="mt-3 text-sm leading-relaxed text-primary/80">{description}</p>
 
-      <AnimatePresence mode="wait">
+      <AnimatePresence mode="wait" initial={false}>
         {step === "email" ? (
           <motion.form
             key="email-step"
