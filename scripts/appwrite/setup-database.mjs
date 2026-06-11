@@ -36,7 +36,7 @@ const collectionDefs = [
       ["string", "fullName", 120, true],
       ["string", "email", 255, true],
       ["string", "phone", 32, false],
-      ["string", "address", 500, false],
+      ["string", "address", 1000, false],
       ["boolean", "isAdmin", false, false],
     ],
     indexes: [
@@ -160,6 +160,48 @@ const collectionDefs = [
     ],
   },
   {
+    id: "wallets",
+    name: "wallets",
+    permissions: [
+      Permission.create(Role.users()),
+      Permission.read(Role.label("admin")),
+      Permission.update(Role.label("admin")),
+      Permission.delete(Role.label("admin")),
+    ],
+    documentSecurity: true,
+    attributes: [
+      ["string", "userId", 64, true],
+      ["double", "balance", 0, true],
+      ["datetime", "updatedAt", false],
+    ],
+    indexes: [
+      ["wallets_userId_unique", "unique", ["userId"]],
+    ],
+  },
+  {
+    id: "wallet_transactions",
+    name: "wallet_transactions",
+    permissions: [
+      Permission.create(Role.users()),
+      Permission.read(Role.label("admin")),
+      Permission.update(Role.label("admin")),
+      Permission.delete(Role.label("admin")),
+    ],
+    documentSecurity: true,
+    attributes: [
+      ["string", "userId", 64, true],
+      ["string", "type", 40, true],
+      ["double", "amount", 0, true],
+      ["string", "source", 500, true],
+      ["string", "referenceOrderId", 64, false],
+      ["datetime", "createdAt", true],
+    ],
+    indexes: [
+      ["wallet_transactions_user_idx", "key", ["userId"]],
+      ["wallet_txn_order_type_unique", "unique", ["userId", "referenceOrderId", "type"]],
+    ],
+  },
+  {
     id: "coupons",
     name: "coupons",
     permissions: [
@@ -207,6 +249,7 @@ const collectionDefs = [
       ["string", "comment", 2000, true],
       ["boolean", "isVerifiedPurchase", false, false],
       ["boolean", "isApproved", true, false],
+      ["string", "imageUrls", 1000, false, true],
     ],
     indexes: [
       ["reviews_productId_idx", "key", ["productId"]],

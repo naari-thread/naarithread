@@ -472,20 +472,19 @@ export function ProductsCatalog({
   const updateCartQuantity = (productId: string, quantity: number) => {
     const nextQuantity = Math.min(99, Math.max(0, Math.trunc(quantity)));
 
-    setCartItems((previous) => {
-      const nextItems: CartItemsMap = {
-        ...previous,
-      };
+    // Compute next state from localStorage (source of truth) so the side
+    // effect (writeCartItems) can run outside the state updater — calling
+    // setState of another component (Navbar) inside a state updater triggers
+    // a React render-phase setState warning.
+    const nextItems: CartItemsMap = { ...readCartItems() };
+    if (nextQuantity <= 0) {
+      delete nextItems[productId];
+    } else {
+      nextItems[productId] = nextQuantity;
+    }
 
-      if (nextQuantity <= 0) {
-        delete nextItems[productId];
-      } else {
-        nextItems[productId] = nextQuantity;
-      }
-
-      writeCartItems(nextItems);
-      return nextItems;
-    });
+    setCartItems(nextItems);
+    writeCartItems(nextItems);
   };
 
   const availableCategories = useMemo(() => {

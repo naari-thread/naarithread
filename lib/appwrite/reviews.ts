@@ -16,6 +16,7 @@ export type ProductReview = {
   rating: number;
   title: string;
   comment: string;
+  imageUrls: string[];
   isVerifiedPurchase: boolean;
   isApproved: boolean;
   createdAt: string;
@@ -29,6 +30,7 @@ type ReviewDocument = Models.Document & {
   rating?: number;
   title?: string;
   comment?: string;
+  imageUrls?: string[];
   isVerifiedPurchase?: boolean;
   isApproved?: boolean;
 };
@@ -43,6 +45,9 @@ function toReviewRecord(document: ReviewDocument): ProductReview {
     rating: Math.max(1, Math.min(5, Math.trunc(Number(document.rating ?? 5) || 5))),
     title: String(document.title ?? "").trim(),
     comment: String(document.comment ?? "").trim(),
+    imageUrls: Array.isArray(document.imageUrls)
+      ? document.imageUrls.map((url) => String(url ?? "").trim()).filter(Boolean)
+      : [],
     isVerifiedPurchase: Boolean(document.isVerifiedPurchase),
     isApproved: typeof document.isApproved === "boolean" ? document.isApproved : true,
     createdAt: String(document.$createdAt ?? ""),
@@ -151,6 +156,7 @@ export async function createProductReview(input: {
   comment: string;
   rating?: number;
   title?: string;
+  imageUrls?: string[];
 }) {
   const databases = getBrowserDatabases(input.jwt);
   if (!databases || !appwritePublicConfig.databaseId) {
@@ -180,6 +186,9 @@ export async function createProductReview(input: {
 
   const safeRating = Math.max(1, Math.min(5, Math.trunc(input.rating ?? 5)));
   const safeTitle = input.title?.trim() ?? "";
+  const safeImageUrls = Array.from(
+    new Set((input.imageUrls ?? []).map((url) => url.trim()).filter(Boolean))
+  ).slice(0, 3);
 
   const payload: Record<string, unknown> = {
     productId: canonicalProductId,
@@ -189,11 +198,12 @@ export async function createProductReview(input: {
     rating: safeRating,
     title: safeTitle,
     comment: safeComment,
+    imageUrls: safeImageUrls,
     isVerifiedPurchase: true,
     isApproved: true,
   };
 
-  const removableKeys = new Set(["rating", "title", "isVerifiedPurchase", "isApproved"]);
+  const removableKeys = new Set(["rating", "title", "imageUrls", "isVerifiedPurchase", "isApproved"]);
   let document: ReviewDocument | null = null;
 
   for (let attempt = 0; attempt < 5; attempt += 1) {

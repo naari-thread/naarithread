@@ -6,7 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
 
-type AdminTab = "dashboard" | "products" | "addons" | "orders" | "payments";
+type AdminTab = "products" | "addons" | "orders" | "payments";
 
 type MobileBarProps = {
   activeTab: AdminTab;
@@ -15,11 +15,10 @@ type MobileBarProps = {
 type NavItem = {
   id: AdminTab;
   label: string;
-  icon: "Home01Icon" | "ShoppingBag01Icon" | "Notification01Icon" | "ShoppingCart02Icon" | "MailSend01Icon";
+  icon: "ShoppingBag01Icon" | "Notification01Icon" | "ShoppingCart02Icon" | "MailSend01Icon";
 };
 
 const navItems: NavItem[] = [
-  { id: "dashboard", label: "Dashboard", icon: "Home01Icon" },
   { id: "products", label: "Products", icon: "ShoppingBag01Icon" },
   { id: "addons", label: "AddOns", icon: "Notification01Icon" },
   { id: "orders", label: "Orders", icon: "ShoppingCart02Icon" },

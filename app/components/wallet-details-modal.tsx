@@ -18,7 +18,7 @@ type WalletDetailsModalProps = {
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function WalletDetailsModal(_props: WalletDetailsModalProps) {
-  const { user } = useAuth();
+  const { user, createAuthJwt } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [balance, setBalance] = useState(0);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
@@ -32,32 +32,26 @@ export function WalletDetailsModal(_props: WalletDetailsModalProps) {
 
     const fetchWalletData = async () => {
       try {
-        // TODO: Replace with actual wallet API endpoint
-        // For now, showing mock data structure
-        setBalance(5600);
-        setTransactions([
-          {
-            id: "txn-1",
-            type: "refunded",
-            amount: 5600,
-            source: "Classic Everyday Dupatta - Cloud White",
-            date: "March 25, 2026",
+        const jwt = await createAuthJwt();
+        const response = await fetch("/api/account/wallet", {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${jwt}`,
           },
-          {
-            id: "txn-2",
-            type: "spent",
-            amount: 4000,
-            source: "Order #ORD-001234",
-            date: "March 20, 2026",
-          },
-          {
-            id: "txn-3",
-            type: "refunded",
-            amount: 2500,
-            source: "Bridal Blouse - Antique Gold",
-            date: "March 15, 2026",
-          },
-        ]);
+        });
+
+        const payload = (await response.json()) as {
+          balance?: number;
+          transactions?: WalletTransaction[];
+          error?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(payload.error ?? "Failed to fetch wallet");
+        }
+
+        setBalance(Math.max(0, Number(payload.balance ?? 0)));
+        setTransactions(Array.isArray(payload.transactions) ? payload.transactions : []);
         setError(null);
       } catch (err) {
         console.error("Failed to fetch wallet data:", err);
@@ -68,7 +62,7 @@ export function WalletDetailsModal(_props: WalletDetailsModalProps) {
     };
 
     void fetchWalletData();
-  }, [user]);
+  }, [createAuthJwt, user]);
 
   function formatCurrency(amount: number) {
     return new Intl.NumberFormat("en-IN", {
@@ -148,7 +142,10 @@ export function WalletDetailsModal(_props: WalletDetailsModalProps) {
                             {transaction.source}
                           </p>
                           <p className="text-[0.6rem] sm:text-xs text-primary/60 mt-0.5">
-                            {transaction.date}
+                            {new Date(transaction.date).toLocaleString("en-IN", {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            })}
                           </p>
                         </div>
                       </div>

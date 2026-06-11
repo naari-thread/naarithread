@@ -3,18 +3,21 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { ID, Query } from "node-appwrite";
 
+import { AdminImageUploadField } from "@/app/components/admin-image-upload-field";
+import { AdminModalClose } from "@/app/components/admin-modal-close";
+import { AdminTransactionFilters } from "@/app/components/admin-transaction-filters";
+import { AdminMultiSelectField } from "@/app/components/admin-multi-select-field";
 import { AdminMobileBottomBar } from "@/app/components/admin-mobile-bottom-bar";
 import { AdminSessionBootstrap } from "@/app/components/admin-session-bootstrap";
 import { CloudinaryImage } from "@/app/components/cloudinary-image";
 import { createDatabasesWithApiKey, getDatabaseId } from "@/lib/appwrite/admin-server";
 import { ensureSlug } from "@/lib/slug";
-import { SearchIcon } from "@hugeicons/core-free-icons";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type SearchParams = Record<string, string | string[] | undefined>;
-type AdminTab = "dashboard" | "products" | "addons" | "orders" | "payments";
+type AdminTab = "products" | "addons" | "orders" | "payments";
 type AddonType = "banners" | "coupons";
 
 type AdminProduct = {
@@ -61,13 +64,6 @@ type AdminTransaction = {
   status: string;
   createdAt: string;
   raw: Record<string, unknown>;
-};
-
-type Overview = {
-  products: number;
-  orders: number;
-  payments: number;
-  reviews: number;
 };
 
 function toNumber(value: unknown, fallback = 0) {
@@ -244,6 +240,111 @@ function mapTransaction(document: Record<string, unknown>, fallbackLabel: string
   };
 }
 
+function withinDateRange(iso: string, from: string, to: string) {
+  if (!from && !to) {
+    return true;
+  }
+
+  const time = new Date(iso).getTime();
+  if (!Number.isFinite(time)) {
+    return true;
+  }
+
+  if (from) {
+    const fromTime = new Date(`${from}T00:00:00`).getTime();
+    if (Number.isFinite(fromTime) && time < fromTime) {
+      return false;
+    }
+  }
+
+  if (to) {
+    const toTime = new Date(`${to}T23:59:59.999`).getTime();
+    if (Number.isFinite(toTime) && time > toTime) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function matchesTransactionQuery(document: Record<string, unknown>, query: string) {
+  if (!query) {
+    return true;
+  }
+
+  const haystack = [
+    document.orderNumber,
+    document.userEmail,
+    document.$id,
+    document.orderId,
+    document.providerPaymentId,
+    document.status,
+    document.paymentStatus,
+  ]
+    .map((value) => String(value ?? "").toLowerCase())
+    .join(" ");
+
+  return haystack.includes(query);
+}
+
+const PRODUCT_COLOR_PALETTE = [
+  "Black",
+  "White",
+  "Red",
+  "Maroon",
+  "Pink",
+  "Blue",
+  "Navy",
+  "Green",
+  "Yellow",
+  "Beige",
+  "Brown",
+  "Grey",
+  "Orange",
+  "Purple",
+  "Gold",
+  "Silver",
+];
+
+async function getProductFormOptions() {
+  const databases = createDatabasesWithApiKey();
+  const databaseId = getDatabaseId();
+
+  const [collection, documents] = await Promise.all([
+    databases.getCollection(databaseId, "sku"),
+    databases
+      .listDocuments(databaseId, "sku", [Query.limit(200), Query.orderDesc("$createdAt")])
+      .catch(() => ({ documents: [] as Record<string, unknown>[] })),
+  ]);
+
+  const enumOf = (key: string) => {
+    const attribute = collection.attributes.find((item) => (item as { key?: string }).key === key) as
+      | { elements?: unknown }
+      | undefined;
+    return Array.isArray(attribute?.elements)
+      ? (attribute?.elements.filter((value): value is string => typeof value === "string") ?? [])
+      : [];
+  };
+
+  const colors = new Set<string>(PRODUCT_COLOR_PALETTE);
+  for (const document of documents.documents as Record<string, unknown>[]) {
+    const docColors = Array.isArray(document.colorOptions) ? document.colorOptions : [];
+    for (const color of docColors) {
+      const value = String(color ?? "").trim();
+      if (value) {
+        colors.add(value);
+      }
+    }
+  }
+
+  return {
+    categories: enumOf("category"),
+    subcategories: enumOf("subcategory"),
+    sizes: enumOf("size"),
+    colors: Array.from(colors).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })),
+  };
+}
+
 async function listDocumentsFromCandidates(
   collectionIds: string[],
   queries: string[]
@@ -318,32 +419,12 @@ function buildAdminHref(searchParams: SearchParams, patch: Record<string, string
   return qs ? `/admin?${qs}` : "/admin";
 }
 
-function serializeForDetail(value: unknown) {
-  if (Array.isArray(value)) {
-    return value.map((item) => String(item)).join(", ");
-  }
-
-  if (typeof value === "object" && value !== null) {
-    return JSON.stringify(value);
-  }
-
-  if (typeof value === "boolean") {
-    return value ? "Yes" : "No";
-  }
-
-  if (value === undefined || value === null || value === "") {
-    return "-";
-  }
-
-  return String(value);
-}
-
 function getActiveTab(value: string): AdminTab {
-  if (value === "dashboard" || value === "products" || value === "addons" || value === "orders" || value === "payments") {
+  if (value === "products" || value === "addons" || value === "orders" || value === "payments") {
     return value;
   }
 
-  return "dashboard";
+  return "products";
 }
 
 function getActiveAddon(value: string): AddonType {
@@ -378,36 +459,84 @@ async function toggleProductStockAction(formData: FormData) {
   redirect(returnTo);
 }
 
+async function assertAdminSession() {
+  const cookieStore = await cookies();
+  if (!cookieStore.get("nt_admin_session")?.value) {
+    throw new Error("Unauthorized: admin session required.");
+  }
+}
+
+const SIZE_ENUM = ["XS", "S", "M", "L", "XL", "XXL", "3XL"];
+
+function generateSkuCode(name: string) {
+  const base = ensureSlug(name).replace(/-/g, "").toUpperCase().slice(0, 10) || "NT";
+  const suffix = Math.random().toString(36).slice(2, 7).toUpperCase();
+  return `${base}-${suffix}`.slice(0, 100);
+}
+
+async function generateUniqueSlug(
+  databases: ReturnType<typeof createDatabasesWithApiKey>,
+  databaseId: string,
+  name: string
+) {
+  const base = ensureSlug(name, "product");
+  try {
+    const existing = await databases.listDocuments(databaseId, "sku", [Query.equal("slug", base), Query.limit(1)]);
+    if (existing.documents.length === 0) {
+      return base;
+    }
+  } catch {
+    // Fall through to a suffixed slug if the lookup fails.
+  }
+  return `${base}-${Math.random().toString(36).slice(2, 6)}`.slice(0, 140);
+}
+
 async function saveProductAction(formData: FormData) {
   "use server";
+
+  await assertAdminSession();
 
   const productId = String(formData.get("productId") ?? "").trim();
   const returnTo = String(formData.get("returnTo") ?? "/admin").trim() || "/admin";
 
-  const payload = {
-    name: String(formData.get("name") ?? "").trim(),
+  const name = String(formData.get("name") ?? "").trim();
+  const stockQty = toNumber(formData.get("stockQty"));
+  const sizeOptions = parseCommaSeparated(String(formData.get("sizeOptions") ?? ""));
+  const primarySize = sizeOptions.find((value) => SIZE_ENUM.includes(value)) ?? "M";
+
+  // Common fields written on both create and edit. Keys match the live `sku`
+  // schema exactly (note: `subcategory` is lowercase; `inStock` is derived from
+  // stock; `size` is a required single enum; `isActive` defaults to true).
+  const payload: Record<string, unknown> = {
+    name,
     description: String(formData.get("description") ?? "").trim(),
-    sku: String(formData.get("sku") ?? "").trim(),
-    slug: ensureSlug(String(formData.get("slug") ?? "").trim(), productId || "sku"),
     category: String(formData.get("category") ?? "").trim(),
-    subCategory: String(formData.get("subCategory") ?? "").trim(),
+    subcategory: String(formData.get("subcategory") ?? "").trim(),
     mainImageUrl: String(formData.get("mainImageUrl") ?? "").trim(),
     discountPrice: toNumber(formData.get("discountPrice")),
     originalPrice: toNumber(formData.get("originalPrice")),
-    stockQty: toNumber(formData.get("stockQty")),
-    inStock: toBoolean(formData.get("inStock"), false),
-    sizeOptions: parseCommaSeparated(String(formData.get("sizeOptions") ?? "")),
+    stockQty,
+    inStock: stockQty > 0,
+    size: primarySize,
+    sizeOptions,
     colorOptions: parseCommaSeparated(String(formData.get("colorOptions") ?? "")),
     otherImageUrls: parseCommaSeparated(String(formData.get("otherImageUrls") ?? "")),
-    isActive: toBoolean(formData.get("isActive"), true),
+    isActive: true,
   };
 
   const databases = createDatabasesWithApiKey();
+  const databaseId = getDatabaseId();
 
   if (productId) {
-    await databases.updateDocument(getDatabaseId(), "sku", productId, payload);
+    // Do not rewrite sku/slug on edit — they are stable identifiers.
+    await databases.updateDocument(databaseId, "sku", productId, payload);
   } else {
-    await databases.createDocument(getDatabaseId(), "sku", ID.unique(), payload);
+    const slug = await generateUniqueSlug(databases, databaseId, name);
+    await databases.createDocument(databaseId, "sku", ID.unique(), {
+      ...payload,
+      sku: generateSkuCode(name),
+      slug,
+    });
   }
 
   redirect(returnTo);
@@ -415,6 +544,8 @@ async function saveProductAction(formData: FormData) {
 
 async function saveAddonAction(formData: FormData) {
   "use server";
+
+  await assertAdminSession();
 
   const addonType = String(formData.get("addonType") ?? "").trim().toLowerCase() === "coupons" ? "coupons" : "banners";
   const addonId = String(formData.get("addonId") ?? "").trim();
@@ -424,24 +555,25 @@ async function saveAddonAction(formData: FormData) {
   const candidate = await listDocumentsFromCandidates(collectionIds, [Query.limit(1)]);
   const collectionId = candidate.collectionId ?? collectionIds[0];
 
+  const isActive = String(formData.get("isActive") ?? "true").trim().toLowerCase() !== "false";
+
   const payload: Record<string, unknown> = addonType === "banners"
     ? {
         title: String(formData.get("title") ?? "").trim(),
-        subtitle: String(formData.get("subtitle") ?? "").trim(),
+        // imageUrl and position are required in the DB schema. On create we use
+        // empty string / 0; on edit the hidden field preserves the existing value.
         imageUrl: String(formData.get("imageUrl") ?? "").trim(),
-        ctaLabel: String(formData.get("ctaLabel") ?? "").trim(),
-        ctaUrl: String(formData.get("ctaUrl") ?? "").trim(),
-        usageCount: toNumber(formData.get("usageCount")),
-        isActive: toBoolean(formData.get("isActive"), true),
+        position: toNumber(formData.get("position")),
+        isActive,
       }
     : {
-        title: String(formData.get("title") ?? "").trim(),
         code: String(formData.get("code") ?? "").trim().toUpperCase(),
-        subtitle: String(formData.get("subtitle") ?? "").trim(),
-        discountPercent: toNumber(formData.get("discountPercent")),
+        discountType: String(formData.get("discountType") ?? "percentage").trim().toLowerCase(),
+        discountValue: toNumber(formData.get("discountValue")),
         minOrderValue: toNumber(formData.get("minOrderValue")),
-        usageCount: toNumber(formData.get("usageCount")),
-        isActive: toBoolean(formData.get("isActive"), true),
+        maxDiscount: toNumber(formData.get("maxDiscount")),
+        usageLimit: toNumber(formData.get("usageLimit")) || null,
+        isActive,
       };
 
   const databases = createDatabasesWithApiKey();
@@ -452,6 +584,28 @@ async function saveAddonAction(formData: FormData) {
   }
 
   redirect(returnTo);
+}
+
+const ORDER_FLOW = ["placed", "confirmed", "shipped", "out_for_delivery", "delivered", "completed"] as const;
+const ORDER_STATUS_TERMINAL = ["delivered", "completed", "cancelled", "refunded_to_wallet"];
+const ORDER_STATUS_LABELS: Record<string, string> = {
+  confirmed: "Confirm",
+  shipped: "Mark shipped",
+  out_for_delivery: "Out for delivery",
+  delivered: "Mark delivered",
+  completed: "Mark completed",
+  cancelled: "Cancel order",
+};
+
+function nextOrderStatusOptions(current: string) {
+  const normalized = current.trim().toLowerCase();
+  const index = ORDER_FLOW.indexOf(normalized as (typeof ORDER_FLOW)[number]);
+  const forward = index >= 0 ? ORDER_FLOW.slice(index + 1) : [];
+  const options: string[] = [...forward];
+  if (!ORDER_STATUS_TERMINAL.includes(normalized)) {
+    options.push("cancelled");
+  }
+  return options;
 }
 
 function AdminPagination({
@@ -502,28 +656,68 @@ function AdminModal({
   title,
   backHref,
   children,
+  maxWidth = "max-w-lg",
 }: {
   title: string;
   backHref: string;
   children: React.ReactNode;
+  maxWidth?: string;
 }) {
   return (
-    <div className="fixed inset-0 z-[120] flex items-end bg-primary/45 p-3 backdrop-blur-sm sm:items-center sm:justify-center sm:p-6">
-      <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-primary/15 bg-secondary p-4 shadow-[0_24px_48px_rgba(40,0,0,0.24)] sm:p-6">
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-primary/50 p-4 backdrop-blur-sm">
+      <div className={`max-h-[90vh] w-full ${maxWidth} overflow-y-auto rounded-3xl border border-primary/15 bg-secondary p-5 shadow-[0_24px_48px_rgba(40,0,0,0.28)]`}>
         <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="text-xl font-semibold sm:text-2xl">{title}</h2>
-          <Link
-            href={backHref}
-            aria-label="Go back from modal"
-            className="rounded-xl border border-primary/20 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-primary/80 transition hover:border-primary/42"
-          >
-            Go Back
-          </Link>
+          <h2 className="text-lg font-semibold sm:text-xl">{title}</h2>
+          <AdminModalClose href={backHref} />
         </div>
         {children}
       </div>
     </div>
   );
+}
+
+function getDateRangeFromPeriod(period: string): { from: string; to: string } | null {
+  if (!period) {
+    return null;
+  }
+
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const isoDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+  if (period === "today") {
+    const s = isoDate(now);
+    return { from: s, to: s };
+  }
+
+  if (period === "yesterday") {
+    const d = new Date(now);
+    d.setDate(d.getDate() - 1);
+    const s = isoDate(d);
+    return { from: s, to: s };
+  }
+
+  if (period === "week") {
+    const d = new Date(now);
+    d.setDate(d.getDate() - 6);
+    return { from: isoDate(d), to: isoDate(now) };
+  }
+
+  if (period === "month") {
+    const from = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
+    return { from, to: isoDate(now) };
+  }
+
+  const yearNum = Number(period);
+  if (Number.isFinite(yearNum) && yearNum > 2000) {
+    const isCurrentYear = yearNum === now.getFullYear();
+    return {
+      from: `${yearNum}-01-01`,
+      to: isCurrentYear ? isoDate(now) : `${yearNum}-12-31`,
+    };
+  }
+
+  return null;
 }
 
 export default async function AdminPage({
@@ -532,18 +726,20 @@ export default async function AdminPage({
   searchParams?: Promise<SearchParams>;
 }) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
-  const activeTab = getActiveTab(getFirstParam(resolvedSearchParams, "tab", "dashboard"));
+  const activeTab = getActiveTab(getFirstParam(resolvedSearchParams, "tab", "products"));
   const activeAddon = getActiveAddon(getFirstParam(resolvedSearchParams, "addon", "banners"));
   const productPage = getPositiveInt(resolvedSearchParams, "page", 1);
   const productQuery = getFirstParam(resolvedSearchParams, "q").trim().toLowerCase();
-  const addonPage = getPositiveInt(resolvedSearchParams, "addonsPage", 1);
-  const ordersPage = getPositiveInt(resolvedSearchParams, "ordersPage", 1);
-  const paymentsPage = getPositiveInt(resolvedSearchParams, "paymentsPage", 1);
+  const txnQuery = getFirstParam(resolvedSearchParams, "q").trim().toLowerCase();
+  const txnPeriod = getFirstParam(resolvedSearchParams, "period").trim();
+  const periodRange = getDateRangeFromPeriod(txnPeriod);
+  const dateFrom = periodRange?.from ?? "";
+  const dateTo = periodRange?.to ?? "";
   const modal = getFirstParam(resolvedSearchParams, "modal");
   const entityId = getFirstParam(resolvedSearchParams, "id");
+  const refundStatus = getFirstParam(resolvedSearchParams, "refund");
+  const orderStatusUpdate = getFirstParam(resolvedSearchParams, "orderStatus");
   const productPageSize = 12;
-  const addonPageSize = 10;
-  const transactionPageSize = 8;
 
   const cookieStore = await cookies();
   const hasAdminSession = Boolean(cookieStore.get("nt_admin_session")?.value);
@@ -555,20 +751,6 @@ export default async function AdminPage({
       </main>
     );
   }
-
-  const [productsCount, ordersCount, paymentsCount, reviewsCount] = await Promise.all([
-    listDocumentsFromCandidates(["sku"], [Query.limit(1)]).then((result) => result.total).catch(() => 0),
-    listDocumentsFromCandidates(["orders"], [Query.limit(1)]).then((result) => result.total).catch(() => 0),
-    listDocumentsFromCandidates(["payments"], [Query.limit(1)]).then((result) => result.total).catch(() => 0),
-    listDocumentsFromCandidates(["reviews"], [Query.limit(1)]).then((result) => result.total).catch(() => 0),
-  ]);
-
-  const overview: Overview = {
-    products: productsCount,
-    orders: ordersCount,
-    payments: paymentsCount,
-    reviews: reviewsCount,
-  };
 
   let products: AdminProduct[] = [];
   let productsTotal = 0;
@@ -602,44 +784,65 @@ export default async function AdminPage({
   }
 
   let addons: AdminAddon[] = [];
-  let addonsTotal = 0;
   if (activeTab === "addons") {
     const addonCollections = activeAddon === "banners" ? ["banners", "banner"] : ["coupons", "coupon"];
     const result = await listDocumentsFromCandidates(addonCollections, [
-      Query.limit(addonPageSize),
-      Query.offset((addonPage - 1) * addonPageSize),
+      Query.limit(100),
       Query.orderDesc("$createdAt"),
     ]);
-    addonsTotal = result.total;
     addons = result.documents.map((document) => mapAddon(document));
   }
 
   let orderItems: AdminTransaction[] = [];
-  let orderTotal = 0;
   let paymentItems: AdminTransaction[] = [];
-  let paymentTotal = 0;
+  let paymentStatusSummary = {
+    paid: 0,
+    failed: 0,
+    created: 0,
+    refundedToWallet: 0,
+  };
 
   if (activeTab === "orders") {
     const ordersResult = await listDocumentsFromCandidates(["orders"], [
-      Query.limit(transactionPageSize),
-      Query.offset((ordersPage - 1) * transactionPageSize),
+      Query.limit(100),
       Query.orderDesc("$createdAt"),
     ]);
 
-    orderTotal = ordersResult.total;
-    orderItems = ordersResult.documents.map((document) => mapTransaction(document, "Order"));
+    orderItems = ordersResult.documents
+      .filter(
+        (document) =>
+          matchesTransactionQuery(document, txnQuery) &&
+          withinDateRange(String(document.$createdAt ?? document.placedAt ?? ""), dateFrom, dateTo)
+      )
+      .map((document) => mapTransaction(document, "Order"));
   }
 
   if (activeTab === "payments") {
-    const paymentsResult = await listDocumentsFromCandidates(["payments"], [
-      Query.limit(transactionPageSize),
-      Query.offset((paymentsPage - 1) * transactionPageSize),
-      Query.orderDesc("$createdAt"),
+    const [paymentsResult, paidCount, failedCount, createdCount, refundedToWalletCount] = await Promise.all([
+      listDocumentsFromCandidates(["payments"], [Query.limit(100), Query.orderDesc("$createdAt")]),
+      listDocumentsFromCandidates(["payments"], [Query.equal("status", "paid"), Query.limit(1)]).then((result) => result.total).catch(() => 0),
+      listDocumentsFromCandidates(["payments"], [Query.equal("status", "failed"), Query.limit(1)]).then((result) => result.total).catch(() => 0),
+      listDocumentsFromCandidates(["payments"], [Query.equal("status", "created"), Query.limit(1)]).then((result) => result.total).catch(() => 0),
+      listDocumentsFromCandidates(["payments"], [Query.equal("status", "refunded_to_wallet"), Query.limit(1)]).then((result) => result.total).catch(() => 0),
     ]);
 
-    paymentTotal = paymentsResult.total;
-    paymentItems = paymentsResult.documents.map((document) => mapTransaction(document, "Payment"));
+    paymentItems = paymentsResult.documents
+      .filter(
+        (document) =>
+          matchesTransactionQuery(document, txnQuery) &&
+          withinDateRange(String(document.$createdAt ?? document.paidAt ?? ""), dateFrom, dateTo)
+      )
+      .map((document) => mapTransaction(document, "Payment"));
+    paymentStatusSummary = {
+      paid: paidCount,
+      failed: failedCount,
+      created: createdCount,
+      refundedToWallet: refundedToWalletCount,
+    };
   }
+
+  const productFormOptions =
+    modal === "product-create" || modal === "product-edit" ? await getProductFormOptions() : null;
 
   let modalDocument: Record<string, unknown> | null = null;
   let modalDocumentType: "product" | "banner" | "coupon" | "order" | "payment" | null = null;
@@ -672,10 +875,43 @@ export default async function AdminPage({
 
   return (
     <main className="min-h-screen bg-paper px-5 pb-24 pt-2 text-primary sm:px-5 sm:pt-16 md:px-8 md:pb-10 md:pt-24">
+      {refundStatus ? (
+        <section className="mx-auto mb-3 w-full max-w-7xl rounded-2xl border border-primary/16 bg-secondary px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary/62">Refund Update</p>
+          <p className="mt-1 text-sm text-primary/84">
+            {refundStatus === "success"
+              ? "Refund credited to user wallet successfully."
+              : refundStatus === "duplicate"
+                ? "Refund already credited to wallet for this order."
+                : refundStatus === "not-paid"
+                  ? "Only paid orders can be refunded to wallet."
+                  : refundStatus === "invalid-order"
+                    ? "Order data is invalid for wallet refund."
+                    : refundStatus === "missing-order"
+                      ? "Order was not provided for refund action."
+                      : "Refund action failed. Please retry."}
+          </p>
+        </section>
+      ) : null}
+
+      {orderStatusUpdate ? (
+        <section className="mx-auto mb-3 w-full max-w-7xl rounded-2xl border border-primary/16 bg-secondary px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary/62">Order Status</p>
+          <p className="mt-1 text-sm text-primary/84">
+            {orderStatusUpdate === "success"
+              ? "Order status updated and customer notified."
+              : orderStatusUpdate === "invalid"
+                ? "That status change is not allowed from the current state."
+                : orderStatusUpdate === "missing"
+                  ? "Order or status was missing for the update."
+                  : "Could not update order status. Please retry."}
+          </p>
+        </section>
+      ) : null}
+
       <section className="mx-auto hidden w-full max-w-7xl md:block">
-        <nav aria-label="Admin sections" className="grid grid-cols-5 gap-2">
+        <nav aria-label="Admin sections" className="grid grid-cols-4 gap-2">
           {[
-            { id: "dashboard", label: "Dashboard" },
             { id: "products", label: "Products" },
             { id: "addons", label: "AddOns" },
             { id: "orders", label: "Orders" },
@@ -705,36 +941,6 @@ export default async function AdminPage({
           })}
         </nav>
       </section>
-
-      {activeTab === "dashboard" ? (
-        <section className="mx-auto mt-4 w-full max-w-7xl">
-          
-
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
-            {[
-              { label: "Products", value: overview.products },
-              { label: "Orders", value: overview.orders },
-              { label: "Payments", value: overview.payments },
-              { label: "Reviews", value: overview.reviews },
-            ].map((item) => (
-              <article key={item.label} className="rounded-2xl border border-primary/12 bg-[#fff4e4] p-4 sm:p-5">
-                <p className="text-[0.62rem] font-semibold uppercase tracking-[0.2em] text-primary/62">{item.label}</p>
-                <p className="mt-2 text-3xl font-semibold leading-none sm:mt-3">{item.value}</p>
-              </article>
-            ))}
-          </div>
-
-          <div className="mt-4 flex justify-end">
-            <Link
-              href="/products"
-              aria-label="Open products page"
-              className="rounded-xl border border-secondary/20 bg-primary px-3 py-2 text-secondary text-xs font-semibold uppercase tracking-[0.15em] transition hover:border-secondary/45 hover:scale-95"
-            >
-              Open Products Page
-            </Link>
-          </div>
-        </section>
-      ) : null}
 
       {activeTab === "products" ? (
         <section className="mx-auto mt-4 w-full max-w-7xl sm:mt-5">
@@ -859,7 +1065,7 @@ export default async function AdminPage({
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <h2 className="text-xl font-semibold sm:text-2xl">AddOns</h2>
-              <p className="mt-1 text-sm text-primary/72">Manage banners and coupons with live counts and details.</p>
+              <p className="mt-1 text-sm text-primary/72">Manage banners and coupons.</p>
             </div>
             <Link
               href={buildAdminHref(resolvedSearchParams, {
@@ -897,60 +1103,56 @@ export default async function AdminPage({
           {addons.length === 0 ? (
             <p className="text-sm text-primary/72">No {activeAddon} found in database.</p>
           ) : (
-            <div className="divide-y divide-primary/10 rounded-2xl border border-primary/12 bg-paper">
+            <div className="max-h-[70vh] divide-y divide-primary/10 overflow-y-auto rounded-2xl border border-primary/12 bg-paper">
               {addons.map((addon) => (
-                <article key={addon.id} className="flex flex-col gap-2 p-3.5 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-primary">{activeAddon === "coupons" ? addon.code || addon.title : addon.title}</p>
-                    <p className="mt-1 text-xs text-primary/70">{addon.subtitle || "No subtitle"}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full border border-primary/16 bg-secondary px-2.5 py-1 text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-primary/78">
-                      Usage {addon.usageCount}
+                <article key={addon.id} className="relative p-3.5 pr-[5.5rem]">
+                  {/* Edit button pinned top-right */}
+                  <Link
+                    href={buildAdminHref(resolvedSearchParams, {
+                      modal: activeAddon === "banners" ? "banner-edit" : "coupon-edit",
+                      id: addon.id,
+                    })}
+                    aria-label={`Edit ${activeAddon === "coupons" ? addon.code || addon.title : addon.title}`}
+                    className="absolute right-3 top-3 rounded-lg border border-primary/20 bg-paper px-2.5 py-1.5 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-primary/80 transition hover:border-primary/40"
+                  >
+                    Edit
+                  </Link>
+                  <p className="text-sm font-semibold text-primary">
+                    {activeAddon === "coupons" ? addon.code || addon.title : addon.title}
+                  </p>
+                  {activeAddon === "coupons" ? (
+                    <p className="mt-0.5 text-xs text-primary/65">{addon.subtitle || "—"}</p>
+                  ) : null}
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {activeAddon === "coupons" ? (
+                      <span className="rounded-full border border-primary/16 bg-secondary px-2.5 py-1 text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-primary/70">
+                        {addon.usageCount} used
+                      </span>
+                    ) : null}
+                    <span className={`rounded-full border px-2.5 py-1 text-[0.62rem] font-semibold uppercase tracking-[0.14em] ${
+                      addon.isActive !== false
+                        ? "border-green-200 bg-green-50 text-green-700"
+                        : "border-zinc-200 bg-zinc-50 text-zinc-500"
+                    }`}>
+                      {addon.isActive !== false ? "Active" : "Inactive"}
                     </span>
-                    <Link
-                      href={buildAdminHref(resolvedSearchParams, {
-                        modal: activeAddon === "banners" ? "banner-view" : "coupon-view",
-                        id: addon.id,
-                      })}
-                      aria-label={`View ${addon.title}`}
-                      className="rounded-lg border border-primary/20 px-2.5 py-1.5 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-primary/80"
-                    >
-                      View
-                    </Link>
-                    <Link
-                      href={buildAdminHref(resolvedSearchParams, {
-                        modal: activeAddon === "banners" ? "banner-edit" : "coupon-edit",
-                        id: addon.id,
-                      })}
-                      aria-label={`Edit ${addon.title}`}
-                      className="rounded-lg border border-primary/20 px-2.5 py-1.5 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-primary/80"
-                    >
-                      Edit
-                    </Link>
                   </div>
                 </article>
               ))}
             </div>
           )}
-
-          <AdminPagination
-            page={addonPage}
-            total={addonsTotal}
-            pageSize={addonPageSize}
-            prevHref={buildAdminHref(resolvedSearchParams, { addonsPage: String(Math.max(1, addonPage - 1)) })}
-            nextHref={buildAdminHref(resolvedSearchParams, { addonsPage: String(addonPage + 1) })}
-          />
         </section>
       ) : null}
 
       {activeTab === "orders" ? (
         <section className="mx-auto mt-4 w-full max-w-7xl sm:mt-5">
           <h2 className="text-xl font-semibold sm:text-2xl">Orders</h2>
-          <p className="mt-1 text-sm text-primary/74">Operational orders stream with server-side pagination.</p>
+          <p className="mt-1 text-sm text-primary/74">Operational orders stream with wallet-first refund actions.</p>
+
+          <AdminTransactionFilters tab="orders" q={txnQuery} period={txnPeriod} />
 
           <div className="mt-4">
-            <div className="mt-2 divide-y divide-primary/10 rounded-2xl border border-primary/12 bg-paper">
+            <div className="mt-2 max-h-[68vh] divide-y divide-primary/10 overflow-y-auto rounded-2xl border border-primary/12 bg-paper">
               {orderItems.length === 0 ? (
                 <p className="p-3 text-sm text-primary/70">No orders found.</p>
               ) : (
@@ -962,8 +1164,23 @@ export default async function AdminPage({
                         <p className="text-sm font-semibold text-primary">{order.title}</p>
                         <p className="text-xs text-primary/72">{order.subtitle || order.status}</p>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap justify-end">
                         <span className="text-sm font-semibold text-primary/90">{order.amount > 0 ? formatPrice(order.amount) : "-"}</span>
+                        {String(order.raw.paymentStatus ?? "").toLowerCase() === "paid" &&
+                        String(order.raw.status ?? "").toLowerCase() !== "refunded_to_wallet" ? (
+                          <form action="/api/admin/orders/refund-to-wallet" method="POST">
+                            <input type="hidden" name="orderId" value={order.id} />
+                            <input type="hidden" name="reason" value="Admin approved wallet refund" />
+                            <input type="hidden" name="returnTo" value={buildAdminHref(resolvedSearchParams, {})} />
+                            <button
+                              type="submit"
+                              aria-label={`Refund order ${order.id} to wallet`}
+                              className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-emerald-700"
+                            >
+                              Refund to Wallet
+                            </button>
+                          </form>
+                        ) : null}
                         <Link
                           href={buildAdminHref(resolvedSearchParams, { modal: "order-view", id: order.id })}
                           aria-label={`View order ${order.id}`}
@@ -973,18 +1190,50 @@ export default async function AdminPage({
                         </Link>
                       </div>
                     </div>
+
+                    {(() => {
+                      const currentStatus = String(order.raw.status ?? "").toLowerCase();
+                      const options = nextOrderStatusOptions(currentStatus);
+                      if (options.length === 0) {
+                        return null;
+                      }
+                      return (
+                        <form
+                          action="/api/admin/orders/status"
+                          method="POST"
+                          className="mt-2.5 flex flex-wrap items-center gap-2 border-t border-primary/10 pt-2.5"
+                        >
+                          <input type="hidden" name="orderId" value={order.id} />
+                          <input type="hidden" name="returnTo" value={buildAdminHref(resolvedSearchParams, {})} />
+                          <span className="rounded-md bg-secondary px-2 py-1 text-[0.6rem] font-semibold uppercase tracking-[0.12em] text-primary/70">
+                            {currentStatus.replace(/_/g, " ") || "—"}
+                          </span>
+                          <select
+                            name="status"
+                            aria-label={`Update status for order ${order.id}`}
+                            defaultValue={options[0]}
+                            className="h-9 rounded-lg border border-primary/20 bg-paper px-2 text-xs text-primary"
+                          >
+                            {options.map((option) => (
+                              <option key={option} value={option}>
+                                {ORDER_STATUS_LABELS[option] ?? option}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="submit"
+                            aria-label={`Apply status change to order ${order.id}`}
+                            className="rounded-lg border border-primary/25 bg-primary px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-paper"
+                          >
+                            Update
+                          </button>
+                        </form>
+                      );
+                    })()}
                   </article>
                 ))
               )}
             </div>
-
-            <AdminPagination
-              page={ordersPage}
-              total={orderTotal}
-              pageSize={transactionPageSize}
-              prevHref={buildAdminHref(resolvedSearchParams, { ordersPage: String(Math.max(1, ordersPage - 1)) })}
-              nextHref={buildAdminHref(resolvedSearchParams, { ordersPage: String(ordersPage + 1) })}
-            />
           </div>
         </section>
       ) : null}
@@ -992,10 +1241,31 @@ export default async function AdminPage({
       {activeTab === "payments" ? (
         <section className="mx-auto mt-4 w-full max-w-7xl sm:mt-5">
           <h2 className="text-xl font-semibold sm:text-2xl">Payments</h2>
-          <p className="mt-1 text-sm text-primary/74">Payments stream with server-side pagination.</p>
+          <p className="mt-1 text-sm text-primary/74">Payments stream with reconciliation status and refund tracking.</p>
+
+          <AdminTransactionFilters tab="payments" q={txnQuery} period={txnPeriod} />
+
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <article className="rounded-xl border border-primary/12 bg-secondary p-3">
+              <p className="text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-primary/62">Paid</p>
+              <p className="mt-1 text-2xl font-semibold text-primary">{paymentStatusSummary.paid}</p>
+            </article>
+            <article className="rounded-xl border border-primary/12 bg-secondary p-3">
+              <p className="text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-primary/62">Failed</p>
+              <p className="mt-1 text-2xl font-semibold text-primary">{paymentStatusSummary.failed}</p>
+            </article>
+            <article className="rounded-xl border border-primary/12 bg-secondary p-3">
+              <p className="text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-primary/62">Pending</p>
+              <p className="mt-1 text-2xl font-semibold text-primary">{paymentStatusSummary.created}</p>
+            </article>
+            <article className="rounded-xl border border-primary/12 bg-secondary p-3">
+              <p className="text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-primary/62">Refunded To Wallet</p>
+              <p className="mt-1 text-2xl font-semibold text-primary">{paymentStatusSummary.refundedToWallet}</p>
+            </article>
+          </div>
 
           <div className="mt-4">
-            <div className="mt-2 divide-y divide-primary/10 rounded-2xl border border-primary/12 bg-paper">
+            <div className="mt-2 max-h-[60vh] divide-y divide-primary/10 overflow-y-auto rounded-2xl border border-primary/12 bg-paper">
               {paymentItems.length === 0 ? (
                 <p className="p-3 text-sm text-primary/70">No payments found.</p>
               ) : (
@@ -1022,96 +1292,159 @@ export default async function AdminPage({
                 ))
               )}
             </div>
-
-            <AdminPagination
-              page={paymentsPage}
-              total={paymentTotal}
-              pageSize={transactionPageSize}
-              prevHref={buildAdminHref(resolvedSearchParams, { paymentsPage: String(Math.max(1, paymentsPage - 1)) })}
-              nextHref={buildAdminHref(resolvedSearchParams, { paymentsPage: String(paymentsPage + 1) })}
-            />
           </div>
         </section>
       ) : null}
 
       {modal === "product-view" && modalDocumentType === "product" && modalDocument ? (
-        <AdminModal title="Product Details" backHref={baseWithoutModal}>
-          <div className="space-y-2 text-sm">
-            {Object.entries(modalDocument).map(([key, value]) => (
-              <div key={key} className="grid grid-cols-[7.2rem_1fr] gap-2 border-b border-primary/8 pb-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary/60">{key}</p>
-                <p className="break-all text-primary/84">{serializeForDetail(value)}</p>
+        <AdminModal title="Product Details" backHref={baseWithoutModal} maxWidth="max-w-lg">
+          {(() => {
+            const p = mapProduct(modalDocument);
+            return (
+              <div className="space-y-4 text-sm">
+                {p.mainImageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={p.mainImageUrl} alt={p.name} className="h-48 w-full rounded-xl object-cover border border-primary/10" />
+                ) : null}
+                <div>
+                  <p className="text-base font-semibold text-primary">{p.name}</p>
+                  <p className="mt-0.5 text-xs text-primary/60">{p.category}{p.subCategory ? ` · ${p.subCategory}` : ""}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl border border-primary/12 bg-paper p-3">
+                    <p className="text-[0.6rem] font-semibold uppercase tracking-[0.16em] text-primary/55">Price</p>
+                    <p className="mt-1 font-semibold text-primary">{formatPrice(p.discountPrice || p.originalPrice)}</p>
+                    {p.discountPrice > 0 && p.originalPrice > p.discountPrice ? (
+                      <p className="mt-0.5 text-xs text-primary/55 line-through">{formatPrice(p.originalPrice)}</p>
+                    ) : null}
+                  </div>
+                  <div className="rounded-xl border border-primary/12 bg-paper p-3">
+                    <p className="text-[0.6rem] font-semibold uppercase tracking-[0.16em] text-primary/55">Stock</p>
+                    <p className="mt-1 font-semibold text-primary">{p.stockQty}</p>
+                    <p className={`mt-0.5 text-xs ${p.inStock ? "text-green-600" : "text-red-500"}`}>{p.inStock ? "In stock" : "Out of stock"}</p>
+                  </div>
+                </div>
+                {p.sizeOptions.length > 0 ? (
+                  <div>
+                    <p className="mb-1.5 text-[0.6rem] font-semibold uppercase tracking-[0.16em] text-primary/55">Sizes</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {p.sizeOptions.map((s) => <span key={s} className="rounded-full border border-primary/20 bg-paper px-2.5 py-1 text-xs">{s}</span>)}
+                    </div>
+                  </div>
+                ) : null}
+                {p.colorOptions.length > 0 ? (
+                  <div>
+                    <p className="mb-1.5 text-[0.6rem] font-semibold uppercase tracking-[0.16em] text-primary/55">Colors</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {p.colorOptions.map((c) => <span key={c} className="rounded-full border border-primary/20 bg-paper px-2.5 py-1 text-xs">{c}</span>)}
+                    </div>
+                  </div>
+                ) : null}
+                {p.description ? (
+                  <div>
+                    <p className="mb-1 text-[0.6rem] font-semibold uppercase tracking-[0.16em] text-primary/55">Description</p>
+                    <p className="text-primary/80 leading-relaxed">{p.description}</p>
+                  </div>
+                ) : null}
               </div>
-            ))}
-          </div>
+            );
+          })()}
         </AdminModal>
       ) : null}
 
       {(modal === "product-edit" || modal === "product-create") ? (
-        <AdminModal title={modal === "product-create" ? "Create Product" : "Edit Product"} backHref={baseWithoutModal}>
+        <AdminModal title={modal === "product-create" ? "Create Product" : "Edit Product"} backHref={baseWithoutModal} maxWidth="max-w-2xl">
           <form action={saveProductAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <input type="hidden" name="productId" value={modal === "product-edit" ? String(modalDocument?.$id ?? entityId) : ""} />
             <input type="hidden" name="returnTo" value={baseWithoutModal} />
-            <label className="flex flex-col gap-1.5">
+            <label className="sm:col-span-2 flex flex-col gap-1.5">
               <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Name</span>
               <input aria-label="Product name" name="name" defaultValue={String(modalDocument?.name ?? "")} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" required />
             </label>
             <label className="flex flex-col gap-1.5">
-              <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">SKU</span>
-              <input aria-label="Product SKU" name="sku" defaultValue={String(modalDocument?.sku ?? "")} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" required />
-            </label>
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Slug</span>
-              <input aria-label="Product slug" name="slug" defaultValue={String(modalDocument?.slug ?? "")} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" />
-            </label>
-            <label className="flex flex-col gap-1.5">
               <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Category</span>
-              <input aria-label="Product category" name="category" defaultValue={String(modalDocument?.category ?? "")} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" required />
+              <select
+                aria-label="Product category"
+                name="category"
+                defaultValue={String(modalDocument?.category ?? "")}
+                className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm"
+                required
+              >
+                <option value="" disabled>
+                  Select category
+                </option>
+                {(productFormOptions?.categories ?? []).map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="flex flex-col gap-1.5">
               <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Sub Category</span>
-              <input aria-label="Product sub category" name="subCategory" defaultValue={String(modalDocument?.subCategory ?? modalDocument?.subcategory ?? "")} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" />
-            </label>
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Main Image URL</span>
-              <input aria-label="Main image URL" name="mainImageUrl" defaultValue={String(modalDocument?.mainImageUrl ?? "")} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" required />
-            </label>
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Discount Price</span>
-              <input aria-label="Discount price" name="discountPrice" type="number" defaultValue={String(modalDocument?.discountPrice ?? 0)} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" required />
+              <select
+                aria-label="Product sub category"
+                name="subcategory"
+                defaultValue={String(modalDocument?.subcategory ?? modalDocument?.subCategory ?? "")}
+                className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm"
+                required
+              >
+                <option value="" disabled>
+                  Select sub category
+                </option>
+                {(productFormOptions?.subcategories ?? []).map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="flex flex-col gap-1.5">
               <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Original Price</span>
-              <input aria-label="Original price" name="originalPrice" type="number" defaultValue={String(modalDocument?.originalPrice ?? 0)} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" required />
+              <input aria-label="Original price" name="originalPrice" type="number" min="0" defaultValue={String(modalDocument?.originalPrice ?? 0)} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" required />
             </label>
             <label className="flex flex-col gap-1.5">
+              <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Discount Price</span>
+              <input aria-label="Discount price" name="discountPrice" type="number" min="0" defaultValue={String(modalDocument?.discountPrice ?? 0)} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" />
+            </label>
+            <label className="sm:col-span-2 flex flex-col gap-1.5">
               <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Stock Qty</span>
-              <input aria-label="Stock quantity" name="stockQty" type="number" defaultValue={String(modalDocument?.stockQty ?? 0)} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" required />
-            </label>
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">InStock (true/false)</span>
-              <input aria-label="In stock value" name="inStock" defaultValue={String(modalDocument?.inStock ?? true)} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" required />
+              <input aria-label="Stock quantity" name="stockQty" type="number" min="0" defaultValue={String(modalDocument?.stockQty ?? 0)} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" required />
+              <span className="text-[0.62rem] text-primary/55">In-stock is set automatically when quantity is above 0.</span>
             </label>
             <label className="sm:col-span-2 flex flex-col gap-1.5">
               <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Description</span>
               <textarea aria-label="Product description" name="description" rows={4} defaultValue={String(modalDocument?.description ?? "")} className="rounded-xl border border-primary/18 bg-paper px-3 py-2.5 text-sm" required />
             </label>
-            <label className="sm:col-span-2 flex flex-col gap-1.5">
-              <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Sizes (comma separated)</span>
-              <input aria-label="Product sizes" name="sizeOptions" defaultValue={toStringArray(modalDocument?.sizeOptions).join(", ")} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" />
-            </label>
-            <label className="sm:col-span-2 flex flex-col gap-1.5">
-              <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Colors (comma separated)</span>
-              <input aria-label="Product colors" name="colorOptions" defaultValue={toStringArray(modalDocument?.colorOptions).join(", ")} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" />
-            </label>
-            <label className="sm:col-span-2 flex flex-col gap-1.5">
-              <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Other Image URLs (comma separated)</span>
-              <input aria-label="Other image URLs" name="otherImageUrls" defaultValue={toStringArray(modalDocument?.otherImageUrls).join(", ")} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" />
-            </label>
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Active (true/false)</span>
-              <input aria-label="Product active value" name="isActive" defaultValue={String(modalDocument?.isActive ?? true)} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" required />
-            </label>
+            <div className="sm:col-span-2 flex flex-col gap-1.5">
+              <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Sizes</span>
+              <AdminMultiSelectField
+                name="sizeOptions"
+                label="Size"
+                options={productFormOptions?.sizes ?? []}
+                defaultValue={toStringArray(modalDocument?.sizeOptions).join(", ")}
+                inline
+              />
+            </div>
+            <div className="sm:col-span-2 flex flex-col gap-1.5">
+              <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Colors</span>
+              <AdminMultiSelectField
+                name="colorOptions"
+                label="Color"
+                options={productFormOptions?.colors ?? []}
+                defaultValue={toStringArray(modalDocument?.colorOptions).join(", ")}
+                allowCustom
+              />
+              {/* inline not set → uses dropdown for the long color list */}
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Main Image</span>
+              <AdminImageUploadField name="mainImageUrl" label="Main image" defaultValue={String(modalDocument?.mainImageUrl ?? "")} required />
+            </div>
+            <div className="sm:col-span-2 flex flex-col gap-1.5">
+              <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Other Images</span>
+              <AdminImageUploadField name="otherImageUrls" label="Other images" multiple defaultValue={toStringArray(modalDocument?.otherImageUrls).join(", ")} />
+            </div>
             <div className="sm:col-span-2">
               <button type="submit" aria-label="Save product" className="cta-thread">Save</button>
             </div>
@@ -1121,77 +1454,308 @@ export default async function AdminPage({
 
       {(modal === "banner-create" || modal === "banner-edit" || modal === "coupon-create" || modal === "coupon-edit") ? (
         <AdminModal
-          title={modal.includes("create") ? "Create AddOn" : "Edit AddOn"}
+          title={modal.startsWith("banner") ? (modal.includes("create") ? "New Banner" : "Edit Banner") : (modal.includes("create") ? "New Coupon" : "Edit Coupon")}
           backHref={baseWithoutModal}
+          maxWidth="max-w-lg"
         >
-          <form action={saveAddonAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <input type="hidden" name="addonType" value={modal.startsWith("coupon") ? "coupons" : "banners"} />
-            <input type="hidden" name="addonId" value={modal.includes("edit") ? String(modalDocument?.$id ?? entityId) : ""} />
-            <input type="hidden" name="returnTo" value={baseWithoutModal} />
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Title</span>
-              <input aria-label="Addon title" name="title" defaultValue={String(modalDocument?.title ?? "")} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" required />
-            </label>
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Usage Count</span>
-              <input aria-label="Addon usage count" name="usageCount" type="number" defaultValue={String(modalDocument?.usageCount ?? 0)} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" required />
-            </label>
-            {modal.startsWith("coupon") ? (
-              <>
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Code</span>
-                  <input aria-label="Coupon code" name="code" defaultValue={String(modalDocument?.code ?? "")} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" required />
-                </label>
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Discount %</span>
-                  <input aria-label="Coupon discount percent" name="discountPercent" type="number" defaultValue={String(modalDocument?.discountPercent ?? 0)} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" />
-                </label>
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Minimum Order</span>
-                  <input aria-label="Coupon minimum order" name="minOrderValue" type="number" defaultValue={String(modalDocument?.minOrderValue ?? 0)} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" />
-                </label>
-              </>
-            ) : (
-              <>
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Image URL</span>
-                  <input aria-label="Banner image URL" name="imageUrl" defaultValue={String(modalDocument?.imageUrl ?? "")} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" />
-                </label>
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">CTA Label</span>
-                  <input aria-label="Banner CTA label" name="ctaLabel" defaultValue={String(modalDocument?.ctaLabel ?? "")} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" />
-                </label>
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">CTA URL</span>
-                  <input aria-label="Banner CTA URL" name="ctaUrl" defaultValue={String(modalDocument?.ctaUrl ?? "")} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" />
-                </label>
-              </>
-            )}
-            <label className="sm:col-span-2 flex flex-col gap-1.5">
-              <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Subtitle / Description</span>
-              <textarea aria-label="Addon subtitle" name="subtitle" rows={3} defaultValue={String(modalDocument?.subtitle ?? "")} className="rounded-xl border border-primary/18 bg-paper px-3 py-2.5 text-sm" />
-            </label>
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Active (true/false)</span>
-              <input aria-label="Addon active value" name="isActive" defaultValue={String(modalDocument?.isActive ?? true)} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" required />
-            </label>
-            <div className="sm:col-span-2">
-              <button type="submit" aria-label="Save addon" className="cta-thread">Save</button>
-            </div>
-          </form>
+          {modal.startsWith("banner") ? (
+            /* ── BANNER FORM ── title + active only ── */
+            <form action={saveAddonAction} className="flex flex-col gap-3">
+              <input type="hidden" name="addonType" value="banners" />
+              <input type="hidden" name="addonId" value={modal === "banner-edit" ? String(modalDocument?.$id ?? entityId) : ""} />
+              <input type="hidden" name="returnTo" value={baseWithoutModal} />
+              {/* Preserve required DB fields silently on edit */}
+              <input type="hidden" name="imageUrl" value={String(modalDocument?.imageUrl ?? "")} />
+              <input type="hidden" name="position" value={String(toNumber(modalDocument?.position))} />
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Banner Text</span>
+                <input
+                  aria-label="Banner text"
+                  name="title"
+                  defaultValue={String(modalDocument?.title ?? "")}
+                  placeholder="e.g. Free shipping on orders above ₹1,499"
+                  className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm outline-none focus:border-primary"
+                  required
+                />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Status</span>
+                <select
+                  aria-label="Banner active status"
+                  name="isActive"
+                  defaultValue={String(toBoolean(modalDocument?.isActive, true))}
+                  className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm outline-none focus:border-primary"
+                >
+                  <option value="true">Active — visible to customers</option>
+                  <option value="false">Inactive — hidden</option>
+                </select>
+              </label>
+              <button type="submit" aria-label="Save banner" className="cta-thread mt-1">Save Banner</button>
+            </form>
+          ) : (
+            /* ── COUPON FORM ── code / discount / limits / active ── */
+            <form action={saveAddonAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <input type="hidden" name="addonType" value="coupons" />
+              <input type="hidden" name="addonId" value={modal === "coupon-edit" ? String(modalDocument?.$id ?? entityId) : ""} />
+              <input type="hidden" name="returnTo" value={baseWithoutModal} />
+              <label className="sm:col-span-2 flex flex-col gap-1.5">
+                <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Coupon Code</span>
+                <input
+                  aria-label="Coupon code"
+                  name="code"
+                  defaultValue={String(modalDocument?.code ?? "")}
+                  placeholder="e.g. NAARI20"
+                  className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm uppercase tracking-wider outline-none focus:border-primary"
+                  required
+                />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Discount Type</span>
+                <select
+                  aria-label="Discount type"
+                  name="discountType"
+                  defaultValue={String(modalDocument?.discountType ?? "percentage")}
+                  className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm outline-none focus:border-primary"
+                  required
+                >
+                  <option value="percentage">Percentage (%)</option>
+                  <option value="fixed">Fixed Amount (₹)</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Discount Value</span>
+                <input
+                  aria-label="Discount value"
+                  name="discountValue"
+                  type="number"
+                  min="0"
+                  defaultValue={String(toNumber(modalDocument?.discountValue ?? modalDocument?.discountPercent))}
+                  placeholder="e.g. 20 for 20% off"
+                  className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm outline-none focus:border-primary"
+                  required
+                />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Min Order (₹)</span>
+                <input
+                  aria-label="Minimum order value"
+                  name="minOrderValue"
+                  type="number"
+                  min="0"
+                  defaultValue={String(toNumber(modalDocument?.minOrderValue))}
+                  placeholder="0 = no minimum"
+                  className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm outline-none focus:border-primary"
+                />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Max Discount Cap (₹)</span>
+                <input
+                  aria-label="Max discount amount"
+                  name="maxDiscount"
+                  type="number"
+                  min="0"
+                  defaultValue={String(toNumber(modalDocument?.maxDiscount))}
+                  placeholder="0 = no cap"
+                  className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm outline-none focus:border-primary"
+                />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Usage Limit</span>
+                <input
+                  aria-label="Usage limit"
+                  name="usageLimit"
+                  type="number"
+                  min="0"
+                  defaultValue={String(toNumber(modalDocument?.usageLimit))}
+                  placeholder="0 = unlimited"
+                  className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm outline-none focus:border-primary"
+                />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Status</span>
+                <select
+                  aria-label="Coupon active status"
+                  name="isActive"
+                  defaultValue={String(toBoolean(modalDocument?.isActive, true))}
+                  className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm outline-none focus:border-primary"
+                >
+                  <option value="true">Active — can be redeemed</option>
+                  <option value="false">Inactive — disabled</option>
+                </select>
+              </label>
+              <div className="sm:col-span-2">
+                <button type="submit" aria-label="Save coupon" className="cta-thread">Save Coupon</button>
+              </div>
+            </form>
+          )}
         </AdminModal>
       ) : null}
 
-      {(modal === "banner-view" || modal === "coupon-view" || modal === "order-view" || modal === "payment-view") && modalDocument ? (
-        <AdminModal title="Details" backHref={baseWithoutModal}>
-          <div className="space-y-2 text-sm">
-            {Object.entries(modalDocument).map(([key, value]) => (
-              <div key={key} className="grid grid-cols-[7.2rem_1fr] gap-2 border-b border-primary/8 pb-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary/60">{key}</p>
-                <p className="break-all text-primary/84">{serializeForDetail(value)}</p>
+      {/* ─── Order View Modal ─── */}
+      {modal === "order-view" && modalDocument ? (
+        <AdminModal title="Order Details" backHref={baseWithoutModal} maxWidth="max-w-xl">
+          {(() => {
+            const doc = modalDocument;
+            const statusColor: Record<string, string> = {
+              placed: "text-green-700 bg-green-50 border-green-200",
+              confirmed: "text-blue-700 bg-blue-50 border-blue-200",
+              shipped: "text-indigo-700 bg-indigo-50 border-indigo-200",
+              out_for_delivery: "text-purple-700 bg-purple-50 border-purple-200",
+              delivered: "text-emerald-700 bg-emerald-50 border-emerald-200",
+              completed: "text-emerald-700 bg-emerald-50 border-emerald-200",
+              payment_failed: "text-red-700 bg-red-50 border-red-200",
+              cancelled: "text-zinc-700 bg-zinc-50 border-zinc-200",
+              refunded_to_wallet: "text-amber-700 bg-amber-50 border-amber-200",
+            };
+            const status = String(doc.status ?? "").toLowerCase();
+            const payStatus = String(doc.paymentStatus ?? "").toLowerCase();
+
+            let items: Array<{productId: string; productName: string; quantity: number; size?: string; color?: string; unitAmount: number}> = [];
+            try { items = JSON.parse(String(doc.itemsJson ?? "[]")); } catch { items = []; }
+
+            let address: Record<string, unknown> = {};
+            try { address = JSON.parse(String(doc.shippingAddress ?? "{}")); } catch { address = {}; }
+
+            return (
+              <div className="space-y-4 text-sm">
+                {/* Header row */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-base font-semibold text-primary">{String(doc.orderNumber ?? doc.$id ?? "—")}</p>
+                  <span className={`rounded-full border px-2.5 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.14em] ${statusColor[status] ?? "text-primary/70 bg-secondary border-primary/20"}`}>
+                    {status.replace(/_/g, " ")}
+                  </span>
+                  <span className={`rounded-full border px-2.5 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.14em] ${statusColor[payStatus] ?? "text-primary/70 bg-secondary border-primary/20"}`}>
+                    {payStatus.replace(/_/g, " ")}
+                  </span>
+                </div>
+
+                {/* Placed at + amount */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl border border-primary/12 bg-paper p-3">
+                    <p className="text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-primary/55">Placed</p>
+                    <p className="mt-1 text-sm font-semibold text-primary">{formatDate(String(doc.placedAt ?? doc.$createdAt ?? ""))}</p>
+                  </div>
+                  <div className="rounded-xl border border-primary/12 bg-paper p-3">
+                    <p className="text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-primary/55">Total</p>
+                    <p className="mt-1 text-sm font-semibold text-primary">{formatPrice(toNumber(doc.totalAmount))}</p>
+                  </div>
+                </div>
+
+                {/* Customer */}
+                <div className="rounded-xl border border-primary/12 bg-paper p-3">
+                  <p className="text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-primary/55">Customer</p>
+                  <p className="mt-1 font-semibold text-primary">{String(doc.userEmail ?? "—")}</p>
+                  {address.fullName ? <p className="mt-0.5 text-primary/75">{String(address.fullName)}</p> : null}
+                  {address.phone ? <p className="mt-0.5 text-primary/75">{String(address.phone)}</p> : null}
+                </div>
+
+                {/* Shipping address */}
+                {address.line1 ? (
+                  <div className="rounded-xl border border-primary/12 bg-paper p-3">
+                    <p className="text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-primary/55">Ship to</p>
+                    <p className="mt-1 text-primary/84 leading-relaxed">
+                      {[address.line1, address.city, address.state, address.postalCode, address.country].filter(Boolean).join(", ")}
+                    </p>
+                  </div>
+                ) : null}
+
+                {/* Items */}
+                {items.length > 0 ? (
+                  <div className="rounded-xl border border-primary/12 bg-paper p-3">
+                    <p className="mb-2 text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-primary/55">Items ({items.length})</p>
+                    <div className="space-y-2">
+                      {items.map((item, i) => (
+                        <div key={i} className="flex items-center justify-between gap-2 border-t border-primary/8 pt-2 first:border-0 first:pt-0">
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold text-primary">{item.productName || item.productId}</p>
+                            <p className="text-xs text-primary/60">{[item.size, item.color].filter(Boolean).join(" · ")} · Qty {item.quantity}</p>
+                          </div>
+                          <p className="shrink-0 font-semibold text-primary/90">{formatPrice(item.unitAmount * item.quantity)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* Pricing breakdown */}
+                <div className="rounded-xl border border-primary/12 bg-paper p-3">
+                  <div className="space-y-1.5">
+                    {toNumber(doc.discountAmount) > 0 ? (
+                      <div className="flex justify-between text-xs text-primary/75">
+                        <span>Discount</span>
+                        <span className="text-green-700">−{formatPrice(toNumber(doc.discountAmount))}</span>
+                      </div>
+                    ) : null}
+                    {toNumber(doc.shippingAmount) > 0 ? (
+                      <div className="flex justify-between text-xs text-primary/75">
+                        <span>Delivery</span>
+                        <span>{formatPrice(toNumber(doc.shippingAmount))}</span>
+                      </div>
+                    ) : null}
+                    <div className="flex justify-between border-t border-primary/10 pt-1.5 font-semibold text-primary">
+                      <span>Total</span>
+                      <span>{formatPrice(toNumber(doc.totalAmount))}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
-            ))}
-          </div>
+            );
+          })()}
+        </AdminModal>
+      ) : null}
+
+      {/* ─── Payment View Modal ─── */}
+      {modal === "payment-view" && modalDocument ? (
+        <AdminModal title="Payment Details" backHref={baseWithoutModal} maxWidth="max-w-md">
+          {(() => {
+            const doc = modalDocument;
+            const status = String(doc.status ?? "").toLowerCase();
+            const statusColor: Record<string, string> = {
+              paid: "text-green-700 bg-green-50 border-green-200",
+              captured: "text-green-700 bg-green-50 border-green-200",
+              failed: "text-red-700 bg-red-50 border-red-200",
+              refunded_to_wallet: "text-amber-700 bg-amber-50 border-amber-200",
+              created: "text-zinc-600 bg-zinc-50 border-zinc-200",
+              authorized: "text-blue-700 bg-blue-50 border-blue-200",
+            };
+
+            let meta: Record<string, unknown> = {};
+            try { meta = JSON.parse(String(doc.paymentMeta ?? "{}")); } catch { meta = {}; }
+
+            return (
+              <div className="space-y-4 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`rounded-full border px-2.5 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.14em] ${statusColor[status] ?? "text-primary/70 bg-secondary border-primary/20"}`}>
+                    {status.replace(/_/g, " ")}
+                  </span>
+                  <p className="font-semibold text-primary">{formatPrice(toNumber(doc.amount))}</p>
+                  <p className="text-xs text-primary/60">{String(doc.currency ?? "INR")}</p>
+                </div>
+
+                <div className="rounded-xl border border-primary/12 bg-paper divide-y divide-primary/8">
+                  {[
+                    ["Order ID", doc.orderId],
+                    ["Provider", doc.provider],
+                    ["Razorpay Payment ID", meta.razorpayPaymentId || doc.providerPaymentId],
+                    ["Razorpay Order ID", meta.razorpayOrderId],
+                    ["Method", meta.method],
+                    ["Bank / Wallet", meta.bank || meta.wallet],
+                    ["Customer", meta.email || doc.userEmail],
+                    ["Contact", meta.contact],
+                    ["Paid at", doc.paidAt ? formatDate(String(doc.paidAt)) : "—"],
+                    ["Created", formatDate(String(doc.$createdAt ?? ""))],
+                  ]
+                    .filter(([, v]) => v && String(v).trim() && String(v) !== "undefined")
+                    .map(([label, value]) => (
+                      <div key={String(label)} className="flex items-start justify-between gap-3 px-3 py-2.5">
+                        <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-primary/55 shrink-0">{String(label)}</p>
+                        <p className="break-all text-right text-sm text-primary/84">{String(value)}</p>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            );
+          })()}
         </AdminModal>
       ) : null}
 

@@ -240,6 +240,29 @@ export async function getOrCreateUserProfile(args: {
   }
 }
 
+export async function readUserProfile(userId: string, jwt?: string) {
+  if (!hasUsersCollectionConfig() || !userId) {
+    return null;
+  }
+
+  const databases = getBrowserDatabases(jwt);
+  if (!databases) {
+    return null;
+  }
+
+  try {
+    const list = await databases.listDocuments<UserProfileDocument>(
+      appwritePublicConfig.databaseId,
+      appwritePublicConfig.usersCollectionId,
+      [Query.equal("userId", userId), Query.limit(1)]
+    );
+
+    return list.documents[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function updateUserProfile(args: {
   documentId: string;
   fullName: string;

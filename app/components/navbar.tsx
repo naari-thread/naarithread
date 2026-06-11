@@ -271,6 +271,7 @@ export function Navbar() {
   }, []);
 
   const isProductsRoute = pathname.startsWith("/products");
+  const isAdminRoute = pathname.startsWith("/admin");
   const desktopQuickLinks = [
     {
       href: "/products",
@@ -842,23 +843,36 @@ export function Navbar() {
 
             {/* Mobile: Direct actions (non-landing page) */}
             <div className="flex items-center gap-2 md:hidden">
-              <button
-                type="button"
-                aria-label="Open contact options"
-                aria-expanded={isContactPanelOpen}
-                onClick={() => setIsContactPanelOpen(true)}
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-secondary text-primary transition hover:border-primary/40"
-              >
-                <DynamicHugeIcon name="CallIcon" className="h-5.5 w-5.5" iconStrokeWidth={2.1} />
-              </button>
-              <button
-                type="button"
-                aria-label="Open Saathi chat"
-                onClick={() => window.dispatchEvent(new CustomEvent("open-saathi-chat"))}
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-secondary text-primary transition hover:border-primary/40"
-              >
-                <DynamicHugeIcon name="AiChat01Icon" className="h-5.5 w-5.5" iconStrokeWidth={1.8} />
-              </button>
+              {isAdminRoute ? (
+                <Link
+                  href="/products"
+                  aria-label="Open live website products page"
+                  className="inline-flex h-10 items-center gap-1.5 rounded-full border border-primary/20 bg-secondary px-3.5 text-[0.66rem] font-semibold uppercase tracking-[0.16em] text-primary transition hover:border-primary/40"
+                >
+                  Website
+                  <DynamicHugeIcon name="ArrowUpRight01Icon" className="h-4.5 w-4.5" iconStrokeWidth={2} />
+                </Link>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Open contact options"
+                    aria-expanded={isContactPanelOpen}
+                    onClick={() => setIsContactPanelOpen(true)}
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-secondary text-primary transition hover:border-primary/40"
+                  >
+                    <DynamicHugeIcon name="CallIcon" className="h-5.5 w-5.5" iconStrokeWidth={2.1} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Open Saathi chat"
+                    onClick={() => window.dispatchEvent(new CustomEvent("open-saathi-chat"))}
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-secondary text-primary transition hover:border-primary/40"
+                  >
+                    <DynamicHugeIcon name="AiChat01Icon" className="h-5.5 w-5.5" iconStrokeWidth={1.8} />
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </header>

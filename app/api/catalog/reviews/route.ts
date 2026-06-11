@@ -15,6 +15,7 @@ type ReviewDocument = Models.Document & {
   rating?: number;
   title?: string;
   comment?: string;
+  imageUrls?: string[];
   isVerifiedPurchase?: boolean;
   isApproved?: boolean;
 };
@@ -29,6 +30,9 @@ function toReviewRecord(document: ReviewDocument) {
     rating: Math.max(1, Math.min(5, Math.trunc(Number(document.rating ?? 5) || 5))),
     title: String(document.title ?? "").trim(),
     comment: String(document.comment ?? "").trim(),
+    imageUrls: Array.isArray(document.imageUrls)
+      ? document.imageUrls.map((url) => String(url ?? "").trim()).filter(Boolean)
+      : [],
     isVerifiedPurchase: Boolean(document.isVerifiedPurchase),
     isApproved: typeof document.isApproved === "boolean" ? document.isApproved : true,
     createdAt: String(document.$createdAt ?? ""),

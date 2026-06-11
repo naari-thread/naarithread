@@ -23,6 +23,7 @@ import {
   listProductReviews,
   type ProductReview,
 } from "@/lib/appwrite/reviews";
+import { uploadImageToCloudinary } from "@/lib/cloudinary-upload-client";
 import {
   readWishlistItems,
   toggleWishlistItem,
@@ -419,6 +420,13 @@ export function ProductDetailsClient({
 
     try {
       const jwt = await createAuthJwt();
+
+      // Upload any attached images to Cloudinary first, then persist their URLs.
+      const imageUrls: string[] = [];
+      for (const file of reviewImages.slice(0, 3)) {
+        imageUrls.push(await uploadImageToCloudinary(file, "review", jwt));
+      }
+
       const createdReview = await createProductReview({
         jwt,
         productId: product.id,
@@ -428,6 +436,7 @@ export function ProductDetailsClient({
         userEmail: user.email,
         rating: reviewRating,
         comment: safeComment,
+        imageUrls,
       });
 
       setReviews((previous) => [createdReview, ...previous]);
@@ -1330,6 +1339,27 @@ export function ProductDetailsClient({
                         <p className="mt-2.5 text-sm leading-relaxed text-primary/82">
                           {review.comment}
                         </p>
+                        {review.imageUrls.length > 0 ? (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {review.imageUrls.map((src) => (
+                              <a
+                                key={src}
+                                href={src}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="block h-16 w-16 overflow-hidden rounded-lg border border-primary/14"
+                              >
+                                <CloudinaryImage
+                                  src={src}
+                                  alt={`${review.userName} review photo`}
+                                  width={120}
+                                  height={120}
+                                  className="h-full w-full object-cover"
+                                />
+                              </a>
+                            ))}
+                          </div>
+                        ) : null}
                       </article>
                     ))}
                   </div>
