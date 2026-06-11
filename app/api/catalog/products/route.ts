@@ -1,12 +1,29 @@
 import { NextResponse } from "next/server";
 
-import { listProductsPageFromCollection } from "@/lib/appwrite/products";
+import { getProductsByIds, listProductsPageFromCollection } from "@/lib/appwrite/products";
 
 export const runtime = "nodejs";
 export const revalidate = 1800;
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
+
+  const idsParam = searchParams.get("ids") ?? "";
+  const ids = idsParam
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 100);
+
+  if (ids.length > 0) {
+    try {
+      const products = await getProductsByIds(ids);
+      return NextResponse.json({ products, total: products.length, hasMore: false, nextOffset: null }, { status: 200 });
+    } catch {
+      return NextResponse.json({ products: [], total: 0, hasMore: false, nextOffset: null }, { status: 200 });
+    }
+  }
+
   const limitParam = Number(searchParams.get("limit") ?? "12");
   const offsetParam = Number(searchParams.get("offset") ?? "0");
 

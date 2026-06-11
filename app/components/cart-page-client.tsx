@@ -22,10 +22,7 @@ import {
 import { readUserCartMap, upsertUserCartMap } from "@/lib/appwrite/shop-sync";
 import { readUserProfile, updateUserProfile } from "@/lib/appwrite/profiles";
 import {
-  areProductsEquivalent,
-  fetchCatalogProductsFromApi,
-  readCachedProductSnapshot,
-  writeCachedProductSnapshot,
+  fetchProductsByIds,
 } from "@/lib/product-catalog-cache";
 
 type CartLine = {
@@ -381,33 +378,35 @@ export function CartPageClient() {
 
   useEffect(() => {
     let alive = true;
-    const cachedProducts = readCachedProductSnapshot();
-
-    if (cachedProducts.length > 0) {
-      setProducts(cachedProducts);
-    }
-
     const controller = new AbortController();
 
-    const hydrateCatalog = async () => {
-      try {
-        const serverProducts = await fetchCatalogProductsFromApi(controller.signal);
-        if (!alive || serverProducts.length === 0) {
-          return;
-        }
+    // Fetch only the products that are in the cart by their exact IDs.
+    // Using the general catalog endpoint (limit=12) would incorrectly flag
+    // products from page 2+ as "stale" and auto-remove them.
+    const hydrateCartProducts = async () => {
+      const cartIds = Object.keys(readCartItems());
 
-        if (!areProductsEquivalent(serverProducts, cachedProducts)) {
+      if (cartIds.length === 0) {
+        if (alive) setHasCompletedCatalogSync(true);
+        return;
+      }
+
+      try {
+        const serverProducts = await fetchProductsByIds(cartIds, controller.signal);
+        if (!alive) return;
+        // serverProducts contains exactly what Appwrite returned for these IDs.
+        // Any cartId absent from the response genuinely doesn't exist anymore.
+        if (serverProducts.length > 0) {
           setProducts(serverProducts);
-          writeCachedProductSnapshot(serverProducts);
         }
+      } catch {
+        // On fetch error, don't flag anything as stale.
       } finally {
-        if (alive) {
-          setHasCompletedCatalogSync(true);
-        }
+        if (alive) setHasCompletedCatalogSync(true);
       }
     };
 
-    void hydrateCatalog();
+    void hydrateCartProducts();
 
     return () => {
       alive = false;

@@ -238,6 +238,21 @@ export async function listProductsPageFromCollection(options: ListProductsPageOp
   };
 }
 
+export async function getProductsByIds(ids: string[]): Promise<ProductRecord[]> {
+  if (ids.length === 0) return [];
+
+  const context = await resolveContext();
+  if (!context) return [];
+
+  const safeIds = ids.slice(0, 100);
+  const response = await context.databases.listDocuments(context.databaseId, context.collectionId, [
+    Query.equal("$id", safeIds),
+    Query.limit(safeIds.length),
+  ]);
+
+  return response.documents.map((doc) => toProductRecord(doc as Record<string, unknown>));
+}
+
 export async function getProductBySlug(slug: string) {
   const normalizedSlug = toSlug(slug);
   if (!normalizedSlug) {

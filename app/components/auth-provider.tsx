@@ -326,7 +326,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
       throw new Error("Appwrite auth is not configured.");
     }
 
-    const redirectUrl = `${typeof window !== "undefined" ? window.location.origin : appwritePublicConfig.endpoint}/account`;
+    // Return to the page the user was on. /account is mobile-only and shows
+    // a blank screen on desktop after the OAuth redirect.
+    const redirectUrl = typeof window !== "undefined" ? window.location.href : `${appwritePublicConfig.endpoint}/`;
 
     console.debug("[google-oauth] initiating sign in", {
       endpoint: appwritePublicConfig.endpoint,

@@ -61,6 +61,28 @@ export function writeCachedProductSnapshot(products: ProductRecord[]) {
   }
 }
 
+export async function fetchProductsByIds(ids: string[], signal?: AbortSignal): Promise<ProductRecord[]> {
+  if (typeof window === "undefined" || ids.length === 0) {
+    return [];
+  }
+
+  try {
+    const response = await fetch(`/api/catalog/products?ids=${ids.join(",")}`, {
+      cache: "no-store",
+      signal,
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const payload = (await response.json()) as { products?: unknown };
+    return normalizeProducts(payload.products);
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchCatalogProductsFromApi(signal?: AbortSignal): Promise<ProductRecord[]> {
   if (typeof window === "undefined") {
     return [];
