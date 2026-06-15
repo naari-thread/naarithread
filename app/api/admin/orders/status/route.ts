@@ -3,15 +3,16 @@ import { cookies } from "next/headers";
 import { ID, Permission, Role, type Models } from "node-appwrite";
 
 import { createDatabasesWithApiKey, getDatabaseId } from "@/lib/appwrite/admin-server";
-import { resolveCollectionId } from "@/lib/appwrite/collection-resolver";
 import { errorMessage, log, newCorrelationId } from "@/lib/logger";
+import { sendOrderStatusEmail } from "@/lib/email/send";
 
 export const runtime = "nodejs";
 
 const SCOPE = "admin.orders.status";
 const ADMIN_GATE_COOKIE = "nt_admin_session";
+const ORDERS_COL = "orders";
+const NOTIFICATIONS_COL = "notifications";
 
-// Linear fulfillment flow. A status may only advance forward along this list.
 const FULFILLMENT_FLOW = ["placed", "confirmed", "shipped", "out_for_delivery", "delivered", "completed"] as const;
 const TERMINAL_STATUSES = new Set(["delivered", "completed", "cancelled", "refunded_to_wallet"]);
 const ALLOWED_TARGETS = new Set<string>([...FULFILLMENT_FLOW.slice(1), "cancelled"]);
@@ -26,9 +27,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 function normalize(value: unknown, maxLength = 64) {
-  if (typeof value !== "string") {
-    return "";
-  }
+  if (typeof value !== "string") return "";
   return value.trim().slice(0, maxLength);
 }
 
@@ -41,18 +40,10 @@ function addStatusToReturnUrl(returnTo: string, status: string) {
 }
 
 function isValidTransition(current: string, target: string) {
-  if (!ALLOWED_TARGETS.has(target)) {
-    return false;
-  }
-
-  if (target === "cancelled") {
-    return !TERMINAL_STATUSES.has(current);
-  }
-
+  if (!ALLOWED_TARGETS.has(target)) return false;
+  if (target === "cancelled") return !TERMINAL_STATUSES.has(current);
   const currentIndex = FULFILLMENT_FLOW.indexOf(current as (typeof FULFILLMENT_FLOW)[number]);
   const targetIndex = FULFILLMENT_FLOW.indexOf(target as (typeof FULFILLMENT_FLOW)[number]);
-
-  // Current must be a known, non-terminal flow state, and target must move forward.
   return currentIndex >= 0 && targetIndex > currentIndex;
 }
 
@@ -75,10 +66,8 @@ export async function POST(request: Request) {
   try {
     const databases = createDatabasesWithApiKey();
     const databaseId = getDatabaseId();
-    const ordersCollectionId =
-      (await resolveCollectionId({ databases, databaseId, candidates: ["orders", "order"] })) ?? "orders";
 
-    const order = await databases.getDocument(databaseId, ordersCollectionId, orderId);
+    const order = await databases.getDocument(databaseId, ORDERS_COL, orderId);
     const currentStatus = String(order.status ?? "").trim().toLowerCase();
 
     if (!isValidTransition(currentStatus, target)) {
@@ -86,21 +75,30 @@ export async function POST(request: Request) {
       return NextResponse.redirect(new URL(addStatusToReturnUrl(returnTo, "invalid"), request.url), 303);
     }
 
-    await databases.updateDocument<Models.DefaultDocument>(databaseId, ordersCollectionId, orderId, {
-      status: target,
-    });
+    await databases.updateDocument<Models.DefaultDocument>(databaseId, ORDERS_COL, orderId, { status: target });
 
-    // Best-effort customer notification — never block the status change on it.
     const userId = String(order.userId ?? "").trim();
+    const userEmail = String(order.userEmail ?? "").trim();
+    const orderNumber = String(order.orderNumber ?? order.$id);
+    const totalAmount = Number(order.totalAmount ?? 0);
+
+    // Send status email — fire-and-forget
+    if (userEmail) {
+      void sendOrderStatusEmail(userEmail, {
+        customerName: "",
+        customerEmail: userEmail,
+        orderNumber,
+        status: target,
+        total: totalAmount,
+      });
+    }
+
+    // Best-effort in-app notification
     if (userId) {
       try {
-        const notificationsCollectionId =
-          (await resolveCollectionId({ databases, databaseId, candidates: ["notifications", "notification"] })) ??
-          "notifications";
-        const orderNumber = String(order.orderNumber ?? order.$id);
         await databases.createDocument(
           databaseId,
-          notificationsCollectionId,
+          NOTIFICATIONS_COL,
           ID.unique(),
           {
             userId,

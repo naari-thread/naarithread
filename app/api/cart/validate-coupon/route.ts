@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { Query } from "node-appwrite";
 
 import { createDatabasesWithApiKey, getDatabaseId, getUserFromJwt } from "@/lib/appwrite/admin-server";
-import { resolveCollectionId } from "@/lib/appwrite/collection-resolver";
 
 export const runtime = "nodejs";
+
+const COUPONS_COL = "coupons";
 
 function getBearerToken(request: Request) {
   const header = request.headers.get("authorization") ?? "";
@@ -25,28 +26,22 @@ export async function POST(request: Request) {
       typeof body.subtotal === "number" && Number.isFinite(body.subtotal) ? Math.max(0, body.subtotal) : 0;
 
     if (!code) {
-      return NextResponse.json({ valid: false, message: "Enter a coupon code." });
+      return NextResponse.json({ valid: false, message: "Please enter a coupon code." });
     }
 
     await getUserFromJwt(token);
 
     const databases = createDatabasesWithApiKey();
     const databaseId = getDatabaseId();
-    const couponsCollectionId =
-      (await resolveCollectionId({
-        databases,
-        databaseId,
-        candidates: ["coupons", "coupon"],
-      })) ?? "coupons";
 
-    const result = await databases.listDocuments(databaseId, couponsCollectionId, [
+    const result = await databases.listDocuments(databaseId, COUPONS_COL, [
       Query.equal("code", code),
       Query.equal("isActive", true),
       Query.limit(1),
     ]);
 
     if (result.documents.length === 0) {
-      return NextResponse.json({ valid: false, message: "Invalid or expired coupon code." });
+      return NextResponse.json({ valid: false, message: "This coupon code doesn't exist or has expired." });
     }
 
     const coupon = result.documents[0];
@@ -58,13 +53,13 @@ export async function POST(request: Request) {
     const usedCount = Number(coupon.usedCount ?? 0);
 
     if (usageLimit > 0 && usedCount >= usageLimit) {
-      return NextResponse.json({ valid: false, message: "This coupon has reached its usage limit." });
+      return NextResponse.json({ valid: false, message: "This coupon has reached its usage limit and is no longer available." });
     }
 
     if (subtotal > 0 && minOrderValue > 0 && subtotal < minOrderValue) {
       return NextResponse.json({
         valid: false,
-        message: `Minimum order of ₹${minOrderValue.toLocaleString("en-IN")} required for this coupon.`,
+        message: `Add ₹${(minOrderValue - subtotal).toLocaleString("en-IN")} more to unlock this coupon (minimum order: ₹${minOrderValue.toLocaleString("en-IN")}).`,
       });
     }
 
@@ -89,9 +84,9 @@ export async function POST(request: Request) {
       code,
       discountAmount,
       description,
-      message: `Coupon applied — you save ₹${discountAmount.toLocaleString("en-IN")}!`,
+      message: `Coupon applied — you save ₹${discountAmount.toLocaleString("en-IN")}! 🎉`,
     });
   } catch {
-    return NextResponse.json({ valid: false, message: "Unable to validate coupon right now." }, { status: 500 });
+    return NextResponse.json({ valid: false, message: "Unable to check this coupon right now. Please try again." }, { status: 500 });
   }
 }

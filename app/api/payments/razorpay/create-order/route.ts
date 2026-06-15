@@ -6,6 +6,7 @@ import { errorMessage, log, newCorrelationId } from "@/lib/logger";
 import { calculateCheckoutPricing, normalizeCheckoutLines } from "@/lib/payments/checkout-pricing";
 import { getRazorpayClient, toPaise } from "@/lib/payments/razorpay-server";
 import { toProductRecord } from "@/lib/appwrite/products";
+import { sendOrderConfirmation } from "@/lib/email/send";
 
 export const runtime = "nodejs";
 
@@ -21,7 +22,9 @@ const COUPONS_COL = "coupons";
 type ShippingAddressInput = {
   fullName?: unknown;
   phone?: unknown;
-  line1?: unknown;
+  houseNo?: unknown;
+  locality?: unknown;
+  landmark?: unknown;
   city?: unknown;
   state?: unknown;
   postalCode?: unknown;
@@ -54,10 +57,18 @@ function normalizeShippingAddress(raw: unknown) {
   }
 
   const address = raw as ShippingAddressInput;
+  const houseNo = normalizeText(address.houseNo, 120);
+  const locality = normalizeText(address.locality, 120);
+  const landmark = normalizeText(address.landmark, 120);
+  const line1 = [houseNo, locality, landmark].filter(Boolean).join(", ");
+
   const normalized = {
     fullName: normalizeText(address.fullName, 120),
     phone: normalizeText(address.phone, 24),
-    line1: normalizeText(address.line1, 220),
+    houseNo,
+    locality,
+    landmark,
+    line1,
     city: normalizeText(address.city, 120),
     state: normalizeText(address.state, 120),
     postalCode: normalizeText(address.postalCode, 24),
@@ -67,7 +78,8 @@ function normalizeShippingAddress(raw: unknown) {
   const hasAllRequired =
     normalized.fullName &&
     normalized.phone &&
-    normalized.line1 &&
+    normalized.houseNo &&
+    normalized.locality &&
     normalized.city &&
     normalized.state &&
     normalized.postalCode &&
@@ -247,6 +259,19 @@ export async function POST(request: Request) {
       razorpayOrderId: razorpayOrder.id,
       userId: user.$id,
       amount: amountInPaise,
+    });
+
+    // Fire-and-forget confirmation email — never block the response on this
+    void sendOrderConfirmation(user.email ?? "", {
+      customerName: user.name ?? "",
+      orderNumber,
+      lines: pricing.lines,
+      subtotal: pricing.subtotal,
+      delivery: pricing.delivery,
+      discount: pricing.discount,
+      couponDiscount,
+      total: finalTotal,
+      address: shippingAddress,
     });
 
     return NextResponse.json({

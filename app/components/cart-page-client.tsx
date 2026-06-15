@@ -58,7 +58,9 @@ type CreateOrderResponse = {
 type ShippingAddressForm = {
   fullName: string;
   phone: string;
-  line1: string;
+  houseNo: string;
+  locality: string;
+  landmark: string;
   city: string;
   state: string;
   postalCode: string;
@@ -143,14 +145,22 @@ function OrderSuccessScreen({ info }: { info: SuccessInfo }) {
                 {info.address.phone ? ` · ${info.address.phone}` : ""}
               </p>
               <p className="text-sm text-primary/65">
-                {[info.address.line1, info.address.city, info.address.state, info.address.postalCode, info.address.country]
+                {[info.address.houseNo, info.address.locality, info.address.landmark, info.address.city, info.address.state, info.address.postalCode, info.address.country]
                   .filter(Boolean)
                   .join(", ")}
               </p>
             </div>
           </div>
-          <p className="mt-4 text-xs text-primary/55">
-            You will receive an email confirmation shortly.
+          <div className="mt-4 w-full rounded-xl border border-primary/10 bg-amber-50/60 p-3 text-left">
+            <p className="text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-amber-800/70">Estimated Delivery</p>
+            <div className="mt-1.5 space-y-1">
+              <p className="text-xs text-amber-900/80">🏙️ Metro cities — <strong>1–3 working days</strong></p>
+              <p className="text-xs text-amber-900/80">🌆 Non-metro — <strong>2–5 working days</strong></p>
+              <p className="text-xs text-amber-900/80">🗺️ Remote areas — <strong>3–7 working days</strong></p>
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-primary/55">
+            A confirmation email has been sent to you.
           </p>
           <div className="mt-6 flex w-full flex-col gap-3 sm:flex-row">
             <Link
@@ -205,9 +215,7 @@ function DismissedBanner({ onRetry, onDismiss }: { onRetry: () => void; onDismis
         >
           Try Again
         </button>
-        <Link href="/account" className="text-xs text-amber-700 underline underline-offset-2 hover:text-amber-900">
-          Check Orders
-        </Link>
+        <span className="text-xs text-amber-700/70">Check your orders from the profile menu.</span>
       </div>
     </motion.div>
   );
@@ -254,7 +262,9 @@ export function CartPageClient() {
   const [shippingAddress, setShippingAddress] = useState<ShippingAddressForm>({
     fullName: "",
     phone: "",
-    line1: "",
+    houseNo: "",
+    locality: "",
+    landmark: "",
     city: "",
     state: "",
     postalCode: "",
@@ -262,6 +272,7 @@ export function CartPageClient() {
   });
   const [profileDocId, setProfileDocId] = useState<string>("");
   const [postalLookupPending, setPostalLookupPending] = useState(false);
+  const [postalLookupFailed, setPostalLookupFailed] = useState(false);
   const [saveAddress, setSaveAddress] = useState(true);
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
@@ -306,13 +317,13 @@ export function CartPageClient() {
             savedAddress = parsed;
           }
         } catch {
-          savedAddress = { line1: profile.address };
+          savedAddress = { houseNo: profile.address };
         }
       }
 
       setShippingAddress((current) => {
         const isPristine =
-          !current.fullName && !current.phone && !current.line1 && !current.city && !current.state && !current.postalCode;
+          !current.fullName && !current.phone && !current.houseNo && !current.locality && !current.city && !current.state && !current.postalCode;
         if (!isPristine) {
           return current;
         }
@@ -320,7 +331,9 @@ export function CartPageClient() {
         return {
           fullName: savedAddress.fullName || profile.fullName || user.name || "",
           phone: savedAddress.phone || profile.phone || "",
-          line1: savedAddress.line1 || "",
+          houseNo: savedAddress.houseNo || "",
+          locality: savedAddress.locality || "",
+          landmark: savedAddress.landmark || "",
           city: savedAddress.city || "",
           state: savedAddress.state || "",
           postalCode: savedAddress.postalCode || "",
@@ -338,11 +351,13 @@ export function CartPageClient() {
   useEffect(() => {
     const code = shippingAddress.postalCode.trim();
     if (!/^\d{6}$/.test(code)) {
+      setPostalLookupFailed(false);
       return;
     }
 
     let alive = true;
     setPostalLookupPending(true);
+    setPostalLookupFailed(false);
 
     const timer = setTimeout(async () => {
       try {
@@ -361,9 +376,11 @@ export function CartPageClient() {
             city: prev.city || po.District,
             state: prev.state || po.State,
           }));
+        } else {
+          if (alive) setPostalLookupFailed(true);
         }
       } catch {
-        // silent — user can type manually
+        if (alive) setPostalLookupFailed(true);
       } finally {
         if (alive) setPostalLookupPending(false);
       }
@@ -607,7 +624,8 @@ export function CartPageClient() {
     const hasShippingDetails =
       shippingAddress.fullName.trim() &&
       shippingAddress.phone.trim() &&
-      shippingAddress.line1.trim() &&
+      shippingAddress.houseNo.trim() &&
+      shippingAddress.locality.trim() &&
       shippingAddress.city.trim() &&
       shippingAddress.state.trim() &&
       shippingAddress.postalCode.trim() &&
@@ -905,12 +923,18 @@ export function CartPageClient() {
                         <button
                           type="button"
                           aria-label={`Increase ${line.product.name} quantity`}
+                          disabled={line.quantity >= line.product.stockQty}
                           onClick={() => void updateQuantity(line.product.id, line.quantity + 1)}
-                          className="flex h-7 w-7 items-center justify-center rounded-full transition hover:bg-primary/10"
+                          className="flex h-7 w-7 items-center justify-center rounded-full transition hover:bg-primary/10 disabled:opacity-30"
                         >
                           <DynamicHugeIcon name="Add01Icon" className="h-4 w-4" iconStrokeWidth={2} aria-hidden={true} />
                         </button>
                       </div>
+                      {line.product.stockQty <= 3 && (
+                        <p className="text-[0.62rem] font-semibold text-red-600">
+                          Only {line.product.stockQty} left in stock!
+                        </p>
+                      )}
                       <button
                         type="button"
                         aria-label={`Remove ${line.product.name} from cart`}
@@ -990,15 +1014,32 @@ export function CartPageClient() {
                     }
                     className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45"
                   />
-                  <textarea
-                    aria-label="Shipping address line"
-                    placeholder="Address line"
-                    value={shippingAddress.line1}
+                  <input
+                    aria-label="House / flat number"
+                    placeholder="House / Flat No., Building"
+                    value={shippingAddress.houseNo}
                     onChange={(event) =>
-                      setShippingAddress((prev) => ({ ...prev, line1: event.target.value }))
+                      setShippingAddress((prev) => ({ ...prev, houseNo: event.target.value }))
                     }
-                    rows={2}
-                    className="rounded-lg border border-primary/16 bg-secondary px-3 py-2 text-sm outline-none transition focus:border-primary/45"
+                    className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45"
+                  />
+                  <input
+                    aria-label="Locality / area"
+                    placeholder="Locality / Area / Street"
+                    value={shippingAddress.locality}
+                    onChange={(event) =>
+                      setShippingAddress((prev) => ({ ...prev, locality: event.target.value }))
+                    }
+                    className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45"
+                  />
+                  <input
+                    aria-label="Landmark (optional)"
+                    placeholder="Landmark (optional)"
+                    value={shippingAddress.landmark}
+                    onChange={(event) =>
+                      setShippingAddress((prev) => ({ ...prev, landmark: event.target.value }))
+                    }
+                    className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45"
                   />
                   {/* Postal code with autofill indicator */}
                   <div className="relative">
@@ -1025,6 +1066,11 @@ export function CartPageClient() {
                       </span>
                     ) : null}
                   </div>
+                  {postalLookupFailed && (
+                    <p className="text-xs text-amber-700">
+                      Pincode not found — please fill in City and State manually.
+                    </p>
+                  )}
                   <div className="grid grid-cols-2 gap-2.5">
                     <input
                       aria-label="Shipping city"
@@ -1056,7 +1102,7 @@ export function CartPageClient() {
                   />
                   {/* Save-for-later checkbox — only shown when user is signed in and has filled something */}
                   {isAuthenticated &&
-                  (shippingAddress.fullName || shippingAddress.phone || shippingAddress.line1 || shippingAddress.city) ? (
+                  (shippingAddress.fullName || shippingAddress.phone || shippingAddress.houseNo || shippingAddress.city) ? (
                     <label className="flex cursor-pointer items-center gap-2.5 pt-0.5">
                       <input
                         type="checkbox"

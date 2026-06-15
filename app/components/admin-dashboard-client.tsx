@@ -11,7 +11,46 @@ type AdminOverview = {
   orders: number;
   payments: number;
   reviews: number;
+  pendingFulfillment: number;
+  delivered: number;
 };
+
+type AdminOrderItem = {
+  productName: string;
+  quantity: number;
+  lineAmount: number;
+};
+
+type AdminOrder = {
+  id: string;
+  orderNumber: string;
+  status: string;
+  paymentStatus: string;
+  totalAmount: number;
+  userEmail: string;
+  userId: string;
+  placedAt: string;
+  items: AdminOrderItem[];
+};
+
+const ORDER_STATUS_OPTIONS = [
+  { value: "placed", label: "Ordered" },
+  { value: "shipped", label: "Shipped" },
+  { value: "delivered", label: "Delivered" },
+  { value: "cancelled", label: "Cancelled" },
+] as const;
+
+function statusToLabel(status: string) {
+  const opt = ORDER_STATUS_OPTIONS.find((o) => o.value === status);
+  return opt?.label ?? status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function statusToColor(status: string) {
+  if (status === "delivered" || status === "completed") return "text-green-700 bg-green-50 border-green-200";
+  if (status === "shipped" || status === "out_for_delivery") return "text-blue-700 bg-blue-50 border-blue-200";
+  if (status === "cancelled" || status === "refunded_to_wallet") return "text-red-700 bg-red-50 border-red-200";
+  return "text-amber-700 bg-amber-50 border-amber-200";
+}
 
 type AdminTab = "dashboard" | "products" | "orders" | "payments" | "analytics" | "others";
 
@@ -242,6 +281,10 @@ export function AdminDashboardClient() {
   const [productPayload, setProductPayload] = useState<ProductCreatePayload>(initialProductPayload);
   const [isSubmittingProduct, setIsSubmittingProduct] = useState(false);
   const [isProductsLoading, setIsProductsLoading] = useState(false);
+  const [adminOrders, setAdminOrders] = useState<AdminOrder[]>([]);
+  const [isOrdersLoading, setIsOrdersLoading] = useState(false);
+  const [orderStatusDraft, setOrderStatusDraft] = useState<Record<string, string>>({});
+  const [orderStatusUpdating, setOrderStatusUpdating] = useState<Set<string>>(new Set());
 
   const canOpenDashboard = useMemo(() => !isLoading && isAuthenticated && isAdmin, [isAdmin, isAuthenticated, isLoading]);
 
@@ -292,6 +335,41 @@ export function AdminDashboardClient() {
       setIsProductsLoading(false);
     }
   }, [normalizeError]);
+
+  const loadAdminOrders = useCallback(async () => {
+    setIsOrdersLoading(true);
+    try {
+      const response = await fetch("/api/admin/orders/list?limit=30", { method: "GET" });
+      if (!response.ok) return;
+      const data = (await response.json()) as { orders?: AdminOrder[] };
+      const list = data.orders ?? [];
+      setAdminOrders(list);
+      // Initialise status drafts
+      setOrderStatusDraft(list.reduce<Record<string, string>>((acc, o) => {
+        acc[o.id] = o.status;
+        return acc;
+      }, {}));
+    } catch { /* ignore */ }
+    finally { setIsOrdersLoading(false); }
+  }, []);
+
+  async function updateOrderStatus(orderId: string, status: string) {
+    setOrderStatusUpdating((prev) => new Set([...prev, orderId]));
+    try {
+      const formData = new FormData();
+      formData.append("orderId", orderId);
+      formData.append("status", status);
+      formData.append("returnTo", "/admin?tab=orders");
+      await fetch("/api/admin/orders/status", { method: "POST", body: formData, redirect: "manual" });
+      // Refresh list after update
+      await loadAdminOrders();
+      setStatusMessage(`Order status updated to "${statusToLabel(status)}". Email sent to customer.`);
+    } catch {
+      setStatusMessage("Failed to update order status.");
+    } finally {
+      setOrderStatusUpdating((prev) => { const s = new Set(prev); s.delete(orderId); return s; });
+    }
+  }
 
   async function unlockAdminGateway() {
     setIsUnlocking(true);
@@ -413,13 +491,16 @@ export function AdminDashboardClient() {
   }
 
   useEffect(() => {
-    if (!canOpenDashboard) {
-      return;
-    }
-
+    if (!canOpenDashboard) return;
     void loadOverview();
     void loadProducts();
   }, [canOpenDashboard, loadOverview, loadProducts]);
+
+  useEffect(() => {
+    if (isSessionReady && activeTab === "orders") {
+      void loadAdminOrders();
+    }
+  }, [isSessionReady, activeTab, loadAdminOrders]);
 
   if (!canOpenDashboard) {
     return (
@@ -665,24 +746,106 @@ export function AdminDashboardClient() {
           ) : null}
 
           {isSessionReady && activeTab === "orders" ? (
-            <section className="mt-4 rounded-3xl border border-primary/14 bg-secondary p-4 sm:mt-5 sm:p-6">
-              <h2 className="text-xl font-semibold sm:text-2xl">Orders</h2>
-              <p className="mt-2 text-sm text-primary/75">Track order traffic with quick operational summaries.</p>
-              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <article className="rounded-2xl border border-primary/12 bg-paper p-4">
+            <section className="mt-4 space-y-4 sm:mt-5">
+              {/* Stats */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <article className="rounded-2xl border border-primary/12 bg-secondary p-4">
                   <p className="text-[0.62rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Total Orders</p>
                   <p className="mt-2 text-3xl font-semibold">{overview?.orders ?? 0}</p>
                 </article>
-                <article className="rounded-2xl border border-primary/12 bg-paper p-4">
+                <article className="rounded-2xl border border-primary/12 bg-secondary p-4">
                   <p className="text-[0.62rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Pending Fulfillment</p>
-                  <p className="mt-2 text-3xl font-semibold">{Math.max(0, Math.floor((overview?.orders ?? 0) * 0.34))}</p>
+                  <p className="mt-2 text-3xl font-semibold">{overview?.pendingFulfillment ?? 0}</p>
                 </article>
-                <article className="rounded-2xl border border-primary/12 bg-paper p-4">
+                <article className="rounded-2xl border border-primary/12 bg-secondary p-4">
                   <p className="text-[0.62rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Delivered</p>
-                  <p className="mt-2 text-3xl font-semibold">{Math.max(0, Math.floor((overview?.orders ?? 0) * 0.53))}</p>
+                  <p className="mt-2 text-3xl font-semibold">{overview?.delivered ?? 0}</p>
                 </article>
               </div>
-              {/* TODO: Connect detailed order table/actions once dedicated admin orders endpoints are available. */}
+
+              {/* Orders list */}
+              <div className="rounded-3xl border border-primary/14 bg-secondary p-4 sm:p-6">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-semibold sm:text-2xl">Recent Orders</h2>
+                  <button type="button" onClick={() => void loadAdminOrders()} disabled={isOrdersLoading} aria-label="Refresh orders"
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-primary/20 text-primary/70 transition hover:border-primary/50 hover:text-primary disabled:opacity-40">
+                    <DynamicHugeIcon name="RefreshIcon" className="h-4 w-4" iconStrokeWidth={2} />
+                  </button>
+                </div>
+
+                {isOrdersLoading ? (
+                  <div className="mt-6 space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="h-24 animate-pulse rounded-2xl bg-primary/5" />
+                    ))}
+                  </div>
+                ) : adminOrders.length === 0 ? (
+                  <p className="mt-6 text-sm text-primary/60">No orders found.</p>
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    {adminOrders.map((order) => {
+                      const draft = orderStatusDraft[order.id] ?? order.status;
+                      const isUpdating = orderStatusUpdating.has(order.id);
+                      const hasPendingChange = draft !== order.status;
+                      const date = new Date(order.placedAt);
+                      const dateStr = Number.isFinite(date.getTime())
+                        ? date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+                        : "—";
+
+                      return (
+                        <article key={order.id} className="rounded-2xl border border-primary/12 bg-paper p-4">
+                          <div className="flex flex-wrap items-start gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-sm font-semibold">{order.orderNumber}</span>
+                                <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.12em] ${statusToColor(order.status)}`}>
+                                  {statusToLabel(order.status)}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-xs text-primary/55">{order.userEmail} · {dateStr}</p>
+                              <p className="mt-1 text-xs text-primary/70">
+                                {order.items.slice(0, 2).map((item) => `${item.productName} ×${item.quantity}`).join(" · ")}
+                                {order.items.length > 2 ? ` + ${order.items.length - 2} more` : ""}
+                              </p>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="text-sm font-semibold">{formatPrice(order.totalAmount)}</p>
+                              <p className="mt-0.5 text-[0.62rem] uppercase tracking-[0.1em] text-primary/50">{order.paymentStatus}</p>
+                            </div>
+                          </div>
+
+                          {/* Status update row */}
+                          {order.paymentStatus === "paid" || order.status !== "cancelled" ? (
+                            <div className="mt-3 flex items-center gap-2 border-t border-primary/10 pt-3">
+                              <select
+                                aria-label={`Update status for ${order.orderNumber}`}
+                                value={draft}
+                                disabled={isUpdating}
+                                onChange={(e) => setOrderStatusDraft((prev) => ({ ...prev, [order.id]: e.target.value }))}
+                                className="flex-1 rounded-lg border border-primary/20 bg-secondary px-2.5 py-1.5 text-xs font-semibold text-primary outline-none transition focus:border-primary/50 disabled:opacity-50"
+                              >
+                                {ORDER_STATUS_OPTIONS.map((opt) => (
+                                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                ))}
+                              </select>
+                              {hasPendingChange && (
+                                <button
+                                  type="button"
+                                  disabled={isUpdating}
+                                  onClick={() => void updateOrderStatus(order.id, draft)}
+                                  className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-secondary transition hover:bg-primary/85 disabled:opacity-50"
+                                >
+                                  {isUpdating ? "Updating…" : "Confirm & Email"}
+                                </button>
+                              )}
+                            </div>
+                          ) : null}
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </section>
           ) : null}
 
@@ -696,12 +859,12 @@ export function AdminDashboardClient() {
                   <p className="mt-2 text-3xl font-semibold">{overview?.payments ?? 0}</p>
                 </article>
                 <article className="rounded-2xl border border-primary/12 bg-paper p-4">
-                  <p className="text-[0.62rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Successful</p>
-                  <p className="mt-2 text-3xl font-semibold">{Math.max(0, Math.floor((overview?.payments ?? 0) * 0.89))}</p>
+                  <p className="text-[0.62rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Completed Orders</p>
+                  <p className="mt-2 text-3xl font-semibold">{overview?.delivered ?? 0}</p>
                 </article>
                 <article className="rounded-2xl border border-primary/12 bg-paper p-4">
-                  <p className="text-[0.62rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Failed / Pending</p>
-                  <p className="mt-2 text-3xl font-semibold">{Math.max(0, Math.ceil((overview?.payments ?? 0) * 0.11))}</p>
+                  <p className="text-[0.62rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Pending Fulfillment</p>
+                  <p className="mt-2 text-3xl font-semibold">{overview?.pendingFulfillment ?? 0}</p>
                 </article>
               </div>
               {/* TODO: Connect payment gateway timeline and settlement export when payment endpoints are implemented. */}

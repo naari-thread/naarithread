@@ -4,7 +4,6 @@ import { Lora, Plus_Jakarta_Sans } from "next/font/google";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/react";
 import { Toaster } from "sonner";
-import { SmoothScrollProvider } from "@/app/components/smooth-scroll-provider";
 import { Navbar } from "@/app/components/navbar";
 import { AiChat } from "@/app/components/ai-chat";
 import { MobileProductsBottomBar } from "@/app/components/mobile-products-bottom-bar";
@@ -106,7 +105,7 @@ export default function RootLayout({
       <body className={`${loraDisplay.variable} ${plusJakartaSans.variable} bg-paper text-primary antialiased`}>
         <AuthProvider>
           <Navbar />
-          <SmoothScrollProvider>{children}</SmoothScrollProvider>
+          {children}
           <MobileProductsBottomBar />
           <AiChat />
           <Toaster

@@ -4,8 +4,7 @@ import { Query } from "node-appwrite";
 import { createDatabasesWithApiKey, getDatabaseId } from "@/lib/appwrite/admin-server";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+export const revalidate = 3600; // refresh filters once per hour
 
 function enumElementsFromAttribute(attribute: unknown) {
   if (!attribute || typeof attribute !== "object") {

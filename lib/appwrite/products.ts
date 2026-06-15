@@ -274,11 +274,19 @@ export async function getProductBySlug(slug: string) {
       return toProductRecord(bySlug.documents[0] as Record<string, unknown>);
     }
   } catch {
-    // Fallback below handles projects that don't have slug indexed yet.
+    // slug field may not be indexed — fall through to name-based scan below
   }
 
-  const all = await listProductsFromCollection();
-  return all.find((item) => item.slug === normalizedSlug) ?? null;
+  // Fallback: scan a limited recent batch rather than all 100 products
+  const recent = await context.databases.listDocuments(context.databaseId, context.collectionId, [
+    Query.limit(50),
+    Query.orderDesc("$createdAt"),
+  ]);
+  const match = recent.documents.find((doc) => {
+    const name = String(doc.name ?? "");
+    return ensureSlug(String(doc.slug ?? name), String(doc.$id ?? "")) === normalizedSlug;
+  });
+  return match ? toProductRecord(match as Record<string, unknown>) : null;
 }
 
 export async function getRelatedProducts(product: ProductRecord, limit = 4) {

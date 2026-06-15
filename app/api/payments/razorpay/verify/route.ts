@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { Query, type Models } from "node-appwrite";
 
 import { createDatabasesWithApiKey, getDatabaseId, getUserFromJwt } from "@/lib/appwrite/admin-server";
-import { resolveCollectionId } from "@/lib/appwrite/collection-resolver";
 import { errorMessage, log, newCorrelationId } from "@/lib/logger";
 import {
   applyPaymentTransition,
@@ -16,6 +15,8 @@ import {
 export const runtime = "nodejs";
 
 const SCOPE = "payments.verify";
+const ORDERS_COL = "orders";
+const PAYMENTS_COL = "payments";
 
 type VerifyPayload = {
   internalOrderId?: string;
@@ -26,18 +27,12 @@ type VerifyPayload = {
 
 function getBearerToken(request: Request) {
   const header = request.headers.get("authorization") ?? "";
-  if (!header.toLowerCase().startsWith("bearer ")) {
-    return "";
-  }
-
+  if (!header.toLowerCase().startsWith("bearer ")) return "";
   return header.slice(7).trim();
 }
 
 function normalize(value: unknown, maxLength = 140) {
-  if (typeof value !== "string") {
-    return "";
-  }
-
+  if (typeof value !== "string") return "";
   return value.trim().slice(0, maxLength);
 }
 
@@ -77,22 +72,10 @@ export async function POST(request: Request) {
 
     const databases = createDatabasesWithApiKey();
     const databaseId = getDatabaseId();
-    const ordersCollectionId =
-      (await resolveCollectionId({
-        databases,
-        databaseId,
-        candidates: ["orders", "order"],
-      })) ?? "orders";
-    const paymentsCollectionId =
-      (await resolveCollectionId({
-        databases,
-        databaseId,
-        candidates: ["payments", "payment"],
-      })) ?? "payments";
 
     const [order, paymentsList, razorpayPayment] = await Promise.all([
-      databases.getDocument(databaseId, ordersCollectionId, internalOrderId),
-      databases.listDocuments(databaseId, paymentsCollectionId, [
+      databases.getDocument(databaseId, ORDERS_COL, internalOrderId),
+      databases.listDocuments(databaseId, PAYMENTS_COL, [
         Query.equal("orderId", internalOrderId),
         Query.equal("provider", "razorpay"),
         Query.limit(1),
@@ -111,8 +94,6 @@ export async function POST(request: Request) {
     const paymentState = mapRazorpayPaymentStatus(String(razorpayPayment.status ?? ""));
     const paymentDoc = paymentsList.documents[0] ?? null;
 
-    // Guard against duplicate/out-of-order deliveries: never downgrade a payment
-    // that is already in a more advanced (or terminal) state.
     const currentPaymentStatus = String(paymentDoc?.status ?? order.paymentStatus ?? "created");
     const paymentTransition = applyPaymentTransition(currentPaymentStatus, paymentState);
     const nextPaymentStatus = paymentTransition.next;
@@ -122,7 +103,7 @@ export async function POST(request: Request) {
 
     if (paymentDoc && paymentTransition.changed) {
       writes.push(
-        databases.updateDocument<Models.DefaultDocument>(databaseId, paymentsCollectionId, paymentDoc.$id, {
+        databases.updateDocument<Models.DefaultDocument>(databaseId, PAYMENTS_COL, paymentDoc.$id, {
           providerPaymentId: razorpayPaymentId,
           status: nextPaymentStatus,
           paymentMeta: JSON.stringify({
@@ -141,20 +122,17 @@ export async function POST(request: Request) {
       );
     }
 
-    // Only let the payment flow move order status while it is still payment-owned.
     const orderStatus = toOrderStatus(nextPaymentStatus as never);
     if (paymentTransition.changed && canPaymentUpdateOrderStatus(String(order.status ?? ""))) {
       writes.push(
-        databases.updateDocument<Models.DefaultDocument>(databaseId, ordersCollectionId, internalOrderId, {
+        databases.updateDocument<Models.DefaultDocument>(databaseId, ORDERS_COL, internalOrderId, {
           paymentStatus: nextPaymentStatus,
           status: orderStatus,
         })
       );
     }
 
-    if (writes.length > 0) {
-      await Promise.all(writes);
-    }
+    if (writes.length > 0) await Promise.all(writes);
 
     log("info", SCOPE, "completed", {
       correlationId,
@@ -164,20 +142,9 @@ export async function POST(request: Request) {
       changed: paymentTransition.changed,
     });
 
-    return NextResponse.json({
-      ok: true,
-      internalOrderId,
-      paymentState: nextPaymentStatus,
-      orderStatus,
-    });
+    return NextResponse.json({ ok: true, internalOrderId, paymentState: nextPaymentStatus, orderStatus });
   } catch (error) {
     log("error", SCOPE, "failed", { correlationId, message: errorMessage(error) });
-    return NextResponse.json(
-      {
-        error: "Failed to verify Razorpay payment.",
-        correlationId,
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to verify Razorpay payment.", correlationId }, { status: 500 });
   }
 }

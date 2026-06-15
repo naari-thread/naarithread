@@ -33,19 +33,39 @@ const policyContent: Record<string, PolicyData> = {
       {
         heading: "Shipping Charges",
         items: [
-          "Standard Shipping Charge: ₹99 across India on all orders.",
-          "Free shipping is available on prepaid orders above ₹999.",
-          "COD Handling Charge: An additional handling charge is applicable on Cash on Delivery orders.",
-          "Express Delivery is available at an extra charge, depending on service availability at your location.",
+          "Standard Shipping: ₹99 across India on all orders.",
+          "Free shipping on prepaid orders above ₹999.",
+          "COD Handling Charge: ₹49 additional charge on all Cash on Delivery orders.",
+          "Express Delivery (Metro cities): ₹99 additional charge over standard delivery.",
+          "Express Delivery (Non-metro / other cities): ₹149 additional charge over standard delivery.",
+          "Express delivery availability depends on your location and courier serviceability.",
         ],
       },
       {
         heading: "Delivery Timeline",
         items: [
           "All orders are processed within 24–48 hours after payment confirmation.",
-          "Standard delivery usually takes 4–7 business days from the date of dispatch.",
-          "Express delivery timelines may vary depending on your location and courier availability.",
+          "Metro cities (Delhi, Mumbai, Bengaluru, Chennai, Hyderabad, Kolkata, Pune, Ahmedabad): 1–3 working days.",
+          "Non-metro cities and towns: 2–5 working days.",
+          "Remote and rural areas: 3–7 working days.",
           "You will receive a tracking link via SMS and email once your order is dispatched.",
+        ],
+      },
+      {
+        heading: "Cash on Delivery",
+        items: [
+          "COD is available for orders up to ₹5,000.",
+          "A handling charge of ₹49 applies to all COD orders.",
+          "COD orders may require confirmation via SMS or call before dispatch.",
+          "Repeated non-acceptance of COD deliveries may result in the COD option being restricted on your account.",
+        ],
+      },
+      {
+        heading: "Order Cancellation",
+        items: [
+          "Orders can be cancelled only before they are dispatched from our warehouse.",
+          "Once an order is shipped, cancellation is not possible.",
+          "To cancel, contact us immediately at naarithread@gmail.com or call +91 84878 49852.",
         ],
       },
       {
@@ -112,8 +132,8 @@ const policyContent: Record<string, PolicyData> = {
       {
         heading: "Cash on Delivery (COD)",
         items: [
-          "Cash on Delivery is available on selected orders and serviceable locations.",
-          "An additional COD handling charge may apply and will be shown at checkout.",
+          "Cash on Delivery is available for orders up to ₹5,000.",
+          "A handling charge of ₹49 applies to all COD orders and is non-refundable.",
           "COD orders may require confirmation via SMS or phone call before dispatch.",
           "Repeated order returns or non-acceptance of COD deliveries may result in restriction of the COD option on your account.",
         ],
