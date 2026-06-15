@@ -52,15 +52,18 @@ async function callGemini(messages: { role: string; text: string }[]): Promise<s
 
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({
-    model: "gemini-2.0-flash",
+    model: "gemini-2.5-flash",
     systemInstruction: SYSTEM_PROMPT,
   });
 
-  // Build Gemini history (all messages except the last user message)
-  const history = messages.slice(0, -1).map((m) => ({
+  // Build Gemini history (all messages except the last user message).
+  // Gemini requires history to start with a "user" turn — drop any leading model turns.
+  const rawHistory = messages.slice(0, -1).map((m) => ({
     role: m.role === "user" ? "user" : "model",
     parts: [{ text: m.text }],
   }));
+  const firstUserIdx = rawHistory.findIndex((h) => h.role === "user");
+  const history = firstUserIdx > 0 ? rawHistory.slice(firstUserIdx) : rawHistory;
 
   const chat = model.startChat({ history });
   const lastMessage = messages[messages.length - 1];
@@ -87,7 +90,7 @@ async function callOpenRouter(messages: { role: string; text: string }[]): Promi
       "X-Title": "NaariThread Saathi",
     },
     body: JSON.stringify({
-      model: "mistralai/mistral-7b-instruct:free",
+      model: "meta-llama/llama-3.3-70b-instruct:free",
       messages: openRouterMessages,
       max_tokens: 200,
       temperature: 0.7,
