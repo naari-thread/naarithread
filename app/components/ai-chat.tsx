@@ -24,9 +24,208 @@ const QUICK_PILLS = [
 
 const WHATSAPP_URL = "https://wa.me/918487849852";
 
+// Renders bot message text with proper paragraph and line-break formatting
+function BotMessageText({ text }: { text: string }) {
+  const paragraphs = text.split(/\n{2,}/).filter(Boolean);
+  if (paragraphs.length <= 1) {
+    const lines = text.split("\n");
+    return (
+      <>
+        {lines.map((line, i) => (
+          <span key={i}>
+            {line}
+            {i < lines.length - 1 && <br />}
+          </span>
+        ))}
+      </>
+    );
+  }
+  return (
+    <>
+      {paragraphs.map((para, i) => (
+        <p key={i} className={i > 0 ? "mt-2" : undefined}>
+          {para.split("\n").map((line, j, arr) => (
+            <span key={j}>
+              {line}
+              {j < arr.length - 1 && <br />}
+            </span>
+          ))}
+        </p>
+      ))}
+    </>
+  );
+}
+
+// Expand icon SVG (four outward-pointing arrows)
+function ExpandIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+    </svg>
+  );
+}
+
+// Collapse icon SVG (four inward-pointing arrows)
+function CollapseIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M4 14h6v6M14 4h6v6M20 14l-6-6M4 10l6 6" />
+    </svg>
+  );
+}
+
+// ─── Shared chat panel ────────────────────────────────────────────────────────
+type ChatPanelProps = {
+  messages: Message[];
+  input: string;
+  isTyping: boolean;
+  visiblePills: typeof QUICK_PILLS;
+  bottomRef: React.RefObject<HTMLDivElement | null>;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  expanded: boolean;
+  showClose: boolean;
+  onInput: (val: string) => void;
+  onSend: (text: string) => void;
+  onPill: (pill: typeof QUICK_PILLS[number]) => void;
+  onExpand: () => void;
+  onCollapse: () => void;
+  onClose: () => void;
+};
+
+function ChatPanel({
+  messages, input, isTyping, visiblePills, bottomRef, inputRef,
+  expanded, showClose, onInput, onSend, onPill, onExpand, onCollapse, onClose,
+}: ChatPanelProps) {
+  return (
+    <div className="flex h-full flex-col overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-3 bg-primary px-5 py-4">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-secondary/20">
+          <Image src="/chatbot.jpg" alt="Saathi" width={36} height={36} className="h-9 w-9 rounded-full object-cover" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold tracking-wide text-secondary">Saathi</p>
+          <p className="truncate text-xs text-secondary/70">NaariThread Style Assistant</p>
+        </div>
+
+        {/* WhatsApp */}
+        <a
+          href={WHATSAPP_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Open WhatsApp support"
+          title="Chat on WhatsApp"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-500/20 text-green-300 transition hover:bg-green-500/40"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4" aria-hidden>
+            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+          </svg>
+        </a>
+
+        {/* Expand / Collapse toggle */}
+        <button
+          type="button"
+          aria-label={expanded ? "Collapse chat" : "Expand chat"}
+          title={expanded ? "Collapse" : "Expand"}
+          onClick={expanded ? onCollapse : onExpand}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary/15 text-secondary transition hover:bg-secondary/30"
+        >
+          {expanded ? <CollapseIcon className="h-3.5 w-3.5" /> : <ExpandIcon className="h-3.5 w-3.5" />}
+        </button>
+
+        {/* Close */}
+        {showClose && (
+          <button
+            type="button"
+            aria-label="Close chat"
+            onClick={onClose}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary/15 text-secondary transition hover:bg-secondary/30"
+          >
+            <DynamicHugeIcon name="Cancel01Icon" className="h-4 w-4" iconStrokeWidth={2.2} />
+          </button>
+        )}
+      </div>
+
+      {/* Messages */}
+      <div className={`flex flex-col gap-3 overflow-y-auto px-4 py-4 scroll-smooth ${expanded ? "flex-1" : "h-[260px]"}`}>
+        {messages.map((msg) => (
+          <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+            <div
+              className={`max-w-[82%] rounded-2xl px-4 py-2.5 text-[13px] leading-relaxed ${
+                msg.role === "user"
+                  ? "rounded-br-sm bg-primary text-secondary"
+                  : "rounded-bl-sm border border-primary/10 bg-secondary/80 text-primary"
+              }`}
+            >
+              {msg.role === "bot" ? <BotMessageText text={msg.text} /> : msg.text}
+            </div>
+          </div>
+        ))}
+        {isTyping && (
+          <div className="flex justify-start">
+            <div className="rounded-2xl rounded-bl-sm border border-primary/10 bg-secondary/80 px-4 py-3">
+              <span className="inline-flex gap-1" aria-label="Saathi is typing">
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary/50 [animation-delay:0ms]" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary/50 [animation-delay:150ms]" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary/50 [animation-delay:300ms]" />
+              </span>
+            </div>
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Quick pills */}
+      {visiblePills.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 border-t border-primary/10 px-4 py-2.5">
+          {visiblePills.slice(0, expanded ? 6 : 4).map((pill) => (
+            <button
+              key={pill.label}
+              type="button"
+              disabled={isTyping}
+              onClick={() => onPill(pill)}
+              className="rounded-full border border-primary/20 bg-secondary/60 px-3 py-1 text-xs text-primary/80 transition hover:border-primary/50 hover:bg-secondary hover:text-primary disabled:opacity-50"
+            >
+              {pill.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Input */}
+      <form
+        onSubmit={(e) => { e.preventDefault(); onSend(input); }}
+        className="flex items-center gap-2 border-t border-primary/10 px-4 py-3"
+      >
+        <input
+          ref={inputRef}
+          type="text"
+          value={input}
+          onChange={(e) => onInput(e.target.value)}
+          placeholder="Ask anything…"
+          aria-label="Chat message"
+          disabled={isTyping}
+          maxLength={400}
+          className="flex-1 rounded-full border border-primary/20 bg-secondary/50 px-4 py-2 text-sm text-primary outline-none transition placeholder:text-primary/40 focus:border-primary/50 focus:bg-secondary disabled:opacity-60"
+        />
+        <button
+          type="submit"
+          disabled={!input.trim() || isTyping}
+          aria-label="Send message"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-secondary transition hover:bg-primary/80 disabled:opacity-40"
+        >
+          <DynamicHugeIcon name="MailSend01Icon" className="h-4 w-4" iconStrokeWidth={2} />
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
 export function AiChat() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [showNudge, setShowNudge] = useState(false);
   const baseId = useId();
   const msgCountRef = useRef(0);
@@ -131,14 +330,24 @@ export function AiChat() {
     void send(pill.text);
   }, [send]);
 
+  const handleClose = () => { setOpen(false); setExpanded(false); };
+  const handleExpand = () => setExpanded(true);
+  const handleCollapse = () => setExpanded(false);
+
   const isAdminPage = pathname.startsWith("/admin");
   const isProductsPage = pathname.startsWith("/products") || pathname === "/cart" || pathname === "/wishlist";
   const showFloatingButton = (pathname === "/" || open || isDesktop) && !isAdminPage;
 
   const visiblePills = QUICK_PILLS.filter((p) => !pillsUsed.has(p.label));
 
+  const panelProps: Omit<ChatPanelProps, "expanded" | "showClose" | "onExpand" | "onCollapse" | "onClose"> = {
+    messages, input, isTyping, visiblePills, bottomRef, inputRef,
+    onInput: setInput, onSend: send, onPill: handlePillClick,
+  };
+
   return (
     <>
+      {/* Floating toggle button */}
       {showFloatingButton && (
         <div className={`fixed ${isProductsPage || pathname === "/" ? "bottom-24 sm:bottom-8" : "bottom-5 sm:bottom-8"} right-5 z-[105] sm:right-8`}>
           <AnimatePresence>
@@ -176,7 +385,7 @@ export function AiChat() {
           <motion.button
             type="button"
             aria-label={open ? "Close Saathi chat" : "Open Saathi style assistant"}
-            onClick={() => { setShowNudge(false); setOpen((o) => !o); }}
+            onClick={() => { setShowNudge(false); setOpen((o) => !o); if (open) setExpanded(false); }}
             whileTap={{ scale: 0.92 }}
             className="relative flex h-14 w-14 items-center justify-center rounded-full border-2 border-secondary/50 bg-primary text-secondary shadow-[0_8px_30px_rgba(0,0,0,0.45)] transition-all duration-300 hover:-translate-y-0.5 hover:border-secondary/80 hover:shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
           >
@@ -204,118 +413,64 @@ export function AiChat() {
         </div>
       )}
 
+      {/* Widget (bottom-right, compact) — visible when open and NOT expanded */}
       <AnimatePresence>
-        {open && (
+        {open && !expanded && (
           <motion.div
+            key="widget"
             initial={{ opacity: 0, y: 28, scale: 0.94 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 28, scale: 0.94 }}
             transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] }}
-            className={`fixed ${isProductsPage ? "bottom-[5.4rem]" : "bottom-24"} right-2 z-[105] flex w-[340px] max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-[1.5rem] border border-primary/15 bg-paper shadow-[0_24px_60px_rgba(120,0,0,0.18)] sm:bottom-28 sm:right-8`}
+            className={`fixed ${isProductsPage ? "bottom-[5.4rem]" : "bottom-24"} right-2 z-[105] w-[340px] max-w-[calc(100vw-1rem)] overflow-hidden rounded-[1.5rem] border border-primary/15 bg-paper shadow-[0_24px_60px_rgba(120,0,0,0.18)] sm:bottom-28 sm:right-8`}
           >
-            {/* Header */}
-            <div className="flex items-center gap-3 bg-primary px-5 py-4">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-secondary/20">
-                <Image src="/chatbot.jpg" alt="Saathi" width={36} height={36} className="h-9 w-9 rounded-full object-cover" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold tracking-wide text-secondary">Saathi</p>
-                <p className="truncate text-xs text-secondary/70">NaariThread Style Assistant</p>
-              </div>
-              <a
-                href={WHATSAPP_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Open WhatsApp support"
-                title="Chat on WhatsApp"
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-500/20 text-green-300 transition hover:bg-green-500/40"
-              >
-                <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4" aria-hidden><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-              </a>
-              {(pathname !== "/" || !isDesktop) && (
-                <button
-                  type="button"
-                  aria-label="Close chat"
-                  onClick={() => setOpen(false)}
-                  className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary/15 text-secondary transition hover:bg-secondary/30"
-                >
-                  <DynamicHugeIcon name="Cancel01Icon" className="h-4 w-4" iconStrokeWidth={2.2} />
-                </button>
-              )}
-            </div>
-
-            {/* Messages */}
-            <div className="flex h-[260px] flex-col gap-3 overflow-y-auto px-4 py-4 scroll-smooth">
-              {messages.map((msg) => (
-                <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <p
-                    className={`max-w-[82%] rounded-2xl px-4 py-2.5 text-[13px] leading-relaxed ${
-                      msg.role === "user"
-                        ? "rounded-br-sm bg-primary text-secondary"
-                        : "rounded-bl-sm border border-primary/10 bg-secondary/80 text-primary"
-                    }`}
-                  >
-                    {msg.text}
-                  </p>
-                </div>
-              ))}
-              {isTyping && (
-                <div className="flex justify-start">
-                  <div className="rounded-2xl rounded-bl-sm border border-primary/10 bg-secondary/80 px-4 py-3">
-                    <span className="inline-flex gap-1" aria-label="Saathi is typing">
-                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary/50 [animation-delay:0ms]" />
-                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary/50 [animation-delay:150ms]" />
-                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary/50 [animation-delay:300ms]" />
-                    </span>
-                  </div>
-                </div>
-              )}
-              <div ref={bottomRef} />
-            </div>
-
-            {/* Quick pills — hide once all used */}
-            {visiblePills.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 border-t border-primary/10 px-4 py-2.5">
-                {visiblePills.slice(0, 4).map((pill) => (
-                  <button
-                    key={pill.label}
-                    type="button"
-                    disabled={isTyping}
-                    onClick={() => handlePillClick(pill)}
-                    className="rounded-full border border-primary/20 bg-secondary/60 px-3 py-1 text-xs text-primary/80 transition hover:border-primary/50 hover:bg-secondary hover:text-primary disabled:opacity-50"
-                  >
-                    {pill.label}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Input */}
-            <form
-              onSubmit={(e) => { e.preventDefault(); void send(input); }}
-              className="flex items-center gap-2 border-t border-primary/10 px-4 py-3"
-            >
-              <input
-                ref={inputRef}
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask anything…"
-                aria-label="Chat message"
-                disabled={isTyping}
-                maxLength={400}
-                className="flex-1 rounded-full border border-primary/20 bg-secondary/50 px-4 py-2 text-sm text-primary outline-none transition placeholder:text-primary/40 focus:border-primary/50 focus:bg-secondary disabled:opacity-60"
-              />
-              <button
-                type="submit"
-                disabled={!input.trim() || isTyping}
-                aria-label="Send message"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-secondary transition hover:bg-primary/80 disabled:opacity-40"
-              >
-                <DynamicHugeIcon name="MailSend01Icon" className="h-4 w-4" iconStrokeWidth={2} />
-              </button>
-            </form>
+            <ChatPanel
+              {...panelProps}
+              expanded={false}
+              showClose={pathname !== "/" || !isDesktop}
+              onExpand={handleExpand}
+              onCollapse={handleCollapse}
+              onClose={handleClose}
+            />
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal (centered, expanded) — visible when open and expanded */}
+      <AnimatePresence>
+        {open && expanded && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              key="backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              className="fixed inset-0 z-[110] bg-black/40 backdrop-blur-sm"
+              onClick={handleCollapse}
+              aria-hidden
+            />
+
+            {/* Modal panel */}
+            <motion.div
+              key="modal"
+              initial={{ opacity: 0, scale: 0.94, y: 24 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 24 }}
+              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] }}
+              className="fixed inset-x-4 bottom-6 top-6 z-[111] mx-auto flex max-w-lg flex-col overflow-hidden rounded-[1.5rem] border border-primary/15 bg-paper shadow-[0_32px_80px_rgba(120,0,0,0.25)] sm:inset-x-auto sm:left-1/2 sm:w-[480px] sm:-translate-x-1/2"
+            >
+              <ChatPanel
+                {...panelProps}
+                expanded={true}
+                showClose={true}
+                onExpand={handleExpand}
+                onCollapse={handleCollapse}
+                onClose={handleClose}
+              />
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
     </>
