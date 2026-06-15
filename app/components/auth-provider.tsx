@@ -180,7 +180,43 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [syncUserProfile]);
 
   useEffect(() => {
-    void refreshUser();
+    // Appwrite's createOAuth2Token appends ?userId=...&secret=... to the success
+    // URL after Google OAuth. We must call createSession() with those params to
+    // complete the login before running the normal session check.
+    const completeOAuthIfNeeded = async () => {
+      if (typeof window === "undefined") {
+        await refreshUser();
+        return;
+      }
+
+      const params = new URLSearchParams(window.location.search);
+      const userId = params.get("userId");
+      const secret = params.get("secret");
+
+      if (userId && secret) {
+        // Clean the params from the URL immediately so a refresh doesn't re-run.
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete("userId");
+        cleanUrl.searchParams.delete("secret");
+        window.history.replaceState({}, "", cleanUrl.toString());
+
+        const account = getBrowserAccount();
+        if (account) {
+          try {
+            await account.createSession({ userId, secret });
+            console.info("[google-oauth] session created from OAuth token");
+          } catch (error) {
+            console.error("[google-oauth] failed to create session from OAuth token", {
+              error: formatErrorForLogging(error),
+            });
+          }
+        }
+      }
+
+      await refreshUser();
+    };
+
+    void completeOAuthIfNeeded();
   }, [refreshUser]);
 
   useEffect(() => {
@@ -260,16 +296,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
     };
   }, [refreshUser]);
 
-  useEffect(() => {
-    // Debug: Log when component mounts, useful for OAuth callback detection
-    const urlParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
-    if (urlParams.get("code") || urlParams.get("state")) {
-      console.debug("[oauth-callback] detected OAuth callback parameters", {
-        hasCode: !!urlParams.get("code"),
-        hasState: !!urlParams.get("state"),
-      });
-    }
-  }, []);
 
   const sendEmailOtp = useCallback(async (email: string) => {
     if (!hasPublicAuthConfig()) {
@@ -337,7 +363,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     });
 
     try {
-      await account.createOAuth2Session(OAuthProvider.Google, redirectUrl, redirectUrl);
+      await account.createOAuth2Token(OAuthProvider.Google, redirectUrl, redirectUrl);
     } catch (error) {
       console.error("[google-oauth] sign in failed", {
         error: formatErrorForLogging(error),
