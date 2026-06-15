@@ -361,9 +361,7 @@ export function CartPageClient() {
     let alive = true;
 
     (async () => {
-      let jwt: string | undefined;
-      try { jwt = await createAuthJwt(); } catch { /* use cookie fallback */ }
-      const profile = await readUserProfile(user.$id, jwt);
+      const profile = await readUserProfile(user.$id);
       if (!alive || !profile) {
         return;
       }

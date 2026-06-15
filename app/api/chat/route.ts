@@ -63,7 +63,7 @@ async function callGemini(messages: { role: string; text: string }[]): Promise<s
     parts: [{ text: m.text }],
   }));
   const firstUserIdx = rawHistory.findIndex((h) => h.role === "user");
-  const history = firstUserIdx > 0 ? rawHistory.slice(firstUserIdx) : rawHistory;
+  const history = firstUserIdx >= 0 ? rawHistory.slice(firstUserIdx) : [];
 
   const chat = model.startChat({ history });
   const lastMessage = messages[messages.length - 1];

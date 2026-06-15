@@ -240,12 +240,12 @@ export async function getOrCreateUserProfile(args: {
   }
 }
 
-export async function readUserProfile(userId: string, jwt?: string) {
+export async function readUserProfile(userId: string) {
   if (!hasUsersCollectionConfig() || !userId) {
     return null;
   }
 
-  const databases = getBrowserDatabases(jwt);
+  const databases = getBrowserDatabases();
   if (!databases) {
     return null;
   }
