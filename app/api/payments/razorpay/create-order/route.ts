@@ -2,17 +2,21 @@ import { NextResponse } from "next/server";
 import { ID, Permission, Query, Role } from "node-appwrite";
 
 import { createDatabasesWithApiKey, getDatabaseId, getUserFromJwt } from "@/lib/appwrite/admin-server";
-import { resolveCollectionId } from "@/lib/appwrite/collection-resolver";
 import { errorMessage, log, newCorrelationId } from "@/lib/logger";
 import { calculateCheckoutPricing, normalizeCheckoutLines } from "@/lib/payments/checkout-pricing";
 import { getRazorpayClient, toPaise } from "@/lib/payments/razorpay-server";
-import { listProductsFromCollection } from "@/lib/appwrite/products";
+import { toProductRecord } from "@/lib/appwrite/products";
 
 export const runtime = "nodejs";
 
 const CURRENCY = "INR";
 const SCOPE = "payments.create-order";
-const DUPLICATE_WINDOW_MS = 10 * 60 * 1000;
+
+// Hardcoded collection IDs — eliminates resolveCollectionId probe calls.
+const SKU_COL = "sku";
+const ORDERS_COL = "orders";
+const PAYMENTS_COL = "payments";
+const COUPONS_COL = "coupons";
 
 type ShippingAddressInput = {
   fullName?: unknown;
@@ -29,7 +33,6 @@ function getBearerToken(request: Request) {
   if (!header.toLowerCase().startsWith("bearer ")) {
     return "";
   }
-
   return header.slice(7).trim();
 }
 
@@ -42,7 +45,6 @@ function normalizeText(value: unknown, max = 120) {
   if (typeof value !== "string") {
     return "";
   }
-
   return value.trim().slice(0, max);
 }
 
@@ -86,23 +88,49 @@ export async function POST(request: Request) {
   }
 
   try {
-    const [body, user] = await Promise.all([request.json(), getUserFromJwt(token)]);
-    const inputLines = normalizeCheckoutLines((body as { lines?: unknown })?.lines);
-    const shippingAddress = normalizeShippingAddress((body as { shippingAddress?: unknown }).shippingAddress);
+    const databases = createDatabasesWithApiKey();
+    const databaseId = getDatabaseId();
+    const razorpay = getRazorpayClient();
+
+    // Parse body synchronously before any API calls.
+    const body = (await request.json()) as {
+      lines?: unknown;
+      shippingAddress?: unknown;
+      couponCode?: unknown;
+    };
+
+    const inputLines = normalizeCheckoutLines(body.lines);
+    const shippingAddress = normalizeShippingAddress(body.shippingAddress);
 
     if (inputLines.length === 0) {
       return NextResponse.json({ error: "Cart is empty." }, { status: 400 });
     }
-
     if (!shippingAddress) {
       return NextResponse.json({ error: "Complete shipping address is required." }, { status: 400 });
     }
 
-    const rawCouponCode = normalizeText((body as { couponCode?: unknown }).couponCode, 50)
-      .toUpperCase()
-      .replace(/\s/g, "");
+    const rawCouponCode = normalizeText(body.couponCode, 50).toUpperCase().replace(/\s/g, "");
+    const cartProductIds = inputLines.map((l) => l.productId).filter(Boolean);
 
-    const products = await listProductsFromCollection();
+    // Round trip 1 — all three in parallel: verify JWT, fetch cart products, fetch coupon.
+    const [user, productsResult, couponResult] = await Promise.all([
+      getUserFromJwt(token),
+      databases.listDocuments(databaseId, SKU_COL, [
+        Query.equal("$id", cartProductIds),
+        Query.limit(cartProductIds.length),
+      ]),
+      rawCouponCode
+        ? databases
+            .listDocuments(databaseId, COUPONS_COL, [
+              Query.equal("code", rawCouponCode),
+              Query.equal("isActive", true),
+              Query.limit(1),
+            ])
+            .catch(() => null)
+        : Promise.resolve(null),
+    ]);
+
+    const products = productsResult.documents.map((doc) => toProductRecord(doc as Record<string, unknown>));
     const pricing = calculateCheckoutPricing({ products, lines: inputLines });
 
     if (pricing.lines.length === 0 || pricing.total <= 0) {
@@ -112,132 +140,51 @@ export async function POST(request: Request) {
     // Server-side coupon validation — never trust the client's discount amount.
     let couponDiscount = 0;
     let validatedCouponCode = "";
-    if (rawCouponCode) {
-      try {
-        const dbs = createDatabasesWithApiKey();
-        const dbId = getDatabaseId();
-        const couponsCol =
-          (await resolveCollectionId({ databases: dbs, databaseId: dbId, candidates: ["coupons", "coupon"] })) ??
-          "coupons";
-        const couponResult = await dbs.listDocuments(dbId, couponsCol, [
-          Query.equal("code", rawCouponCode),
-          Query.equal("isActive", true),
-          Query.limit(1),
-        ]);
-        if (couponResult.documents.length > 0) {
-          const coupon = couponResult.documents[0];
-          const minOrderValue = Number(coupon.minOrderValue ?? 0);
-          const discountType = String(coupon.discountType ?? "flat");
-          const discountValue = Number(coupon.discountValue ?? 0);
-          const maxDiscount = Number(coupon.maxDiscount ?? 0);
-          const usageLimit = Number(coupon.usageLimit ?? 0);
-          const usedCount = Number(coupon.usedCount ?? 0);
-          if ((usageLimit <= 0 || usedCount < usageLimit) && pricing.subtotal >= minOrderValue) {
-            if (discountType === "percentage") {
-              couponDiscount = (pricing.subtotal * Math.min(100, discountValue)) / 100;
-              if (maxDiscount > 0) couponDiscount = Math.min(couponDiscount, maxDiscount);
-            } else {
-              couponDiscount = discountValue;
-              if (maxDiscount > 0) couponDiscount = Math.min(couponDiscount, maxDiscount);
-            }
-            couponDiscount = Math.min(Math.floor(couponDiscount), pricing.subtotal);
-            validatedCouponCode = rawCouponCode;
-          }
+    if (rawCouponCode && couponResult && couponResult.documents.length > 0) {
+      const coupon = couponResult.documents[0];
+      const minOrderValue = Number(coupon.minOrderValue ?? 0);
+      const discountType = String(coupon.discountType ?? "flat");
+      const discountValue = Number(coupon.discountValue ?? 0);
+      const maxDiscount = Number(coupon.maxDiscount ?? 0);
+      const usageLimit = Number(coupon.usageLimit ?? 0);
+      const usedCount = Number(coupon.usedCount ?? 0);
+
+      if ((usageLimit <= 0 || usedCount < usageLimit) && pricing.subtotal >= minOrderValue) {
+        if (discountType === "percentage") {
+          couponDiscount = (pricing.subtotal * Math.min(100, discountValue)) / 100;
+          if (maxDiscount > 0) couponDiscount = Math.min(couponDiscount, maxDiscount);
+        } else {
+          couponDiscount = discountValue;
+          if (maxDiscount > 0) couponDiscount = Math.min(couponDiscount, maxDiscount);
         }
-      } catch (couponErr) {
-        log("warn", SCOPE, "coupon_validation_failed", { correlationId, message: errorMessage(couponErr) });
+        couponDiscount = Math.min(Math.floor(couponDiscount), pricing.subtotal);
+        validatedCouponCode = rawCouponCode;
       }
     }
 
     const finalTotal = Math.max(0, pricing.subtotal - couponDiscount) + pricing.delivery;
-
-    const razorpay = getRazorpayClient();
-    const receipt = makeReceipt();
     const amountInPaise = toPaise(finalTotal);
 
     if (amountInPaise <= 0) {
       return NextResponse.json({ error: "Invalid payment amount." }, { status: 400 });
     }
 
-    const databases = createDatabasesWithApiKey();
-    const databaseId = getDatabaseId();
-    const ordersCollectionId =
-      (await resolveCollectionId({
-        databases,
-        databaseId,
-        candidates: ["orders", "order"],
-      })) ?? "orders";
-    const paymentsCollectionId =
-      (await resolveCollectionId({
-        databases,
-        databaseId,
-        candidates: ["payments", "payment"],
-      })) ?? "payments";
-
+    const orderNumber = `ORD-${Date.now()}`;
     const nowIso = new Date().toISOString();
     const itemsJson = JSON.stringify(pricing.lines);
     const shippingJson = JSON.stringify(shippingAddress);
+    const receipt = makeReceipt();
+    const permissions = [
+      Permission.read(Role.user(user.$id)),
+      Permission.update(Role.user(user.$id)),
+      Permission.read(Role.label("admin")),
+      Permission.update(Role.label("admin")),
+    ];
 
-    // Duplicate-click guard: reuse an in-flight "initiated" order if everything matches.
-    try {
-      const recent = await databases.listDocuments(databaseId, ordersCollectionId, [
-        Query.equal("userId", user.$id),
-        Query.equal("status", "initiated"),
-        Query.orderDesc("$createdAt"),
-        Query.limit(5),
-      ]);
-
-      const cutoff = Date.now() - DUPLICATE_WINDOW_MS;
-      const existing = recent.documents.find((doc) => {
-        const createdMs = Date.parse(String(doc.$createdAt ?? doc.placedAt ?? ""));
-        return (
-          String(doc.itemsJson ?? "") === itemsJson &&
-          Number(doc.totalAmount ?? -1) === finalTotal &&
-          String(doc.shippingAddress ?? "") === shippingJson &&
-          String(doc.paymentId ?? "") !== "" &&
-          Number.isFinite(createdMs) &&
-          createdMs >= cutoff
-        );
-      });
-
-      if (existing) {
-        log("info", SCOPE, "reused_open_order", {
-          correlationId,
-          internalOrderId: existing.$id,
-          razorpayOrderId: String(existing.paymentId ?? ""),
-          userId: user.$id,
-        });
-
-        return NextResponse.json({
-          keyId: razorpay.keyId,
-          currency: CURRENCY,
-          amount: amountInPaise,
-          razorpayOrderId: String(existing.paymentId ?? ""),
-          internalOrderId: existing.$id,
-          orderNumber: String(existing.orderNumber ?? ""),
-          reused: true,
-          customer: {
-            name: user.name ?? "",
-            email: user.email ?? "",
-          },
-          summary: {
-            subtotal: pricing.subtotal,
-            discount: pricing.discount,
-            delivery: pricing.delivery,
-            total: pricing.total,
-          },
-        });
-      }
-    } catch (dedupeError) {
-      // Non-fatal: fall through to normal creation if the lookup fails.
-      log("warn", SCOPE, "dedupe_lookup_failed", { correlationId, message: errorMessage(dedupeError) });
-    }
-
-    const orderNumber = `ORD-${Date.now()}`;
-
+    // Round trip 2 — create the order document.
     const order = await databases.createDocument(
       databaseId,
-      ordersCollectionId,
+      ORDERS_COL,
       ID.unique(),
       {
         orderNumber,
@@ -254,14 +201,10 @@ export async function POST(request: Request) {
         shippingAddress: shippingJson,
         placedAt: nowIso,
       },
-      [
-        Permission.read(Role.user(user.$id)),
-        Permission.update(Role.user(user.$id)),
-        Permission.read(Role.label("admin")),
-        Permission.update(Role.label("admin")),
-      ]
+      permissions
     );
 
+    // Round trip 3 — create Razorpay order (needs order.$id for notes).
     const razorpayOrder = await razorpay.client.orders.create({
       amount: amountInPaise,
       currency: CURRENCY,
@@ -274,10 +217,11 @@ export async function POST(request: Request) {
       },
     });
 
+    // Round trip 4 — parallel: create payment doc + store Razorpay order ID on order.
     await Promise.all([
       databases.createDocument(
         databaseId,
-        paymentsCollectionId,
+        PAYMENTS_COL,
         ID.unique(),
         {
           userId: user.$id,
@@ -287,20 +231,12 @@ export async function POST(request: Request) {
           status: "created",
           amount: finalTotal,
           currency: CURRENCY,
-          paymentMeta: JSON.stringify({
-            razorpayOrderId: razorpayOrder.id,
-            receipt,
-          }),
+          paymentMeta: JSON.stringify({ razorpayOrderId: razorpayOrder.id, receipt }),
           paidAt: null,
         },
-        [
-          Permission.read(Role.user(user.$id)),
-          Permission.update(Role.user(user.$id)),
-          Permission.read(Role.label("admin")),
-          Permission.update(Role.label("admin")),
-        ]
+        permissions
       ),
-      databases.updateDocument(databaseId, ordersCollectionId, order.$id, {
+      databases.updateDocument(databaseId, ORDERS_COL, order.$id, {
         paymentId: razorpayOrder.id,
       }),
     ]);
@@ -335,10 +271,7 @@ export async function POST(request: Request) {
   } catch (error) {
     log("error", SCOPE, "failed", { correlationId, message: errorMessage(error) });
     return NextResponse.json(
-      {
-        error: "Failed to initialize Razorpay checkout.",
-        correlationId,
-      },
+      { error: "Failed to initialize Razorpay checkout.", correlationId },
       { status: 500 }
     );
   }

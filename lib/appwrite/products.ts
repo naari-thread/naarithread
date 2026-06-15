@@ -61,7 +61,7 @@ function toStringArray(value: unknown) {
   return value.filter((item): item is string => typeof item === "string");
 }
 
-function toProductRecord(document: Record<string, unknown>): ProductRecord {
+export function toProductRecord(document: Record<string, unknown>): ProductRecord {
   const name = String(document.name ?? "Untitled Product");
   const description = String(document.description ?? "");
   const categoryRaw = String(document.category ?? "");
