@@ -148,7 +148,7 @@ export function AiChat() {
                 initial={{ opacity: 0, y: 10, scale: 0.96 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.96 }}
-                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] as number[] }}
+                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] }}
                 className="pointer-events-none absolute bottom-16 right-0 w-[min(220px,calc(100vw-1rem))] rounded-2xl border border-primary/15 bg-secondary px-4 py-2.5 shadow-[0_12px_32px_rgba(120,0,0,0.2)]"
                 role="status"
                 aria-live="polite"
@@ -210,7 +210,7 @@ export function AiChat() {
             initial={{ opacity: 0, y: 28, scale: 0.94 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 28, scale: 0.94 }}
-            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] as number[] }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] }}
             className={`fixed ${isProductsPage ? "bottom-[5.4rem]" : "bottom-24"} right-2 z-[105] flex w-[340px] max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-[1.5rem] border border-primary/15 bg-paper shadow-[0_24px_60px_rgba(120,0,0,0.18)] sm:bottom-28 sm:right-8`}
           >
             {/* Header */}
