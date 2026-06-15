@@ -1150,9 +1150,7 @@ export function CartPageClient() {
                         <p className="text-xs font-semibold text-emerald-800">
                           Est. delivery in {deliveryEstimate.days} working day{deliveryEstimate.days === "1" ? "" : "s"}
                         </p>
-                        <p className="text-[0.68rem] text-emerald-700/70">
-                          Delhivery Zone {deliveryEstimate.zone} · ~{deliveryEstimate.km.toLocaleString("en-IN")} km from our warehouse · indicative
-                        </p>
+                        <p className="text-[0.68rem] text-emerald-700/70">Indicative estimate based on your location</p>
                       </div>
                     </div>
                   )}
