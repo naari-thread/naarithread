@@ -1,6 +1,6 @@
 "use client";
 
-import { Permission, Query, Role, type Models } from "appwrite";
+import { Permission, Role, type Models } from "appwrite";
 import { appwritePublicConfig, hasUsersCollectionConfig } from "@/lib/appwrite/constants";
 import { getBrowserDatabases } from "@/lib/appwrite/client";
 
@@ -251,13 +251,11 @@ export async function readUserProfile(userId: string, jwt?: string) {
   }
 
   try {
-    const list = await databases.listDocuments<UserProfileDocument>(
+    return await databases.getDocument<UserProfileDocument>(
       appwritePublicConfig.databaseId,
       appwritePublicConfig.usersCollectionId,
-      [Query.equal("userId", userId), Query.limit(1)]
+      userId
     );
-
-    return list.documents[0] ?? null;
   } catch {
     return null;
   }
