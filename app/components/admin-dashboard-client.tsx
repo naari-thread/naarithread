@@ -769,7 +769,9 @@ export function AdminDashboardClient() {
                   <h2 className="text-xl font-semibold sm:text-2xl">Recent Orders</h2>
                   <button type="button" onClick={() => void loadAdminOrders()} disabled={isOrdersLoading} aria-label="Refresh orders"
                     className="flex h-8 w-8 items-center justify-center rounded-full border border-primary/20 text-primary/70 transition hover:border-primary/50 hover:text-primary disabled:opacity-40">
-                    <DynamicHugeIcon name="RefreshIcon" className="h-4 w-4" iconStrokeWidth={2} />
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" />
+                    </svg>
                   </button>
                 </div>
 
