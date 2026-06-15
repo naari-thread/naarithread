@@ -361,7 +361,9 @@ export function CartPageClient() {
     let alive = true;
 
     (async () => {
-      const profile = await readUserProfile(user.$id);
+      let jwt: string | undefined;
+      try { jwt = await createAuthJwt(); } catch { /* use cookie fallback */ }
+      const profile = await readUserProfile(user.$id, jwt);
       if (!alive || !profile) {
         return;
       }
@@ -844,6 +846,7 @@ export function CartPageClient() {
                   fullName: shippingAddress.fullName.trim() || user?.name || "",
                   phone: shippingAddress.phone.trim(),
                   address: JSON.stringify(shippingAddress),
+                  jwt,
                 });
               } catch {
                 // Non-fatal: order already succeeded.

@@ -268,8 +268,9 @@ export async function updateUserProfile(args: {
   fullName: string;
   phone: string;
   address: string;
+  jwt?: string;
 }) {
-  const databases = getBrowserDatabases();
+  const databases = getBrowserDatabases(args.jwt);
 
   if (!databases || !hasUsersCollectionConfig()) {
     throw new Error("Users collection is not configured.");
