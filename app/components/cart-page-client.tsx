@@ -444,6 +444,13 @@ export function CartPageClient() {
     };
   }, [createAuthJwt, isAuthenticated, user?.$id]);
 
+  // Pre-load the Razorpay checkout script as soon as the cart page mounts so
+  // it's ready before the user clicks "Proceed to Buy". Avoids a race where
+  // the script hasn't loaded when the button is clicked.
+  useEffect(() => {
+    void loadRazorpayCheckoutScript();
+  }, []);
+
   // Auto-remove stale cart entries (IDs not in the catalog) once the catalog
   // finishes loading. Silently clears leftover dev/test data without scaring
   // the user with "Product unavailable" error cards.
@@ -617,23 +624,33 @@ export function CartPageClient() {
 
     try {
       const jwt = await createAuthJwt();
-      const orderResponse = await fetch("/api/payments/razorpay/create-order", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${jwt}`,
-        },
-        body: JSON.stringify({
-          lines: lines.map((line) => ({
-            productId: line.product.id,
-            quantity: line.quantity,
-            size: cartSelections[line.product.id]?.size ?? "",
-            color: cartSelections[line.product.id]?.color ?? "",
-          })),
-          shippingAddress,
-          couponCode: appliedCoupon?.code ?? "",
-        }),
+
+      const orderBody = JSON.stringify({
+        lines: lines.map((line) => ({
+          productId: line.product.id,
+          quantity: line.quantity,
+          size: cartSelections[line.product.id]?.size ?? "",
+          color: cartSelections[line.product.id]?.color ?? "",
+        })),
+        shippingAddress,
+        couponCode: appliedCoupon?.code ?? "",
       });
+
+      const fetchOrder = () =>
+        fetch("/api/payments/razorpay/create-order", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}` },
+          body: orderBody,
+        });
+
+      let orderResponse = await fetchOrder();
+
+      // Retry once on server error — handles Vercel cold-start timeouts where
+      // the first call fails but the second succeeds on a warm function.
+      if (!orderResponse.ok) {
+        await new Promise((r) => setTimeout(r, 800));
+        orderResponse = await fetchOrder();
+      }
 
       const orderPayload = (await orderResponse.json()) as Partial<CreateOrderResponse> & { error?: string };
 
@@ -658,8 +675,9 @@ export function CartPageClient() {
         description: "Secure checkout",
         order_id: orderPayload.razorpayOrderId,
         prefill: {
-          name: orderPayload.customer?.name ?? "",
+          name: orderPayload.customer?.name ?? shippingAddress.fullName,
           email: orderPayload.customer?.email ?? "",
+          contact: shippingAddress.phone,
         },
         retry: {
           enabled: true,
