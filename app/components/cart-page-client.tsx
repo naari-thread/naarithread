@@ -25,6 +25,42 @@ import {
   fetchProductsByIds,
 } from "@/lib/product-catalog-cache";
 
+// ─── Delivery estimate helpers ────────────────────────────────────────────────
+const SHOP_LAT = 21.1702; // Surat, Gujarat (395002)
+const SHOP_LNG = 72.8311;
+
+const ZONE_E_STATES = new Set([
+  "arunachal pradesh", "assam", "manipur", "meghalaya", "mizoram",
+  "nagaland", "sikkim", "tripura", "jammu and kashmir", "ladakh",
+  "andaman and nicobar islands", "andaman & nicobar islands",
+  "lakshadweep",
+]);
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+type DeliveryEstimate = { zone: string; days: string; km: number };
+
+function calcDeliveryEstimate(km: number, state: string): DeliveryEstimate {
+  if (ZONE_E_STATES.has(state.toLowerCase().trim())) {
+    return { zone: "E", days: "4–5", km };
+  }
+  if (km < 80) return { zone: "A", days: "1", km };
+  if (km <= 500) return { zone: "B", days: "1–2", km };
+  if (km <= 1400) return { zone: "C", days: "2–3", km };
+  if (km <= 2500) return { zone: "D", days: "3–4", km };
+  return { zone: "E", days: "4–5", km };
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 type CartLine = {
   product: ProductRecord;
   quantity: number;
@@ -273,6 +309,7 @@ export function CartPageClient() {
   const [profileDocId, setProfileDocId] = useState<string>("");
   const [postalLookupPending, setPostalLookupPending] = useState(false);
   const [postalLookupFailed, setPostalLookupFailed] = useState(false);
+  const [deliveryEstimate, setDeliveryEstimate] = useState<DeliveryEstimate | null>(null);
   const [saveAddress, setSaveAddress] = useState(true);
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
@@ -347,30 +384,35 @@ export function CartPageClient() {
     };
   }, [isAuthenticated, user]);
 
-  // Postal code → city + state autofill using India Post API.
+  // Postal code → city + state autofill + delivery estimate.
   useEffect(() => {
     const code = shippingAddress.postalCode.trim();
     if (!/^\d{6}$/.test(code)) {
       setPostalLookupFailed(false);
+      setDeliveryEstimate(null);
       return;
     }
 
     let alive = true;
     setPostalLookupPending(true);
     setPostalLookupFailed(false);
+    setDeliveryEstimate(null);
 
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`https://api.postalpincode.in/pincode/${code}`);
-        const data = (await res.json()) as Array<{
+        // 1. India Post API — city/state autofill
+        const postalRes = await fetch(`https://api.postalpincode.in/pincode/${code}`);
+        const postalData = (await postalRes.json()) as Array<{
           Status: string;
           PostOffice?: Array<{ District: string; State: string }>;
         }>;
 
         if (!alive) return;
 
-        if (data[0]?.Status === "Success" && data[0]?.PostOffice?.length) {
-          const po = data[0].PostOffice[0];
+        let detectedState = "";
+        if (postalData[0]?.Status === "Success" && postalData[0]?.PostOffice?.length) {
+          const po = postalData[0].PostOffice[0];
+          detectedState = po.State;
           setShippingAddress((prev) => ({
             ...prev,
             city: prev.city || po.District,
@@ -378,6 +420,22 @@ export function CartPageClient() {
           }));
         } else {
           if (alive) setPostalLookupFailed(true);
+        }
+
+        // 2. Nominatim geocoding — lat/lng for distance → zone estimate
+        try {
+          const geoRes = await fetch(
+            `https://nominatim.openstreetmap.org/search?postalcode=${code}&country=India&format=json&limit=1`,
+            { headers: { "User-Agent": "NaariThread/1.0 (naarithread@gmail.com)" } }
+          );
+          const geoData = (await geoRes.json()) as Array<{ lat: string; lon: string }>;
+          if (!alive) return;
+          if (geoData[0]) {
+            const km = haversineKm(SHOP_LAT, SHOP_LNG, parseFloat(geoData[0].lat), parseFloat(geoData[0].lon));
+            setDeliveryEstimate(calcDeliveryEstimate(Math.round(km), detectedState));
+          }
+        } catch {
+          // Geocoding failure is non-fatal — city/state already autofilled above
         }
       } catch {
         if (alive) setPostalLookupFailed(true);
@@ -1041,11 +1099,11 @@ export function CartPageClient() {
                     }
                     className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45"
                   />
-                  {/* Postal code with autofill indicator */}
+                  {/* Postal code with autofill + delivery estimate */}
                   <div className="relative">
                     <input
                       aria-label="Shipping postal code"
-                      placeholder="Postal code"
+                      placeholder="Pincode — get delivery estimate"
                       maxLength={6}
                       value={shippingAddress.postalCode}
                       onChange={(event) => {
@@ -1070,6 +1128,19 @@ export function CartPageClient() {
                     <p className="text-xs text-amber-700">
                       Pincode not found — please fill in City and State manually.
                     </p>
+                  )}
+                  {deliveryEstimate && !postalLookupPending && (
+                    <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                      <span className="text-base leading-none">🚚</span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-emerald-800">
+                          Est. delivery in {deliveryEstimate.days} working day{deliveryEstimate.days === "1" ? "" : "s"}
+                        </p>
+                        <p className="text-[0.68rem] text-emerald-700/70">
+                          Delhivery Zone {deliveryEstimate.zone} · ~{deliveryEstimate.km.toLocaleString("en-IN")} km from our warehouse · indicative
+                        </p>
+                      </div>
+                    </div>
                   )}
                   <div className="grid grid-cols-2 gap-2.5">
                     <input
