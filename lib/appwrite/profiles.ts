@@ -1,6 +1,6 @@
 "use client";
 
-import { Permission, Role, type Models } from "appwrite";
+import { Permission, Query, Role, type Models } from "appwrite";
 import { appwritePublicConfig, hasUsersCollectionConfig } from "@/lib/appwrite/constants";
 import { getBrowserDatabases } from "@/lib/appwrite/client";
 
