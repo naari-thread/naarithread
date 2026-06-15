@@ -329,6 +329,28 @@ export function CartPageClient() {
     };
   }, []);
 
+  // Reset form whenever the logged-in user changes (including logout → login with different account).
+  const prevUserIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const nextId = user?.$id ?? null;
+    if (prevUserIdRef.current !== nextId) {
+      prevUserIdRef.current = nextId;
+      setShippingAddress({
+        fullName: "",
+        phone: "",
+        houseNo: "",
+        locality: "",
+        landmark: "",
+        city: "",
+        state: "",
+        postalCode: "",
+        country: "India",
+      });
+      setDeliveryEstimate(null);
+      setPostalLookupFailed(false);
+    }
+  }, [user?.$id]);
+
   // Prefill shipping form from saved profile.
   useEffect(() => {
     if (!isAuthenticated || !user) {
@@ -358,24 +380,16 @@ export function CartPageClient() {
         }
       }
 
-      setShippingAddress((current) => {
-        const isPristine =
-          !current.fullName && !current.phone && !current.houseNo && !current.locality && !current.city && !current.state && !current.postalCode;
-        if (!isPristine) {
-          return current;
-        }
-
-        return {
-          fullName: savedAddress.fullName || profile.fullName || user.name || "",
-          phone: savedAddress.phone || profile.phone || "",
-          houseNo: savedAddress.houseNo || "",
-          locality: savedAddress.locality || "",
-          landmark: savedAddress.landmark || "",
-          city: savedAddress.city || "",
-          state: savedAddress.state || "",
-          postalCode: savedAddress.postalCode || "",
-          country: savedAddress.country || "India",
-        };
+      setShippingAddress({
+        fullName: savedAddress.fullName || profile.fullName || user.name || "",
+        phone: savedAddress.phone || profile.phone || "",
+        houseNo: savedAddress.houseNo || "",
+        locality: savedAddress.locality || "",
+        landmark: savedAddress.landmark || "",
+        city: savedAddress.city || "",
+        state: savedAddress.state || "",
+        postalCode: savedAddress.postalCode || "",
+        country: savedAddress.country || "India",
       });
     })();
 
