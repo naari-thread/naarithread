@@ -329,25 +329,30 @@ export function CartPageClient() {
     };
   }, []);
 
-  // Reset form whenever the logged-in user changes (including logout → login with different account).
+  // Reset form only when switching between two different logged-in users.
+  // Ignore null transitions (brief session re-validation on focus) to prevent
+  // the form from clearing when the user takes a screenshot or tab switches.
   const prevUserIdRef = useRef<string | null>(null);
   useEffect(() => {
     const nextId = user?.$id ?? null;
-    if (prevUserIdRef.current !== nextId) {
+    const prevId = prevUserIdRef.current;
+    if (nextId !== null) {
+      if (prevId !== null && prevId !== nextId) {
+        setShippingAddress({
+          fullName: "",
+          phone: "",
+          houseNo: "",
+          locality: "",
+          landmark: "",
+          city: "",
+          state: "",
+          postalCode: "",
+          country: "India",
+        });
+        setDeliveryEstimate(null);
+        setPostalLookupFailed(false);
+      }
       prevUserIdRef.current = nextId;
-      setShippingAddress({
-        fullName: "",
-        phone: "",
-        houseNo: "",
-        locality: "",
-        landmark: "",
-        city: "",
-        state: "",
-        postalCode: "",
-        country: "India",
-      });
-      setDeliveryEstimate(null);
-      setPostalLookupFailed(false);
     }
   }, [user?.$id]);
 
@@ -712,6 +717,16 @@ export function CartPageClient() {
     setCheckoutError("");
     setIsProcessingCheckout(true);
 
+    // Save address immediately on "Proceed to Buy" — don't wait for payment outcome.
+    if (saveAddress && profileDocId) {
+      void updateUserProfile({
+        documentId: profileDocId,
+        fullName: shippingAddress.fullName.trim() || user?.name || "",
+        phone: shippingAddress.phone.trim(),
+        address: JSON.stringify(shippingAddress),
+      });
+    }
+
     try {
       const jwt = await createAuthJwt();
 
@@ -836,20 +851,6 @@ export function CartPageClient() {
               throw new Error(verifyPayload.error ?? "Payment verification failed.");
             }
 
-            // Persist address back to user profile only when the checkbox is checked.
-            if (saveAddress && profileDocId) {
-              try {
-                await updateUserProfile({
-                  documentId: profileDocId,
-                  fullName: shippingAddress.fullName.trim() || user?.name || "",
-                  phone: shippingAddress.phone.trim(),
-                  address: JSON.stringify(shippingAddress),
-                  jwt,
-                });
-              } catch {
-                // Non-fatal: order already succeeded.
-              }
-            }
 
             writeCartItems({});
             writeCartItemSelections({});

@@ -161,18 +161,25 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
       await syncUserProfile(currentUser);
     } catch (error) {
-      // 401 with "missing scopes" is expected when not logged in (guest user)
-      // This is normal state, not an error
       const errorMessage = normalizeError(error);
-      const isNotLoggedIn = errorMessage.includes("missing scopes");
-      const logLevel = isNotLoggedIn ? "debug" : "error";
+      // Only clear user on genuine auth failures (401 / session expired).
+      // Network errors and timeouts on focus-triggered revalidation should
+      // not wipe user state — they're transient and would clear the cart form.
+      const isAuthFailure =
+        errorMessage.includes("missing scopes") ||
+        errorMessage.includes("unauthorized") ||
+        errorMessage.includes("invalid session") ||
+        errorMessage.includes("user (role: guests)");
+      const logLevel = isAuthFailure ? "debug" : "warn";
 
-      console[logLevel as "debug" | "error"]("[auth-profile] refreshUser: session check", {
-        state: isNotLoggedIn ? "not-logged-in (expected)" : "unexpected-error",
+      console[logLevel as "debug" | "warn"]("[auth-profile] refreshUser: session check", {
+        state: isAuthFailure ? "not-logged-in (expected)" : "transient-error (keeping user)",
         error: formatErrorForLogging(error),
         message: errorMessage,
       });
-      setUser(null);
+      if (isAuthFailure) {
+        setUser(null);
+      }
     } finally {
       setIsLoading(false);
       isRefreshingRef.current = false;
