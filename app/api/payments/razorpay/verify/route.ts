@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { Query, type Models } from "node-appwrite";
+import { ID, Permission, Query, Role, type Models } from "node-appwrite";
 
 import { createDatabasesWithApiKey, getDatabaseId, getUserFromJwt } from "@/lib/appwrite/admin-server";
 import { errorMessage, log, newCorrelationId } from "@/lib/logger";
@@ -100,25 +100,47 @@ export async function POST(request: Request) {
     const isPaid = nextPaymentStatus === "paid";
 
     const writes: Promise<unknown>[] = [];
+    const paymentMeta = JSON.stringify({
+      razorpayOrderId,
+      razorpayPaymentId,
+      razorpayStatus: razorpayPayment.status,
+      method: razorpayPayment.method,
+      bank: razorpayPayment.bank,
+      wallet: razorpayPayment.wallet,
+      email: razorpayPayment.email,
+      contact: razorpayPayment.contact,
+      verifiedAt: new Date().toISOString(),
+    });
 
     if (paymentDoc && paymentTransition.changed) {
       writes.push(
         databases.updateDocument<Models.DefaultDocument>(databaseId, PAYMENTS_COL, paymentDoc.$id, {
           providerPaymentId: razorpayPaymentId,
           status: nextPaymentStatus,
-          paymentMeta: JSON.stringify({
-            razorpayOrderId,
-            razorpayPaymentId,
-            razorpayStatus: razorpayPayment.status,
-            method: razorpayPayment.method,
-            bank: razorpayPayment.bank,
-            wallet: razorpayPayment.wallet,
-            email: razorpayPayment.email,
-            contact: razorpayPayment.contact,
-            verifiedAt: new Date().toISOString(),
-          }),
+          paymentMeta,
           ...(isPaid ? { paidAt: new Date().toISOString() } : paymentDoc.paidAt ? { paidAt: paymentDoc.paidAt } : {}),
         })
+      );
+    } else if (!paymentDoc) {
+      // Payment doc doesn't exist yet (created here, not at order initiation).
+      const permissions = [
+        Permission.read(Role.user(user.$id)),
+        Permission.update(Role.user(user.$id)),
+        Permission.read(Role.label("admin")),
+        Permission.update(Role.label("admin")),
+      ];
+      writes.push(
+        databases.createDocument<Models.DefaultDocument>(databaseId, PAYMENTS_COL, ID.unique(), {
+          userId: user.$id,
+          orderId: internalOrderId,
+          provider: "razorpay",
+          providerPaymentId: razorpayPaymentId,
+          status: nextPaymentStatus,
+          amount: Number(order.totalAmount ?? 0),
+          currency: "INR",
+          paymentMeta,
+          ...(isPaid ? { paidAt: new Date().toISOString() } : {}),
+        }, permissions)
       );
     }
 

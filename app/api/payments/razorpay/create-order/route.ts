@@ -16,7 +16,6 @@ const SCOPE = "payments.create-order";
 // Hardcoded collection IDs — eliminates resolveCollectionId probe calls.
 const SKU_COL = "sku";
 const ORDERS_COL = "orders";
-const PAYMENTS_COL = "payments";
 const COUPONS_COL = "coupons";
 
 type ShippingAddressInput = {
@@ -229,28 +228,11 @@ export async function POST(request: Request) {
       },
     });
 
-    // Round trip 4 — parallel: create payment doc + store Razorpay order ID on order.
-    await Promise.all([
-      databases.createDocument(
-        databaseId,
-        PAYMENTS_COL,
-        ID.unique(),
-        {
-          userId: user.$id,
-          orderId: order.$id,
-          provider: "razorpay",
-          providerPaymentId: "",
-          status: "created",
-          amount: finalTotal,
-          currency: CURRENCY,
-          paymentMeta: JSON.stringify({ razorpayOrderId: razorpayOrder.id, receipt }),
-        },
-        permissions
-      ),
-      databases.updateDocument(databaseId, ORDERS_COL, order.$id, {
-        paymentId: razorpayOrder.id,
-      }),
-    ]);
+    // Round trip 4 — store Razorpay order ID on the order doc.
+    // Payment document is created in the verify route after the user completes payment.
+    await databases.updateDocument(databaseId, ORDERS_COL, order.$id, {
+      paymentId: razorpayOrder.id,
+    });
 
     log("info", SCOPE, "created", {
       correlationId,
