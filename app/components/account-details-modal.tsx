@@ -1,59 +1,108 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/components/auth-provider";
-import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
 import { type UserProfileDocument, updateUserProfile } from "@/lib/appwrite/profiles";
 import { getBrowserDatabases } from "@/lib/appwrite/client";
 import { appwritePublicConfig } from "@/lib/appwrite/constants";
+
+type AddressFields = {
+  houseNo: string;
+  locality: string;
+  landmark: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+};
+
+type FormData = {
+  fullName: string;
+  phone: string;
+  address: AddressFields;
+};
+
+function parseAddress(raw: string): AddressFields {
+  const blank: AddressFields = { houseNo: "", locality: "", landmark: "", city: "", state: "", postalCode: "", country: "India" };
+  if (!raw) return blank;
+  try {
+    const parsed = JSON.parse(raw) as Partial<AddressFields & { line1?: string }>;
+    return {
+      houseNo: parsed.houseNo || "",
+      locality: parsed.locality || "",
+      landmark: parsed.landmark || "",
+      city: parsed.city || "",
+      state: parsed.state || "",
+      postalCode: parsed.postalCode || "",
+      country: parsed.country || "India",
+    };
+  } catch {
+    return { ...blank, houseNo: raw };
+  }
+}
+
+function serializeAddress(a: AddressFields): string {
+  return JSON.stringify(a);
+}
+
+function formEqual(a: FormData, b: FormData) {
+  return (
+    a.fullName === b.fullName &&
+    a.phone === b.phone &&
+    a.address.houseNo === b.address.houseNo &&
+    a.address.locality === b.address.locality &&
+    a.address.landmark === b.address.landmark &&
+    a.address.city === b.address.city &&
+    a.address.state === b.address.state &&
+    a.address.postalCode === b.address.postalCode &&
+    a.address.country === b.address.country
+  );
+}
+
+const INPUT_CLS = "w-full rounded-lg border border-primary/16 bg-paper px-3 py-2.5 text-sm text-primary placeholder:text-primary/40 outline-none transition focus:border-primary/40 focus:bg-secondary";
 
 type AccountDetailsModalProps = {
   onClose: () => void;
   showLogout?: boolean;
 };
 
-export function AccountDetailsModal({ onClose, showLogout = false }: AccountDetailsModalProps) {
-  const { user, logout } = useAuth();
+export function AccountDetailsModal({ onClose }: AccountDetailsModalProps) {
+  const { user } = useAuth();
   const [profile, setProfile] = useState<UserProfileDocument | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
+  const [savedData, setSavedData] = useState<FormData | null>(null);
+  const [formData, setFormData] = useState<FormData>({
     fullName: "",
     phone: "",
-    address: "",
+    address: { houseNo: "", locality: "", landmark: "", city: "", state: "", postalCode: "", country: "India" },
   });
+  const [isEditingAddress, setIsEditingAddress] = useState(false);
 
   useEffect(() => {
-    if (!user) {
-      setIsLoading(false);
-      return;
-    }
+    if (!user) { setIsLoading(false); return; }
 
     const fetchProfile = async () => {
       try {
         const databases = getBrowserDatabases();
-        if (!databases) {
-          throw new Error("Database not available");
-        }
-
+        if (!databases) throw new Error("Database not available");
         const doc = await databases.getDocument<UserProfileDocument>(
           appwritePublicConfig.databaseId,
           appwritePublicConfig.usersCollectionId,
           user.$id
         );
-
         setProfile(doc);
-        setFormData({
+        const initial: FormData = {
           fullName: doc.fullName || "",
           phone: doc.phone || "",
-          address: doc.address || "",
-        });
+          address: parseAddress(doc.address || ""),
+        };
+        setFormData(initial);
+        setSavedData(initial);
         setError(null);
-      } catch (err) {
-        console.error("Failed to fetch profile:", err);
+      } catch {
         setError("Failed to load profile");
-        setProfile(null);
       } finally {
         setIsLoading(false);
       }
@@ -62,60 +111,41 @@ export function AccountDetailsModal({ onClose, showLogout = false }: AccountDeta
     void fetchProfile();
   }, [user]);
 
-  const handleSave = async () => {
-    if (!profile || !user) return;
+  const hasChanges = useMemo(() => {
+    if (!savedData) return false;
+    return !formEqual(formData, savedData);
+  }, [formData, savedData]);
 
+  const setAddr = (patch: Partial<AddressFields>) =>
+    setFormData((prev) => ({ ...prev, address: { ...prev.address, ...patch } }));
+
+  const handleSave = async () => {
+    if (!profile || !user || !hasChanges) return;
     setIsSaving(true);
     setError(null);
-
     try {
       const updated = await updateUserProfile({
         documentId: profile.$id,
         fullName: formData.fullName,
         phone: formData.phone,
-        address: formData.address,
+        address: serializeAddress(formData.address),
       });
-
       setProfile(updated);
-      // Show success message
-      const successMsg = "Profile updated successfully";
-      console.info(successMsg);
-      setTimeout(() => onClose(), 1200);
+      setSavedData(formData);
+      setIsEditingAddress(false);
+      setTimeout(() => onClose(), 800);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to save profile";
-      setError(message);
-      console.error("Save error:", err);
+      setError(err instanceof Error ? err.message : "Failed to save profile");
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-      onClose();
-    } catch (err) {
-      console.error("Logout error:", err);
-      setError("Failed to logout");
-    }
-  };
+  const addressIsBlank = !formData.address.houseNo && !formData.address.city && !formData.address.state;
 
   return (
-    <div className="flex flex-col max-h-[60vh] overflow-y-auto overscroll-contain space-y-4 px-1 pb-1 sm:px-2 sm:pb-2">
-      {showLogout && (
-        <div className="flex justify-end shrink-0">
-          <button
-            type="button"
-            onClick={handleLogout}
-            aria-label="Logout from account"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-primary/20 text-primary transition hover:border-primary/40 hover:bg-primary/5"
-          >
-            <DynamicHugeIcon name="ArrowLeft01Icon" className="h-4.5 w-4.5" iconStrokeWidth={2} aria-hidden={true} />
-          </button>
-        </div>
-      )}
-
-      {isLoading && !profile ? (
+    <div className="flex flex-col max-h-[65vh] overflow-y-auto overscroll-contain space-y-4 px-1 pb-1 sm:px-2 sm:pb-2">
+      {isLoading ? (
         <div className="flex min-h-40 items-center justify-center">
           <div className="inline-flex flex-col items-center gap-2">
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
@@ -124,57 +154,134 @@ export function AccountDetailsModal({ onClose, showLogout = false }: AccountDeta
         </div>
       ) : profile ? (
         <>
-          <div className="space-y-3 sm:space-y-4">
+          <div className="space-y-3">
+            {/* Full name */}
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-primary/65 mb-1.5 sm:text-[0.7rem]">
-                Full Name
-              </label>
+              <label className="block text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-primary/60 mb-1.5">Full Name</label>
               <input
                 type="text"
                 value={formData.fullName}
-                onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                placeholder="Enter your full name"
-                className="w-full rounded-lg border border-primary/16 bg-paper px-3 py-2.5 text-xs sm:text-sm text-primary placeholder:text-primary/50 outline-none transition focus:border-primary/40 focus:bg-secondary"
+                onChange={(e) => setFormData((p) => ({ ...p, fullName: e.target.value }))}
+                placeholder="Your full name"
+                className={INPUT_CLS}
               />
             </div>
 
+            {/* Email — read-only */}
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-primary/65 mb-1.5 sm:text-[0.7rem]">
-                Email
-              </label>
+              <label className="block text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-primary/60 mb-1.5">Email</label>
               <input
                 type="email"
                 value={user?.email || ""}
                 disabled
-                className="w-full rounded-lg border border-primary/16 bg-paper px-3 py-2.5 text-xs sm:text-sm text-primary/50 outline-none cursor-not-allowed"
+                className="w-full rounded-lg border border-primary/12 bg-paper px-3 py-2.5 text-sm text-primary/45 outline-none cursor-not-allowed"
               />
-              <p className="mt-1 text-[0.6rem] sm:text-[0.65rem] text-primary/50">Email cannot be changed</p>
+              <p className="mt-1 text-[0.6rem] text-primary/45">Email cannot be changed</p>
             </div>
 
+            {/* Phone */}
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-primary/65 mb-1.5 sm:text-[0.7rem]">
-                Phone Number
-              </label>
+              <label className="block text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-primary/60 mb-1.5">Phone Number</label>
               <input
                 type="tel"
                 value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                placeholder="Enter your phone number"
-                className="w-full rounded-lg border border-primary/16 bg-paper px-3 py-2.5 text-xs sm:text-sm text-primary placeholder:text-primary/50 outline-none transition focus:border-primary/40 focus:bg-secondary"
+                onChange={(e) => setFormData((p) => ({ ...p, phone: e.target.value }))}
+                placeholder="Your phone number"
+                className={INPUT_CLS}
               />
             </div>
 
+            {/* Address section */}
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-primary/65 mb-1.5 sm:text-[0.7rem]">
-                Address
-              </label>
-              <textarea
-                value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                placeholder="Enter your address"
-                rows={3}
-                className="w-full rounded-lg border border-primary/16 bg-paper px-3 py-2.5 text-xs sm:text-sm text-primary placeholder:text-primary/50 outline-none transition focus:border-primary/40 focus:bg-secondary resize-none"
-              />
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-primary/60">Delivery Address</label>
+                {!isEditingAddress && (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingAddress(true)}
+                    className="text-[0.65rem] font-semibold uppercase tracking-[0.1em] text-primary/55 underline underline-offset-2 hover:text-primary transition"
+                  >
+                    {addressIsBlank ? "Add address" : "Edit"}
+                  </button>
+                )}
+              </div>
+
+              {!isEditingAddress ? (
+                /* Read view */
+                <div className="rounded-lg border border-primary/12 bg-paper px-3 py-2.5 min-h-[2.75rem]">
+                  {addressIsBlank ? (
+                    <p className="text-sm text-primary/38">No address saved</p>
+                  ) : (
+                    <p className="text-sm text-primary/80 leading-relaxed">
+                      {[
+                        formData.address.houseNo,
+                        formData.address.locality,
+                        formData.address.landmark,
+                        formData.address.city,
+                        formData.address.state,
+                        formData.address.postalCode,
+                        formData.address.country,
+                      ].filter(Boolean).join(", ")}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                /* Edit view */
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    placeholder="House / Flat No."
+                    value={formData.address.houseNo}
+                    onChange={(e) => setAddr({ houseNo: e.target.value })}
+                    className={INPUT_CLS}
+                  />
+                  <input
+                    placeholder="Locality / Area"
+                    value={formData.address.locality}
+                    onChange={(e) => setAddr({ locality: e.target.value })}
+                    className={INPUT_CLS}
+                  />
+                  <input
+                    placeholder="Landmark (optional)"
+                    value={formData.address.landmark}
+                    onChange={(e) => setAddr({ landmark: e.target.value })}
+                    className={`${INPUT_CLS} col-span-2`}
+                  />
+                  <input
+                    placeholder="Pincode"
+                    value={formData.address.postalCode}
+                    onChange={(e) => setAddr({ postalCode: e.target.value.replace(/\D/g, "").slice(0, 6) })}
+                    className={INPUT_CLS}
+                  />
+                  <input
+                    placeholder="City"
+                    value={formData.address.city}
+                    onChange={(e) => setAddr({ city: e.target.value })}
+                    className={INPUT_CLS}
+                  />
+                  <input
+                    placeholder="State"
+                    value={formData.address.state}
+                    onChange={(e) => setAddr({ state: e.target.value })}
+                    className={INPUT_CLS}
+                  />
+                  <input
+                    placeholder="Country"
+                    value={formData.address.country}
+                    onChange={(e) => setAddr({ country: e.target.value })}
+                    className={`${INPUT_CLS} col-span-2`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddr(savedData?.address ?? { houseNo: "", locality: "", landmark: "", city: "", state: "", postalCode: "", country: "India" });
+                      setIsEditingAddress(false);
+                    }}
+                    className="col-span-2 text-[0.65rem] font-semibold uppercase tracking-[0.1em] text-primary/45 hover:text-primary/70 transition text-right mt-0.5"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -184,28 +291,29 @@ export function AccountDetailsModal({ onClose, showLogout = false }: AccountDeta
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={isSaving}
-            className="mt-4 inline-flex h-9 sm:h-10 w-full items-center justify-center gap-2 rounded-lg border border-primary/20 bg-primary px-4 text-xs font-semibold uppercase tracking-[0.18em] text-secondary transition hover:border-primary/40 hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-          >
-            {isSaving ? (
-              <>
-                <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-secondary/30 border-t-secondary" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <DynamicHugeIcon name="Mail01Icon" className="h-3.5 w-3.5 sm:h-4 sm:w-4" iconStrokeWidth={2} aria-hidden={true} />
-                Save Changes
-              </>
-            )}
-          </button>
+          {hasChanges && (
+            <button
+              type="button"
+              onClick={() => void handleSave()}
+              disabled={isSaving}
+              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-primary/20 bg-primary px-4 text-xs font-semibold uppercase tracking-[0.18em] text-secondary transition hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSaving ? (
+                <>
+                  <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-secondary/30 border-t-secondary" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  Save Changes
+                </>
+              )}
+            </button>
+          )}
         </>
       ) : (
         <div className="flex min-h-40 items-center justify-center">
-          <p className="text-xs sm:text-sm text-primary/60">Unable to load profile</p>
+          <p className="text-sm text-primary/60">Unable to load profile</p>
         </div>
       )}
     </div>

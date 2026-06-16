@@ -115,6 +115,7 @@ type SuccessInfo = {
   orderNumber: string;
   total: number;
   address: ShippingAddressForm;
+  deliveryDays?: string;
 };
 
 function formatPrice(value: number) {
@@ -187,27 +188,24 @@ function OrderSuccessScreen({ info }: { info: SuccessInfo }) {
               </p>
             </div>
           </div>
-          <div className="mt-4 w-full rounded-xl border border-primary/10 bg-amber-50/60 p-3 text-left">
-            <p className="text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-amber-800/70">Estimated Delivery</p>
-            <div className="mt-1.5 space-y-1">
-              <p className="text-xs text-amber-900/80">🏙️ Metro cities — <strong>1–3 working days</strong></p>
-              <p className="text-xs text-amber-900/80">🌆 Non-metro — <strong>2–5 working days</strong></p>
-              <p className="text-xs text-amber-900/80">🗺️ Remote areas — <strong>3–7 working days</strong></p>
+          {info.deliveryDays && (
+            <div className="mt-4 w-full flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-left">
+              <span className="text-xl leading-none">🚚</span>
+              <div>
+                <p className="text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-emerald-800/70">Expected Delivery</p>
+                <p className="mt-0.5 text-sm font-semibold text-emerald-900">
+                  {info.deliveryDays} working day{info.deliveryDays === "1" ? "" : "s"}
+                </p>
+              </div>
             </div>
-          </div>
-          <p className="mt-3 text-xs text-primary/55">
-            A confirmation email has been sent to you.
+          )}
+          <p className="mt-4 text-xs text-primary/50">
+            To check your orders, open your profile and go to Orders.
           </p>
-          <div className="mt-6 flex w-full flex-col gap-3 sm:flex-row">
-            <Link
-              href="/account"
-              className="inline-flex h-11 flex-1 items-center justify-center rounded-xl border border-primary/20 px-4 text-xs font-semibold uppercase tracking-[0.16em] text-primary transition hover:bg-primary/5"
-            >
-              View Orders
-            </Link>
+          <div className="mt-4 w-full">
             <Link
               href="/products"
-              className="inline-flex h-11 flex-1 items-center justify-center rounded-xl border border-primary bg-primary px-4 text-xs font-semibold uppercase tracking-[0.2em] text-secondary transition hover:bg-primary/90"
+              className="inline-flex h-11 w-full items-center justify-center rounded-xl border border-primary bg-primary px-4 text-xs font-semibold uppercase tracking-[0.2em] text-secondary transition hover:bg-primary/90"
             >
               Continue Shopping
             </Link>
@@ -818,6 +816,7 @@ export function CartPageClient() {
                     orderNumber: thisOrder.orderNumber,
                     total: thisOrder.totalAmount,
                     address: { ...shippingAddress },
+                    deliveryDays: deliveryEstimate?.days,
                   });
                   setCheckoutPhase("success");
                   return;
@@ -863,6 +862,7 @@ export function CartPageClient() {
               orderNumber: orderPayload.orderNumber ?? "",
               total: serverTotal,
               address: { ...shippingAddress },
+              deliveryDays: deliveryEstimate?.days,
             });
             setCheckoutPhase("success");
           } catch (error) {
