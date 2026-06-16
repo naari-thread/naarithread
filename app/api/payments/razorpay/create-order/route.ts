@@ -244,7 +244,6 @@ export async function POST(request: Request) {
           amount: finalTotal,
           currency: CURRENCY,
           paymentMeta: JSON.stringify({ razorpayOrderId: razorpayOrder.id, receipt }),
-          paidAt: null,
         },
         permissions
       ),

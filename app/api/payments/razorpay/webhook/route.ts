@@ -119,7 +119,7 @@ export async function POST(request: Request) {
             email: paymentEntity?.email ?? "",
             contact: paymentEntity?.contact ?? "",
           }),
-          paidAt: isPaid ? new Date().toISOString() : (paymentDoc.paidAt ?? null),
+          ...(isPaid ? { paidAt: new Date().toISOString() } : paymentDoc.paidAt ? { paidAt: paymentDoc.paidAt } : {}),
         })
       );
     }

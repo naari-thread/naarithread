@@ -117,7 +117,7 @@ export async function POST(request: Request) {
             contact: razorpayPayment.contact,
             verifiedAt: new Date().toISOString(),
           }),
-          paidAt: isPaid ? new Date().toISOString() : paymentDoc.paidAt ?? null,
+          ...(isPaid ? { paidAt: new Date().toISOString() } : paymentDoc.paidAt ? { paidAt: paymentDoc.paidAt } : {}),
         })
       );
     }
