@@ -904,19 +904,18 @@ export function CartPageClient() {
     <>
       <main className="min-h-screen bg-paper px-4 pb-32 pt-6 text-primary sm:px-6 md:px-10 md:pb-16 md:pt-30">
         <section className="mx-auto w-full max-w-6xl">
-          <header className={`pb-6 ${isLoading || isAuthenticated ? "border-b border-primary/15" : ""}`}>
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary/70">Checkout</p>
-            <h1 className="mt-3 text-3xl font-semibold sm:text-4xl">Cart</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-primary/82 sm:text-base">
+          <header className="pb-6 border-b border-primary/15">
+            <h1 className="text-3xl font-semibold sm:text-4xl">Cart</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-primary/65">
               Review your selected items and proceed with secure checkout.
             </p>
           </header>
 
           {/* No banner for unauthenticated users — checkout sidebar handles the sign-in gate */}
 
-          <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start lg:gap-12">
+          <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_480px] lg:items-start lg:gap-10">
             {/* ─── Cart items ──────────────────────────────────── */}
-            <div className="flex flex-col">
+            <div className="flex flex-col lg:max-h-[calc(100vh-18rem)] lg:overflow-y-auto lg:pr-1">
               {lines.length === 0 && missingLines.length === 0 ? (
                 <div className="py-12 text-center text-sm text-primary/75">
                   Your cart is empty. Add products from the catalog to continue.
@@ -1061,7 +1060,7 @@ export function CartPageClient() {
             </div>
 
             {/* ─── Order summary sidebar ────────────────────────── */}
-            <aside className="relative overflow-hidden rounded-2xl border border-primary/15 bg-secondary p-5 sm:p-6 lg:sticky lg:top-28">
+            <aside className="relative rounded-2xl border border-primary/15 bg-secondary p-5 sm:p-6 lg:sticky lg:top-28 lg:max-h-[calc(100vh-9rem)] lg:overflow-y-auto">
               <h3 className="text-lg font-semibold">Amount Breakup</h3>
 
               {/* Shipping address */}
@@ -1069,7 +1068,8 @@ export function CartPageClient() {
                 <p className="text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-primary/62">
                   Shipping Address
                 </p>
-                <div className="mt-3 grid grid-cols-1 gap-2.5">
+                <div className="mt-3 grid grid-cols-2 gap-2.5">
+                  {/* Full name | Phone */}
                   <input
                     aria-label="Shipping full name"
                     placeholder="Full name"
@@ -1088,9 +1088,10 @@ export function CartPageClient() {
                     }
                     className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45"
                   />
+                  {/* House no | Locality */}
                   <input
                     aria-label="House / flat number"
-                    placeholder="House / Flat No., Building"
+                    placeholder="House / Flat No."
                     value={shippingAddress.houseNo}
                     onChange={(event) =>
                       setShippingAddress((prev) => ({ ...prev, houseNo: event.target.value }))
@@ -1099,13 +1100,14 @@ export function CartPageClient() {
                   />
                   <input
                     aria-label="Locality / area"
-                    placeholder="Locality / Area / Street"
+                    placeholder="Locality / Area"
                     value={shippingAddress.locality}
                     onChange={(event) =>
                       setShippingAddress((prev) => ({ ...prev, locality: event.target.value }))
                     }
                     className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45"
                   />
+                  {/* Landmark — full width */}
                   <input
                     aria-label="Landmark (optional)"
                     placeholder="Landmark (optional)"
@@ -1113,18 +1115,17 @@ export function CartPageClient() {
                     onChange={(event) =>
                       setShippingAddress((prev) => ({ ...prev, landmark: event.target.value }))
                     }
-                    className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45"
+                    className="col-span-2 h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45"
                   />
-                  {/* Postal code with autofill + delivery estimate */}
-                  <div className="relative">
+                  {/* Pincode — full width, has autofill spinner */}
+                  <div className="relative col-span-2">
                     <input
                       aria-label="Shipping postal code"
-                      placeholder="Pincode — get delivery estimate"
+                      placeholder="Pincode — auto-fills city & state"
                       maxLength={6}
                       value={shippingAddress.postalCode}
                       onChange={(event) => {
                         const val = event.target.value.replace(/\D/g, "").slice(0, 6);
-                        // Clear city/state when postal code changes so autofill can re-run.
                         setShippingAddress((prev) => ({
                           ...prev,
                           postalCode: val,
@@ -1141,12 +1142,12 @@ export function CartPageClient() {
                     ) : null}
                   </div>
                   {postalLookupFailed && (
-                    <p className="text-xs text-amber-700">
+                    <p className="col-span-2 text-xs text-amber-700">
                       Pincode not found — please fill in City and State manually.
                     </p>
                   )}
                   {deliveryEstimate && !postalLookupPending && (
-                    <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                    <div className="col-span-2 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
                       <span className="text-base leading-none">🚚</span>
                       <div className="min-w-0">
                         <p className="text-xs font-semibold text-emerald-800">
@@ -1156,26 +1157,26 @@ export function CartPageClient() {
                       </div>
                     </div>
                   )}
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <input
-                      aria-label="Shipping city"
-                      placeholder="City"
-                      value={shippingAddress.city}
-                      onChange={(event) =>
-                        setShippingAddress((prev) => ({ ...prev, city: event.target.value }))
-                      }
-                      className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45"
-                    />
-                    <input
-                      aria-label="Shipping state"
-                      placeholder="State"
-                      value={shippingAddress.state}
-                      onChange={(event) =>
-                        setShippingAddress((prev) => ({ ...prev, state: event.target.value }))
-                      }
-                      className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45"
-                    />
-                  </div>
+                  {/* City | State */}
+                  <input
+                    aria-label="Shipping city"
+                    placeholder="City"
+                    value={shippingAddress.city}
+                    onChange={(event) =>
+                      setShippingAddress((prev) => ({ ...prev, city: event.target.value }))
+                    }
+                    className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45"
+                  />
+                  <input
+                    aria-label="Shipping state"
+                    placeholder="State"
+                    value={shippingAddress.state}
+                    onChange={(event) =>
+                      setShippingAddress((prev) => ({ ...prev, state: event.target.value }))
+                    }
+                    className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45"
+                  />
+                  {/* Country — full width */}
                   <input
                     aria-label="Shipping country"
                     placeholder="Country"
@@ -1183,12 +1184,12 @@ export function CartPageClient() {
                     onChange={(event) =>
                       setShippingAddress((prev) => ({ ...prev, country: event.target.value }))
                     }
-                    className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45"
+                    className="col-span-2 h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45"
                   />
-                  {/* Save-for-later checkbox — only shown when user is signed in and has filled something */}
+                  {/* Save-for-later checkbox */}
                   {isAuthenticated &&
                   (shippingAddress.fullName || shippingAddress.phone || shippingAddress.houseNo || shippingAddress.city) ? (
-                    <label className="flex cursor-pointer items-center gap-2.5 pt-0.5">
+                    <label className="col-span-2 flex cursor-pointer items-center gap-2.5 pt-0.5">
                       <input
                         type="checkbox"
                         checked={saveAddress}
