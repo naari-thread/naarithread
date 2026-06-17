@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { ID, Query } from "node-appwrite";
 
 import { AdminImageUploadField } from "@/app/components/admin-image-upload-field";
@@ -462,6 +463,8 @@ async function toggleProductStockAction(formData: FormData) {
     stockQty: nextStockQty,
   });
 
+  revalidatePath("/products", "layout");
+  revalidatePath("/api/catalog/products");
   redirect(returnTo);
 }
 
@@ -550,6 +553,8 @@ async function saveProductAction(formData: FormData) {
     });
   }
 
+  revalidatePath("/products", "layout");
+  revalidatePath("/api/catalog/products");
   redirect(returnTo);
 }
 
