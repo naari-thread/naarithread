@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ID, Permission, Query, Role, type Models } from "node-appwrite";
 
 import { createDatabasesWithApiKey, getDatabaseId, getUserFromJwt } from "@/lib/appwrite/admin-server";
+import { createUserNotification } from "@/lib/appwrite/notifications";
 import { errorMessage, log, newCorrelationId } from "@/lib/logger";
 import {
   applyPaymentTransition,
@@ -155,6 +156,18 @@ export async function POST(request: Request) {
     }
 
     if (writes.length > 0) await Promise.all(writes);
+
+    if (isPaid) {
+      createUserNotification({
+        userId: user.$id,
+        title: "Order Confirmed 🌸",
+        body: `Your order ${String(order.orderNumber ?? internalOrderId)} has been placed successfully.`,
+        type: "order",
+        metadata: { orderId: internalOrderId },
+      }).catch((err: unknown) => {
+        log("warn", SCOPE, "notification_failed", { correlationId, message: errorMessage(err) });
+      });
+    }
 
     log("info", SCOPE, "completed", {
       correlationId,

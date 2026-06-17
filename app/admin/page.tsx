@@ -528,7 +528,11 @@ async function saveProductAction(formData: FormData) {
   const databaseId = getDatabaseId();
 
   if (productId) {
-    // Do not rewrite sku/slug on edit — they are stable identifiers.
+    // Include sku/slug in the payload so required fields are satisfied (TablesDB enforces required on every write).
+    const existingSku = String(formData.get("existingSku") ?? "").trim();
+    const existingSlug = String(formData.get("existingSlug") ?? "").trim();
+    if (existingSku) payload.sku = existingSku;
+    if (existingSlug) payload.slug = existingSlug;
     await databases.updateDocument(databaseId, "sku", productId, payload);
   } else {
     const slug = await generateUniqueSlug(databases, databaseId, name);
@@ -1357,6 +1361,8 @@ export default async function AdminPage({
           <form action={saveProductAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <input type="hidden" name="productId" value={modal === "product-edit" ? String(modalDocument?.$id ?? entityId) : ""} />
             <input type="hidden" name="returnTo" value={baseWithoutModal} />
+            {modal === "product-edit" && <input type="hidden" name="existingSku" value={String(modalDocument?.sku ?? "")} />}
+            {modal === "product-edit" && <input type="hidden" name="existingSlug" value={String(modalDocument?.slug ?? "")} />}
             <label className="sm:col-span-2 flex flex-col gap-1.5">
               <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Name</span>
               <input aria-label="Product name" name="name" defaultValue={String(modalDocument?.name ?? "")} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" required />

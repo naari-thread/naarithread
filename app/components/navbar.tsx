@@ -31,8 +31,19 @@ type NotificationItem = {
   id: string;
   title: string;
   body: string;
-  createdAt: string;
+  isRead: boolean;
+  sentAt: string;
+  createdAt: string; // formatted relative string
+  type?: string;
 };
+
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 60_000) return "just now";
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  return `${Math.floor(diff / 86_400_000)}d ago`;
+}
 
 const navCategories: NavCategory[] = [
   {
@@ -81,38 +92,6 @@ const navCategories: NavCategory[] = [
   },
 ];
 
-const sampleNotifications: NotificationItem[] = [
-  {
-    id: "notif-1",
-    title: "Your cart is waiting",
-    body: "You still have selected items in cart. Complete checkout before stock changes.",
-    createdAt: "2m ago",
-  },
-  {
-    id: "notif-2",
-    title: "Festive offer unlocked",
-    body: "Use code NAARI20 on eligible products and save more on this order.",
-    createdAt: "1h ago",
-  },
-  {
-    id: "notif-3",
-    title: "New arrivals in Saree",
-    body: "Fresh saree styles are now live. Explore latest color and drape edits.",
-    createdAt: "5h ago",
-  },
-  {
-    id: "notif-4",
-    title: "Order support update",
-    body: "Support team response time improved. Reach us directly from account page.",
-    createdAt: "1d ago",
-  },
-  {
-    id: "notif-5",
-    title: "Wishlist reminder",
-    body: "Some wishlist products are low in stock. Review before they sell out.",
-    createdAt: "2d ago",
-  },
-];
 
 function categoryHref(category: string, subcategory?: string) {
   if (subcategory) {
@@ -145,7 +124,7 @@ const menuItem = {
 };
 
 export function Navbar() {
-  const { isAuthenticated, isLoading, logout, isAdmin } = useAuth();
+  const { isAuthenticated, isLoading, logout, isAdmin, createAuthJwt } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const prefersReducedMotion = useReducedMotion();
@@ -165,6 +144,8 @@ export function Navbar() {
   const [isContactPanelOpen, setIsContactPanelOpen] = useState(false);
   const [selectedAccountAction, setSelectedAccountAction] = useState<"account" | "wallet" | "orders" | null>(null);
   const [selectedNotification, setSelectedNotification] = useState<NotificationItem | null>(null);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [notifFetched, setNotifFetched] = useState(false);
   const closeDropdownTimer = useRef<number | null>(null);
   const notificationPanelRef = useRef<HTMLDivElement | null>(null);
   const accountPanelRef = useRef<HTMLDivElement | null>(null);
@@ -269,6 +250,52 @@ export function Navbar() {
       document.removeEventListener("keydown", onEscape);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated || notifFetched) return;
+
+    const load = async () => {
+      try {
+        const jwt = await createAuthJwt();
+        const res = await fetch("/api/account/notifications", {
+          headers: { Authorization: `Bearer ${jwt}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json() as { notifications: Array<{ id: string; title: string; body: string; isRead: boolean; sentAt: string; type: string }> };
+        setNotifications(
+          data.notifications.map((n) => ({
+            id: n.id,
+            title: n.title,
+            body: n.body,
+            isRead: n.isRead,
+            sentAt: n.sentAt,
+            createdAt: timeAgo(n.sentAt),
+            type: n.type,
+          }))
+        );
+      } catch {
+        // non-blocking — notifications are best-effort
+      } finally {
+        setNotifFetched(true);
+      }
+    };
+
+    void load();
+  }, [isAuthenticated, notifFetched, createAuthJwt]);
+
+  const markNotifRead = async (id: string) => {
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
+    try {
+      const jwt = await createAuthJwt();
+      await fetch("/api/account/notifications", {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${jwt}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+    } catch {
+      // best-effort
+    }
+  };
 
   const isProductsRoute = pathname.startsWith("/products");
   const isAdminRoute = pathname.startsWith("/admin");
@@ -692,28 +719,39 @@ export function Navbar() {
               ))}
 
               <div className="relative" ref={notificationPanelRef}>
-                <button
-                  type="button"
-                  aria-label="Open notifications"
-                  aria-expanded={isNotificationsOpen}
-                  onClick={() => {
-                    setIsNotificationsOpen((prev) => !prev);
-                    setIsAccountMenuOpen(false);
-                  }}
-                  className="group relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-primary/20 bg-secondary text-primary/75 transition hover:border-primary/40 hover:text-primary"
-                >
-                  <DynamicHugeIcon
-                    name="Notification01Icon"
-                    className="relative z-10 h-5.5 w-5.5"
-                    iconStrokeWidth={2.1}
-                  />
-                  <span
-                    className="absolute right-0 top-0 -translate-y-[20%] translate-x-[20%] z-20 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-primary px-1 text-[0.54rem] font-bold leading-none text-secondary ring-2 ring-secondary"
-                    aria-hidden={true}
-                  >
-                    {sampleNotifications.length > 9 ? "9+" : sampleNotifications.length}
-                  </span>
-                </button>
+                {(() => {
+                  const unreadCount = isAuthenticated ? notifications.filter((n) => !n.isRead).length : 0;
+                  return (
+                    <button
+                      type="button"
+                      aria-label="Open notifications"
+                      aria-expanded={isNotificationsOpen}
+                      onClick={() => {
+                        if (!isAuthenticated && !isLoading) {
+                          setIsAuthModalOpen(true);
+                          return;
+                        }
+                        setIsNotificationsOpen((prev) => !prev);
+                        setIsAccountMenuOpen(false);
+                      }}
+                      className="group relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-primary/20 bg-secondary text-primary/75 transition hover:border-primary/40 hover:text-primary"
+                    >
+                      <DynamicHugeIcon
+                        name="Notification01Icon"
+                        className="relative z-10 h-5.5 w-5.5"
+                        iconStrokeWidth={2.1}
+                      />
+                      {unreadCount > 0 && (
+                        <span
+                          className="absolute right-0 top-0 -translate-y-[20%] translate-x-[20%] z-20 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-primary px-1 text-[0.54rem] font-bold leading-none text-secondary ring-2 ring-secondary"
+                          aria-hidden={true}
+                        >
+                          {unreadCount > 9 ? "9+" : unreadCount}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })()}
 
                 <AnimatePresence>
                   {isNotificationsOpen ? (
@@ -728,22 +766,34 @@ export function Navbar() {
                         <p className="text-[0.62rem] font-semibold uppercase tracking-[0.22em] text-primary/62">Notifications</p>
                       </div>
                       <div className="max-h-64 overflow-y-auto overscroll-contain p-2" onWheel={(event) => event.stopPropagation()}>
-                        {sampleNotifications.map((notification) => (
-                          <button
-                            key={notification.id}
-                            type="button"
-                            aria-label={`Open notification: ${notification.title}`}
-                            onClick={() => {
-                              setSelectedNotification(notification);
-                              setIsNotificationsOpen(false);
-                            }}
-                            className="mb-1 w-full rounded-xl border border-transparent px-3 py-2 text-left transition hover:border-primary/12 hover:bg-primary/[0.04]"
-                          >
-                            <p className="text-sm font-semibold text-primary">{notification.title}</p>
-                            <p className="mt-0.5 line-clamp-2 text-xs text-primary/72">{notification.body}</p>
-                            <p className="mt-1 text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-primary/55">{notification.createdAt}</p>
-                          </button>
-                        ))}
+                        {notifications.length === 0 ? (
+                          <p className="px-3 py-6 text-center text-xs text-primary/45">No notifications yet</p>
+                        ) : (
+                          notifications.map((notification) => (
+                            <button
+                              key={notification.id}
+                              type="button"
+                              aria-label={`Open notification: ${notification.title}`}
+                              onClick={() => {
+                                void markNotifRead(notification.id);
+                                setSelectedNotification({ ...notification, isRead: true });
+                                setIsNotificationsOpen(false);
+                              }}
+                              className={`mb-1 w-full rounded-xl border px-3 py-2 text-left transition hover:border-primary/12 hover:bg-primary/[0.04] ${notification.isRead ? "border-transparent" : "border-primary/10 bg-primary/[0.025]"}`}
+                            >
+                              <div className="flex items-start gap-2">
+                                {!notification.isRead && (
+                                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                                )}
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-semibold text-primary">{notification.title}</p>
+                                  <p className="mt-0.5 line-clamp-2 text-xs text-primary/72">{notification.body}</p>
+                                  <p className="mt-1 text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-primary/55">{notification.createdAt}</p>
+                                </div>
+                              </div>
+                            </button>
+                          ))
+                        )}
                       </div>
                     </motion.div>
                   ) : null}

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Query, type Models } from "node-appwrite";
 
 import { createDatabasesWithApiKey, getDatabaseId } from "@/lib/appwrite/admin-server";
+import { createUserNotification } from "@/lib/appwrite/notifications";
 import { errorMessage, log, newCorrelationId } from "@/lib/logger";
 import {
   applyPaymentTransition,
@@ -134,6 +135,16 @@ export async function POST(request: Request) {
     }
 
     if (writes.length > 0) await Promise.all(writes);
+
+    if (event === "payment.failed" && order?.userId) {
+      createUserNotification({
+        userId: String(order.userId),
+        title: "Payment Failed",
+        body: `Your payment for order ${String(order.orderNumber ?? internalOrderId)} could not be processed. Please retry from your Orders page.`,
+        type: "payment",
+        metadata: { orderId: internalOrderId },
+      }).catch(() => {});
+    }
 
     log("info", SCOPE, "processed", { correlationId, event, eventId, internalOrderId, paymentState: nextPaymentStatus, changed: transition.changed });
     return NextResponse.json({ ok: true });
