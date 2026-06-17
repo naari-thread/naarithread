@@ -82,14 +82,36 @@ export async function POST(request: Request) {
     const orderNumber = String(order.orderNumber ?? order.$id);
     const totalAmount = Number(order.totalAmount ?? 0);
 
+    // Extract customer name from shipping address
+    let customerName = "";
+    try {
+      const shipping = JSON.parse(String(order.shippingAddress ?? "{}")) as { fullName?: string };
+      customerName = shipping.fullName ?? "";
+    } catch { /* ignore */ }
+
+    // Extract line items from itemsJson
+    type RawLine = { productName?: string; quantity?: number; size?: string; color?: string; lineAmount?: number };
+    let lines: Array<{ productName: string; quantity: number; size?: string; color?: string; lineAmount: number }> = [];
+    try {
+      const raw = JSON.parse(String(order.itemsJson ?? "[]")) as RawLine[];
+      lines = raw.map((l) => ({
+        productName: String(l.productName ?? ""),
+        quantity: Number(l.quantity ?? 1),
+        size: l.size ? String(l.size) : undefined,
+        color: l.color ? String(l.color) : undefined,
+        lineAmount: Number(l.lineAmount ?? 0),
+      }));
+    } catch { /* ignore */ }
+
     // Send status email — fire-and-forget
     if (userEmail) {
       void sendOrderStatusEmail(userEmail, {
-        customerName: "",
+        customerName,
         customerEmail: userEmail,
         orderNumber,
         status: target,
         total: totalAmount,
+        lines,
       });
     }
 

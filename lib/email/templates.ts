@@ -1,11 +1,12 @@
-import { SUPPORT_EMAIL, WHATSAPP_NUMBER } from "./client";
+import { WHATSAPP_NUMBER } from "./client";
 
 // ─── Brand tokens ─────────────────────────────────────────────────────────────
 const PRIMARY   = "#2A0F0F";
 const SECONDARY = "#F5EDE3";
 const ACCENT    = "#7C2D2D";
 const MUTED     = "rgba(42,15,15,0.55)";
-const LOGO_URL  = "https://www.naarithread.com/logoname.png";
+const LOGO_ICON_URL = "https://www.naarithread.com/logo4.png";
+const LOGO_TEXT_URL = "https://www.naarithread.com/logoname.png";
 const SITE_URL  = "https://www.naarithread.com";
 
 // Sans-serif for everything (numbers stay on baseline — no waving)
@@ -27,12 +28,14 @@ function baseLayout(title: string, body: string) {
   <tr><td align="center">
     <table width="580" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%;border-radius:20px;overflow:hidden;box-shadow:0 4px 24px rgba(42,15,15,0.10);">
 
-      <!-- Logo header (cream bg so any logo colour shows) -->
+      <!-- Logo header -->
       <tr>
-        <td style="background:${SECONDARY};padding:28px 36px 20px;text-align:center;border-bottom:1px solid rgba(42,15,15,0.08);">
-          <a href="${SITE_URL}" style="display:inline-block;">
-            <img src="${LOGO_URL}" alt="NaariThread" width="160" height="auto"
-                 style="display:block;max-height:60px;object-fit:contain;margin:0 auto;" />
+        <td style="background:${SECONDARY};padding:24px 36px 18px;text-align:center;border-bottom:1px solid rgba(42,15,15,0.08);">
+          <a href="${SITE_URL}" style="display:inline-flex;align-items:center;gap:12px;text-decoration:none;vertical-align:middle;">
+            <img src="${LOGO_ICON_URL}" alt="" width="52" height="52"
+                 style="display:inline-block;width:52px;height:52px;object-fit:contain;vertical-align:middle;border-radius:8px;" />
+            <img src="${LOGO_TEXT_URL}" alt="NaariThread" width="130" height="auto"
+                 style="display:inline-block;max-height:52px;object-fit:contain;vertical-align:middle;" />
           </a>
         </td>
       </tr>
@@ -54,11 +57,14 @@ function baseLayout(title: string, body: string) {
       <!-- Footer -->
       <tr>
         <td style="background:${PRIMARY};padding:20px 36px;text-align:center;">
-          <p style="margin:0;font-family:${SANS};font-size:11px;color:rgba(245,237,227,0.60);">
-            Questions? <a href="mailto:${SUPPORT_EMAIL}" style="color:${SECONDARY};text-decoration:none;">${SUPPORT_EMAIL}</a>
-            &nbsp;·&nbsp; WhatsApp: ${WHATSAPP_NUMBER}
+          <p style="margin:0;font-family:${SANS};font-size:11px;color:rgba(245,237,227,0.55);">
+            Please do not reply to this email — we are unable to receive replies.
           </p>
-          <p style="margin:8px 0 0;font-family:${SANS};font-size:10px;color:rgba(245,237,227,0.35);">
+          <p style="margin:6px 0 0;font-family:${SANS};font-size:11px;color:rgba(245,237,227,0.60);">
+            For any help, reach us on WhatsApp:
+            <a href="https://wa.me/${WHATSAPP_NUMBER.replace(/\s/g, "").replace("+", "")}" style="color:${SECONDARY};text-decoration:none;font-weight:600;">${WHATSAPP_NUMBER}</a>
+          </p>
+          <p style="margin:10px 0 0;font-family:${SANS};font-size:10px;color:rgba(245,237,227,0.35);">
             © NaariThread · India · At NaariThread, every thread tells your story.
           </p>
         </td>
@@ -195,6 +201,7 @@ export type OrderStatusData = {
   orderNumber: string;
   status: string;
   total: number;
+  lines?: OrderLine[];
 };
 
 const STATUS_COPY: Record<string, { emoji: string; heading: string; message: string }> = {
@@ -231,7 +238,7 @@ const STATUS_COPY: Record<string, { emoji: string; heading: string; message: str
 };
 
 export function orderStatusHtml(data: OrderStatusData): string {
-  const { customerName, orderNumber, status, total } = data;
+  const { customerName, orderNumber, status, total, lines } = data;
   const name = customerName || "Valued Customer";
   const copy = STATUS_COPY[status] ?? {
     emoji: "📦",
@@ -248,8 +255,9 @@ export function orderStatusHtml(data: OrderStatusData): string {
       ${kv("Order Total", `₹${total.toLocaleString("en-IN")}`)}
       ${kv("Status", status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()))}
     </table>
+    ${lines && lines.length > 0 ? `${divider()}${sectionLabel("Your Items")}${itemsTable(lines)}` : ""}
     ${divider()}
-    ${p("For any questions, you can reply to this email or reach us on WhatsApp for faster support.", true)}
+    ${p("Reach us on WhatsApp for any questions — our team is happy to help.", true)}
   `;
 
   return baseLayout(`Order Update: ${copy.heading} — ${orderNumber} | NaariThread`, body);
