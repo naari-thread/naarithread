@@ -1,10 +1,19 @@
 import { SUPPORT_EMAIL, WHATSAPP_NUMBER } from "./client";
 
-// ─── Brand colours (match globals.css) ────────────────────────────────────────
-const PRIMARY = "#2A0F0F";
+// ─── Brand tokens ─────────────────────────────────────────────────────────────
+const PRIMARY   = "#2A0F0F";
 const SECONDARY = "#F5EDE3";
-const ACCENT = "#7C2D2D";
+const ACCENT    = "#7C2D2D";
+const MUTED     = "rgba(42,15,15,0.55)";
+const LOGO_URL  = "https://www.naarithread.com/logoname.png";
+const SITE_URL  = "https://www.naarithread.com";
 
+// Sans-serif for everything (numbers stay on baseline — no waving)
+const SANS = "Arial, Helvetica, sans-serif";
+// Serif only for display headings
+const SERIF = "Georgia, 'Times New Roman', serif";
+
+// ─── Base layout ──────────────────────────────────────────────────────────────
 function baseLayout(title: string, body: string) {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -13,31 +22,45 @@ function baseLayout(title: string, body: string) {
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>${title}</title>
 </head>
-<body style="margin:0;padding:0;background:#F0E8DC;font-family:'Georgia',serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#F0E8DC;padding:32px 16px;">
+<body style="margin:0;padding:0;background:#EAE0D4;font-family:${SANS};">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#EAE0D4;padding:40px 16px;">
   <tr><td align="center">
-    <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+    <table width="580" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%;border-radius:20px;overflow:hidden;box-shadow:0 4px 24px rgba(42,15,15,0.10);">
 
-      <!-- Header -->
+      <!-- Logo header (cream bg so any logo colour shows) -->
       <tr>
-        <td style="background:${PRIMARY};border-radius:16px 16px 0 0;padding:28px 36px;text-align:center;">
-          <p style="margin:0;font-size:10px;letter-spacing:0.3em;text-transform:uppercase;color:rgba(245,237,227,0.65);">NAARITHREAD</p>
-          <p style="margin:6px 0 0;font-size:13px;letter-spacing:0.15em;color:${SECONDARY};font-style:italic;">Wear Your Story</p>
+        <td style="background:${SECONDARY};padding:28px 36px 20px;text-align:center;border-bottom:1px solid rgba(42,15,15,0.08);">
+          <a href="${SITE_URL}" style="display:inline-block;">
+            <img src="${LOGO_URL}" alt="NaariThread" width="160" height="auto"
+                 style="display:block;max-height:60px;object-fit:contain;margin:0 auto;" />
+          </a>
+        </td>
+      </tr>
+
+      <!-- Dark accent bar -->
+      <tr>
+        <td style="background:${PRIMARY};padding:10px 36px;text-align:center;">
+          <p style="margin:0;font-family:${SANS};font-size:10px;letter-spacing:0.28em;text-transform:uppercase;color:rgba(245,237,227,0.55);">Wear Your Story</p>
         </td>
       </tr>
 
       <!-- Body -->
       <tr>
-        <td style="background:${SECONDARY};padding:36px 36px 28px;border-left:1px solid rgba(42,15,15,0.1);border-right:1px solid rgba(42,15,15,0.1);">
+        <td style="background:${SECONDARY};padding:36px 36px 32px;">
           ${body}
         </td>
       </tr>
 
       <!-- Footer -->
       <tr>
-        <td style="background:${PRIMARY};border-radius:0 0 16px 16px;padding:20px 36px;text-align:center;">
-          <p style="margin:0;font-size:11px;color:rgba(245,237,227,0.6);">Questions? <a href="mailto:${SUPPORT_EMAIL}" style="color:${SECONDARY};">${SUPPORT_EMAIL}</a> &nbsp;|&nbsp; WhatsApp: ${WHATSAPP_NUMBER}</p>
-          <p style="margin:8px 0 0;font-size:10px;color:rgba(245,237,227,0.4);">© NaariThread · India · At NaariThread, every thread tells your story.</p>
+        <td style="background:${PRIMARY};padding:20px 36px;text-align:center;">
+          <p style="margin:0;font-family:${SANS};font-size:11px;color:rgba(245,237,227,0.60);">
+            Questions? <a href="mailto:${SUPPORT_EMAIL}" style="color:${SECONDARY};text-decoration:none;">${SUPPORT_EMAIL}</a>
+            &nbsp;·&nbsp; WhatsApp: ${WHATSAPP_NUMBER}
+          </p>
+          <p style="margin:8px 0 0;font-family:${SANS};font-size:10px;color:rgba(245,237,227,0.35);">
+            © NaariThread · India · At NaariThread, every thread tells your story.
+          </p>
         </td>
       </tr>
 
@@ -48,52 +71,55 @@ function baseLayout(title: string, body: string) {
 </html>`;
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function h1(text: string) {
-  return `<h1 style="margin:0 0 12px;font-size:26px;color:${PRIMARY};font-weight:600;line-height:1.15;">${text}</h1>`;
+  return `<h1 style="margin:0 0 14px;font-family:${SERIF};font-size:26px;font-weight:600;color:${PRIMARY};line-height:1.2;">${text}</h1>`;
 }
 
 function p(text: string, muted = false) {
-  return `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:${muted ? "rgba(42,15,15,0.65)" : PRIMARY};">${text}</p>`;
+  return `<p style="margin:0 0 16px;font-family:${SANS};font-size:14px;line-height:1.75;color:${muted ? MUTED : PRIMARY};">${text}</p>`;
 }
 
 function divider() {
-  return `<hr style="border:none;border-top:1px solid rgba(42,15,15,0.12);margin:20px 0;"/>`;
+  return `<hr style="border:none;border-top:1px solid rgba(42,15,15,0.10);margin:22px 0;"/>`;
 }
 
-function badge(label: string, value: string) {
+function kv(label: string, value: string) {
   return `<tr>
-    <td style="padding:6px 0;font-size:12px;text-transform:uppercase;letter-spacing:0.15em;color:rgba(42,15,15,0.55);width:44%;">${label}</td>
-    <td style="padding:6px 0;font-size:14px;font-weight:600;color:${PRIMARY};">${value}</td>
+    <td style="padding:7px 0;font-family:${SANS};font-size:11px;text-transform:uppercase;letter-spacing:0.14em;color:${MUTED};width:44%;vertical-align:top;">${label}</td>
+    <td style="padding:7px 0;font-family:${SANS};font-size:14px;font-weight:600;color:${PRIMARY};vertical-align:top;">${value}</td>
   </tr>`;
+}
+
+function sectionLabel(text: string) {
+  return `<p style="margin:0 0 10px;font-family:${SANS};font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:${MUTED};">${text}</p>`;
 }
 
 type OrderLine = { productName: string; quantity: number; size?: string; color?: string; lineAmount: number };
 
 function itemsTable(lines: OrderLine[]) {
-  const rows = lines
-    .map(
-      (line) => `<tr>
-    <td style="padding:10px 0;font-size:13px;color:${PRIMARY};border-bottom:1px solid rgba(42,15,15,0.08);">
+  const rows = lines.map((line) => `
+  <tr>
+    <td style="padding:11px 0;font-family:${SANS};font-size:13px;color:${PRIMARY};border-bottom:1px solid rgba(42,15,15,0.07);vertical-align:top;">
       <strong>${line.productName}</strong>
-      ${line.size ? `<span style="font-size:11px;color:rgba(42,15,15,0.55);margin-left:8px;">Size: ${line.size}</span>` : ""}
-      ${line.color ? `<span style="font-size:11px;color:rgba(42,15,15,0.55);margin-left:8px;">Colour: ${line.color}</span>` : ""}
+      ${line.size  ? `<br/><span style="font-size:11px;color:${MUTED};">Size: ${line.size}</span>` : ""}
+      ${line.color ? `<br/><span style="font-size:11px;color:${MUTED};">Colour: ${line.color}</span>` : ""}
     </td>
-    <td style="padding:10px 0;font-size:13px;color:rgba(42,15,15,0.55);text-align:center;border-bottom:1px solid rgba(42,15,15,0.08);">×${line.quantity}</td>
-    <td style="padding:10px 0;font-size:13px;font-weight:600;color:${PRIMARY};text-align:right;border-bottom:1px solid rgba(42,15,15,0.08);">₹${line.lineAmount.toLocaleString("en-IN")}</td>
-  </tr>`
-    )
-    .join("");
+    <td style="padding:11px 0;font-family:${SANS};font-size:13px;color:${MUTED};text-align:center;border-bottom:1px solid rgba(42,15,15,0.07);vertical-align:top;">×${line.quantity}</td>
+    <td style="padding:11px 0;font-family:${SANS};font-size:13px;font-weight:600;color:${PRIMARY};text-align:right;border-bottom:1px solid rgba(42,15,15,0.07);vertical-align:top;">₹${line.lineAmount.toLocaleString("en-IN")}</td>
+  </tr>`).join("");
 
-  return `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
-  <thead>
-    <tr>
-      <th style="text-align:left;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:rgba(42,15,15,0.5);padding-bottom:8px;">Item</th>
-      <th style="text-align:center;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:rgba(42,15,15,0.5);padding-bottom:8px;">Qty</th>
-      <th style="text-align:right;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:rgba(42,15,15,0.5);padding-bottom:8px;">Amount</th>
-    </tr>
-  </thead>
-  <tbody>${rows}</tbody>
-</table>`;
+  return `
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
+    <thead>
+      <tr>
+        <th style="text-align:left;font-family:${SANS};font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:${MUTED};padding-bottom:8px;font-weight:600;">Item</th>
+        <th style="text-align:center;font-family:${SANS};font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:${MUTED};padding-bottom:8px;font-weight:600;">Qty</th>
+        <th style="text-align:right;font-family:${SANS};font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:${MUTED};padding-bottom:8px;font-weight:600;">Amount</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>`;
 }
 
 // ─── Order Confirmation ───────────────────────────────────────────────────────
@@ -119,30 +145,44 @@ export function orderConfirmationHtml(data: OrderConfirmationData): string {
     ${p(`Namaste ${name},<br/>Thank you for your order — we're so happy to be dressing you up! Your order has been confirmed and will be dispatched within 24–48 hours.`)}
     ${divider()}
 
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
-      ${badge("Order No.", orderNumber)}
-      ${badge("Amount Paid", `₹${total.toLocaleString("en-IN")}`)}
+    ${sectionLabel("Order Details")}
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      ${kv("Order No.", orderNumber)}
+      ${kv("Amount Paid", `₹${total.toLocaleString("en-IN")}`)}
     </table>
 
     ${divider()}
-    <p style="margin:0 0 12px;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:rgba(42,15,15,0.55);">Your Items</p>
+    ${sectionLabel("Your Items")}
     ${itemsTable(lines)}
 
-    <table width="100%" cellpadding="0" cellspacing="0" style="background:rgba(42,15,15,0.04);border-radius:8px;padding:12px 16px;margin-bottom:20px;">
-      <tr><td style="font-size:12px;color:rgba(42,15,15,0.65);padding:3px 0;">Subtotal</td><td style="font-size:12px;text-align:right;color:${PRIMARY};">₹${subtotal.toLocaleString("en-IN")}</td></tr>
-      ${discount > 0 ? `<tr><td style="font-size:12px;color:#16a34a;padding:3px 0;">Product Discount</td><td style="font-size:12px;text-align:right;color:#16a34a;">−₹${discount.toLocaleString("en-IN")}</td></tr>` : ""}
-      ${couponDiscount > 0 ? `<tr><td style="font-size:12px;color:#16a34a;padding:3px 0;">Coupon Discount</td><td style="font-size:12px;text-align:right;color:#16a34a;">−₹${couponDiscount.toLocaleString("en-IN")}</td></tr>` : ""}
-      <tr><td style="font-size:12px;color:rgba(42,15,15,0.65);padding:3px 0;">Delivery</td><td style="font-size:12px;text-align:right;color:${PRIMARY};">${delivery === 0 ? "Free" : `₹${delivery.toLocaleString("en-IN")}`}</td></tr>
-      <tr><td style="font-size:14px;font-weight:700;color:${PRIMARY};padding:8px 0 3px;border-top:1px solid rgba(42,15,15,0.1);">Total Paid</td><td style="font-size:14px;font-weight:700;text-align:right;color:${PRIMARY};padding:8px 0 3px;border-top:1px solid rgba(42,15,15,0.1);">₹${total.toLocaleString("en-IN")}</td></tr>
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:rgba(42,15,15,0.04);border-radius:10px;padding:14px 16px;margin-bottom:24px;">
+      <tr>
+        <td style="font-family:${SANS};font-size:12px;color:${MUTED};padding:4px 0;">Subtotal</td>
+        <td style="font-family:${SANS};font-size:12px;text-align:right;color:${PRIMARY};padding:4px 0;">₹${subtotal.toLocaleString("en-IN")}</td>
+      </tr>
+      ${discount > 0 ? `<tr><td style="font-family:${SANS};font-size:12px;color:#16a34a;padding:4px 0;">Product Discount</td><td style="font-family:${SANS};font-size:12px;text-align:right;color:#16a34a;padding:4px 0;">−₹${discount.toLocaleString("en-IN")}</td></tr>` : ""}
+      ${couponDiscount > 0 ? `<tr><td style="font-family:${SANS};font-size:12px;color:#16a34a;padding:4px 0;">Coupon Discount</td><td style="font-family:${SANS};font-size:12px;text-align:right;color:#16a34a;padding:4px 0;">−₹${couponDiscount.toLocaleString("en-IN")}</td></tr>` : ""}
+      <tr>
+        <td style="font-family:${SANS};font-size:12px;color:${MUTED};padding:4px 0;">Delivery</td>
+        <td style="font-family:${SANS};font-size:12px;text-align:right;color:${PRIMARY};padding:4px 0;">${delivery === 0 ? "Free" : `₹${delivery.toLocaleString("en-IN")}`}</td>
+      </tr>
+      <tr>
+        <td style="font-family:${SANS};font-size:14px;font-weight:700;color:${PRIMARY};padding:10px 0 4px;border-top:1px solid rgba(42,15,15,0.10);">Total Paid</td>
+        <td style="font-family:${SANS};font-size:14px;font-weight:700;text-align:right;color:${PRIMARY};padding:10px 0 4px;border-top:1px solid rgba(42,15,15,0.10);">₹${total.toLocaleString("en-IN")}</td>
+      </tr>
     </table>
 
     ${divider()}
-    <p style="margin:0 0 8px;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:rgba(42,15,15,0.55);">Delivering To</p>
-    ${p(`<strong>${address.fullName}</strong>${address.phone ? ` · ${address.phone}` : ""}<br/>${addressLine}`)}
+    ${sectionLabel("Delivering To")}
+    ${p(`<strong>${address.fullName}</strong>${address.phone ? ` &nbsp;·&nbsp; ${address.phone}` : ""}<br/><span style="color:${MUTED};">${addressLine}</span>`)}
 
-    <div style="background:rgba(124,45,45,0.06);border-left:3px solid ${ACCENT};border-radius:4px;padding:14px 16px;margin-top:8px;">
-      <p style="margin:0;font-size:13px;color:${PRIMARY};">📦 <strong>Metro Cities:</strong> 1–3 working days &nbsp;|&nbsp; <strong>Non-Metro:</strong> 2–5 working days</p>
-    </div>
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:rgba(124,45,45,0.06);border-left:3px solid ${ACCENT};border-radius:0 8px 8px 0;margin-top:4px;">
+      <tr>
+        <td style="padding:14px 16px;font-family:${SANS};font-size:13px;color:${PRIMARY};">
+          🚚 &nbsp;<strong>Metro Cities:</strong> 1–3 working days &nbsp;·&nbsp; <strong>Non-Metro:</strong> 2–5 working days
+        </td>
+      </tr>
+    </table>
   `;
 
   return baseLayout(`Order Confirmed — ${orderNumber} | NaariThread`, body);
@@ -204,9 +244,9 @@ export function orderStatusHtml(data: OrderStatusData): string {
     ${p(`Hi ${name},<br/>${copy.message}`)}
     ${divider()}
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
-      ${badge("Order No.", orderNumber)}
-      ${badge("Order Total", `₹${total.toLocaleString("en-IN")}`)}
-      ${badge("Status", status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()))}
+      ${kv("Order No.", orderNumber)}
+      ${kv("Order Total", `₹${total.toLocaleString("en-IN")}`)}
+      ${kv("Status", status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()))}
     </table>
     ${divider()}
     ${p("For any questions, you can reply to this email or reach us on WhatsApp for faster support.", true)}
@@ -236,7 +276,7 @@ export function abandonedCartHtml(data: AbandonedCartData): string {
     ${p(`Hi ${name},<br/>You added <strong>${itemCount} item${itemCount !== 1 ? "s" : ""}</strong> to your NaariThread cart but didn't complete your order. Your cart is waiting for you!`)}
     ${divider()}
     <div style="text-align:center;padding:16px 0;">
-      <a href="https://www.naarithread.com/cart" style="display:inline-block;background:${PRIMARY};color:${SECONDARY};text-decoration:none;font-size:13px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;padding:14px 32px;border-radius:12px;">Complete Your Order →</a>
+      <a href="${SITE_URL}/cart" style="display:inline-block;background:${PRIMARY};color:${SECONDARY};text-decoration:none;font-family:${SANS};font-size:12px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;padding:15px 36px;border-radius:12px;">Complete Your Order →</a>
     </div>
     ${divider()}
     ${p("If you need help choosing a size or have questions about a product, we're here for you!", true)}
