@@ -11,6 +11,6 @@ export function getResendClient(): Resend {
   return _client;
 }
 
-export const FROM_ADDRESS = "NaariThread <noreply@naarithread.com>";
+export const FROM_ADDRESS = "NaariThread <noreply@mail.naarithread.com>";
 export const WHATSAPP_NUMBER = "+91 84878 49852";
 export const SUPPORT_EMAIL = "naarithread@gmail.com";
