@@ -451,7 +451,13 @@ async function toggleProductStockAction(formData: FormData) {
   const nextStockQty = nextInStock ? Math.max(1, currentStockQty) : 0;
 
   const databases = createDatabasesWithApiKey();
+  // sku/slug are required by Appwrite on every updateDocument; fall back to productId if null in the row.
+  const existingDoc = await databases.getDocument(getDatabaseId(), "sku", productId).catch(() => null);
+  const existingSku = String(existingDoc?.sku ?? "").trim() || productId;
+  const existingSlug = String(existingDoc?.slug ?? "").trim() || productId;
   await databases.updateDocument(getDatabaseId(), "sku", productId, {
+    sku: existingSku,
+    slug: existingSlug,
     inStock: nextInStock,
     stockQty: nextStockQty,
   });
@@ -531,8 +537,9 @@ async function saveProductAction(formData: FormData) {
     // Include sku/slug in the payload so required fields are satisfied (TablesDB enforces required on every write).
     const existingSku = String(formData.get("existingSku") ?? "").trim();
     const existingSlug = String(formData.get("existingSlug") ?? "").trim();
-    if (existingSku) payload.sku = existingSku;
-    if (existingSlug) payload.slug = existingSlug;
+    // Fall back to productId/generated slug if the row had null values (pre-existing rows before schema update).
+    payload.sku = existingSku || productId;
+    payload.slug = existingSlug || await generateUniqueSlug(databases, databaseId, name);
     await databases.updateDocument(databaseId, "sku", productId, payload);
   } else {
     const slug = await generateUniqueSlug(databases, databaseId, name);
