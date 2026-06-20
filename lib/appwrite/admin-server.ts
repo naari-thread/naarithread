@@ -1,7 +1,6 @@
 import { Databases } from "node-appwrite";
 
 import { getServerAdminEmails } from "@/lib/firebase/admin";
-import { verifyFirebaseIdToken } from "@/lib/firebase/admin-auth";
 
 export function getAdminEmails(): string[] {
   return getServerAdminEmails();
@@ -24,6 +23,7 @@ export async function getUserFromJwt(jwt: string): Promise<{
   email: string;
   name: string;
 }> {
+  const { verifyFirebaseIdToken } = await import("@/lib/firebase/admin-auth");
   const decoded = await verifyFirebaseIdToken(jwt);
   return {
     $id: decoded.uid,
