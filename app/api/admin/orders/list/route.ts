@@ -18,11 +18,17 @@ function parseItems(raw: unknown) {
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return (parsed as Record<string, unknown>[]).map((item) => ({
-      productName: String(item.productName ?? "Product"),
-      quantity: toNumber(item.quantity),
-      lineAmount: toNumber(item.lineAmount),
-    }));
+    return (parsed as Record<string, unknown>[]).map((item) => {
+      const size = typeof item.size === "string" ? item.size.trim() : "";
+      const color = typeof item.color === "string" ? item.color.trim() : "";
+      return {
+        productName: String(item.productName ?? "Product"),
+        quantity: toNumber(item.quantity),
+        lineAmount: toNumber(item.lineAmount),
+        ...(size ? { size } : {}),
+        ...(color ? { color } : {}),
+      };
+    });
   } catch { return []; }
 }
 

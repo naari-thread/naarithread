@@ -16,6 +16,8 @@ type OrderLine = {
   productName: string;
   unitAmount: number;
   lineAmount: number;
+  size?: string;
+  color?: string;
 };
 
 type OrderItem = {
@@ -269,11 +271,27 @@ export function OrdersDetailsModal({ onClose }: OrdersDetailsModalProps) {
               </div>
             </div>
 
-            <div className="mt-3 space-y-1.5">
+            <div className="mt-3 space-y-2">
               {order.items.slice(0, 3).map((line) => (
-                <div key={`${order.id}-${line.productId}`} className="flex items-center justify-between text-xs">
-                  <p className="line-clamp-1 text-primary/82">{line.productName} x {line.quantity}</p>
-                  <p className="font-semibold text-primary/88">{formatCurrency(line.lineAmount)}</p>
+                <div key={`${order.id}-${line.productId}`} className="flex items-start justify-between gap-2 text-xs">
+                  <div className="min-w-0 flex-1">
+                    <p className="line-clamp-1 text-primary/82">{line.productName} x {line.quantity}</p>
+                    {(line.color || line.size) && (
+                      <div className="mt-0.5 flex flex-wrap gap-1">
+                        {line.color && (
+                          <span className="rounded-full border border-primary/12 bg-primary/5 px-1.5 py-0.5 text-[0.6rem] text-primary/65">
+                            {line.color}
+                          </span>
+                        )}
+                        {line.size && (
+                          <span className="rounded-full border border-primary/12 bg-primary/5 px-1.5 py-0.5 text-[0.6rem] text-primary/65">
+                            Size: {line.size}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <p className="shrink-0 font-semibold text-primary/88">{formatCurrency(line.lineAmount)}</p>
                 </div>
               ))}
             </div>

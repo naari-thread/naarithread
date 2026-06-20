@@ -87,6 +87,21 @@ type CreateOrderResponse = {
     discount: number;
     couponDiscount: number;
     delivery: number;
+    walletDiscount?: number;
+    total: number;
+  };
+};
+
+type ZeroPayResponse = {
+  zeroPay: true;
+  internalOrderId: string;
+  orderNumber: string;
+  summary: {
+    subtotal: number;
+    discount: number;
+    couponDiscount: number;
+    delivery: number;
+    walletDiscount: number;
     total: number;
   };
 };
@@ -140,6 +155,10 @@ function isCreateOrderResponse(value: unknown): value is CreateOrderResponse {
     typeof value.summary.delivery === "number" &&
     typeof value.summary.total === "number"
   );
+}
+
+function isZeroPayResponse(value: unknown): value is ZeroPayResponse {
+  return isRecord(value) && value.zeroPay === true && typeof value.orderNumber === "string";
 }
 
 function formatPrice(value: number) {
@@ -338,6 +357,8 @@ export function CartPageClient() {
   const [couponLoading, setCouponLoading] = useState(false);
   const [couponError, setCouponError] = useState("");
   const [isMobileCheckoutOpen, setIsMobileCheckoutOpen] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [useWalletBalance, setUseWalletBalance] = useState(false);
 
   const handleProceedToBuyRef = useRef<(() => Promise<void>) | null>(null);
 
@@ -561,6 +582,32 @@ export function CartPageClient() {
     };
   }, [createAuthJwt, isAuthenticated, user?.$id]);
 
+  // Fetch wallet balance so the checkout UI can show the "Use Refund Wallet" option.
+  useEffect(() => {
+    if (!isAuthenticated || !user?.$id) {
+      setWalletBalance(0);
+      setUseWalletBalance(false);
+      return;
+    }
+
+    let alive = true;
+    (async () => {
+      try {
+        const jwt = await createAuthJwt();
+        const res = await fetch("/api/account/wallet", { headers: { Authorization: `Bearer ${jwt}` } });
+        if (!res.ok || !alive) return;
+        const data = (await res.json()) as { balance?: number };
+        if (alive && typeof data.balance === "number") {
+          setWalletBalance(data.balance);
+        }
+      } catch {
+        // Non-fatal — wallet option simply won't appear
+      }
+    })();
+
+    return () => { alive = false; };
+  }, [isAuthenticated, user?.$id, createAuthJwt]);
+
   // Auto-remove stale cart entries (IDs not in the catalog) once the catalog
   // finishes loading. Silently clears leftover dev/test data without scaring
   // the user with "Product unavailable" error cards.
@@ -624,7 +671,9 @@ export function CartPageClient() {
   const productDiscount = Math.max(0, originalTotal - subtotal);
   const delivery = lines.length === 0 || subtotal > 2999 ? 0 : 99;
   const couponDiscount = Math.min(appliedCoupon?.discountAmount ?? 0, subtotal);
-  const total = Math.max(0, subtotal - couponDiscount) + delivery;
+  const preTotalBeforeWallet = Math.max(0, subtotal - couponDiscount) + delivery;
+  const walletDiscount = useWalletBalance ? Math.min(walletBalance, preTotalBeforeWallet) : 0;
+  const total = Math.max(0, preTotalBeforeWallet - walletDiscount);
 
   const persistCart = async (nextItems: CartItemsMap) => {
     setCartItems(nextItems);
@@ -768,6 +817,7 @@ export function CartPageClient() {
         })),
         shippingAddress,
         couponCode: appliedCoupon?.code ?? "",
+        useWalletBalance: useWalletBalance && walletBalance > 0,
       });
 
       const orderResponse = pendingOrder
@@ -783,6 +833,28 @@ export function CartPageClient() {
         });
 
       const responsePayload: unknown = await orderResponse.json();
+
+      // Zero-pay: wallet covered the entire order, no Razorpay needed.
+      if (!pendingOrder && isZeroPayResponse(responsePayload)) {
+        writeCartItems({});
+        writeCartItemSelections({});
+        setCartItems({});
+        setCartSelections({});
+        setAppliedCoupon(null);
+        setCouponCode("");
+        setUseWalletBalance(false);
+        setWalletBalance(0);
+        setSuccessInfo({
+          orderNumber: responsePayload.orderNumber,
+          total: responsePayload.summary.total,
+          address: { ...shippingAddress },
+          deliveryDays: deliveryEstimate?.days,
+        });
+        setCheckoutPhase("success");
+        setIsProcessingCheckout(false);
+        return;
+      }
+
       const orderPayload = pendingOrder
         ? {
             ...pendingOrder,
@@ -1337,6 +1409,27 @@ export function CartPageClient() {
                 ) : null}
               </div>
 
+              {/* Wallet balance */}
+              {isAuthenticated && walletBalance > 0 ? (
+                <div className="mt-4">
+                  <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-primary/14 bg-paper px-3.5 py-3">
+                    <input
+                      type="checkbox"
+                      checked={useWalletBalance}
+                      onChange={(e) => setUseWalletBalance(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-primary/30 accent-primary"
+                    />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-primary">Use Refund Wallet</p>
+                      <p className="text-[0.7rem] text-primary/60">
+                        Available: {formatPrice(walletBalance)}
+                        {walletDiscount > 0 ? ` · Applying ${formatPrice(walletDiscount)}` : ""}
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              ) : null}
+
               {/* Price breakdown */}
               <div className="mt-5 space-y-2.5 border-t border-primary/12 pt-4 text-sm">
                 <div className="flex items-center justify-between">
@@ -1361,6 +1454,12 @@ export function CartPageClient() {
                   <span className="text-primary/75">Delivery</span>
                   <span>{delivery === 0 ? "Free" : formatPrice(delivery)}</span>
                 </div>
+                {walletDiscount > 0 ? (
+                  <div className="flex items-center justify-between">
+                    <span className="text-primary/75">Refund Wallet</span>
+                    <span className="text-blue-700">- {formatPrice(walletDiscount)}</span>
+                  </div>
+                ) : null}
               </div>
 
               <div className="mt-4 flex items-center justify-between border-t border-primary/12 pt-4">
@@ -1394,7 +1493,7 @@ export function CartPageClient() {
                 disabled={lines.length === 0 || isProcessingCheckout}
                 className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-xl border border-primary bg-primary px-4 text-xs font-semibold uppercase tracking-[0.2em] text-secondary transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isProcessingCheckout ? "Processing..." : "Proceed to Buy"}
+                {isProcessingCheckout ? "Processing..." : total === 0 ? "Place Order (Free)" : "Proceed to Buy"}
               </button>
 
               {delivery > 0 ? (
@@ -1604,6 +1703,27 @@ export function CartPageClient() {
                   {couponError ? <p className="mt-1.5 text-xs text-red-600">{couponError}</p> : null}
                 </div>
 
+                {/* Wallet balance */}
+                {isAuthenticated && walletBalance > 0 ? (
+                  <div className="mt-4">
+                    <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-primary/14 bg-paper px-3.5 py-3">
+                      <input
+                        type="checkbox"
+                        checked={useWalletBalance}
+                        onChange={(e) => setUseWalletBalance(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 shrink-0 rounded border-primary/30 accent-primary"
+                      />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-primary">Use Refund Wallet</p>
+                        <p className="text-[0.7rem] text-primary/60">
+                          Available: {formatPrice(walletBalance)}
+                          {walletDiscount > 0 ? ` · Applying ${formatPrice(walletDiscount)}` : ""}
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                ) : null}
+
                 {/* Price breakdown */}
                 <div className="mt-5 space-y-2.5 border-t border-primary/12 pt-4 text-sm">
                   <div className="flex items-center justify-between">
@@ -1626,6 +1746,12 @@ export function CartPageClient() {
                     <span className="text-primary/75">Delivery</span>
                     <span>{delivery === 0 ? "Free" : formatPrice(delivery)}</span>
                   </div>
+                  {walletDiscount > 0 ? (
+                    <div className="flex items-center justify-between">
+                      <span className="text-primary/75">Refund Wallet</span>
+                      <span className="text-blue-700">- {formatPrice(walletDiscount)}</span>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="mt-4 flex items-center justify-between border-t border-primary/12 pt-4">
@@ -1656,7 +1782,7 @@ export function CartPageClient() {
                   disabled={lines.length === 0 || isProcessingCheckout}
                   className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-xl border border-primary bg-primary px-4 text-xs font-semibold uppercase tracking-[0.2em] text-secondary transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {isProcessingCheckout ? "Processing..." : "Proceed to Buy"}
+                  {isProcessingCheckout ? "Processing..." : total === 0 ? "Place Order (Free)" : "Proceed to Buy"}
                 </button>
 
                 {delivery > 0 ? (

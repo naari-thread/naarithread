@@ -34,6 +34,8 @@ type OrderLine = {
   productName: string;
   unitAmount: number;
   lineAmount: number;
+  size?: string;
+  color?: string;
 };
 
 function parseOrderLines(raw: unknown) {
@@ -51,12 +53,16 @@ function parseOrderLines(raw: unknown) {
       .filter((line) => line && typeof line === "object")
       .map((line) => {
         const item = line as Record<string, unknown>;
+        const size = typeof item.size === "string" ? item.size.trim() : "";
+        const color = typeof item.color === "string" ? item.color.trim() : "";
         return {
           productId: String(item.productId ?? ""),
           quantity: Math.max(0, Math.trunc(toNumber(item.quantity))),
           productName: String(item.productName ?? "Product"),
           unitAmount: Math.max(0, toNumber(item.unitAmount)),
           lineAmount: Math.max(0, toNumber(item.lineAmount)),
+          ...(size ? { size } : {}),
+          ...(color ? { color } : {}),
         };
       })
       .filter((line) => line.productId && line.quantity > 0);

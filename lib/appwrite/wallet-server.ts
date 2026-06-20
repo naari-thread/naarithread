@@ -11,7 +11,7 @@ const WALLET_TRANSACTIONS_COLLECTION = "walletTransactions";
 const WALLET_PAYOUT_REQUESTS_COLLECTION = "walletPayoutRequests";
 const REFUND_MATURITY_DAYS = 7;
 
-export type WalletTransactionType = "refund_credit" | "withdrawal_paid" | "withdrawal_released";
+export type WalletTransactionType = "refund_credit" | "checkout_debit" | "withdrawal_paid" | "withdrawal_released";
 
 export type WalletTransaction = {
   id: string;
@@ -417,9 +417,12 @@ export async function listWalletSummary(args: { userId: string }): Promise<Walle
     )
     .sort((left, right) => left.maturityAt.localeCompare(right.maturityAt));
 
+  const actualBalance = toRoundedAmount(toNumber(walletData?.balance));
+  const maturedCreditSum = toRoundedAmount(availableTransactions.reduce((sum, transaction) => sum + transaction.amount, 0));
+
   return {
-    balance: toRoundedAmount(toNumber(walletData?.balance)),
-    availableToTransfer: toRoundedAmount(availableTransactions.reduce((sum, transaction) => sum + transaction.amount, 0)),
+    balance: actualBalance,
+    availableToTransfer: Math.min(actualBalance, maturedCreditSum),
     pendingTransferAmount: toRoundedAmount(toNumber(walletData?.reservedBalance)),
     nextEligibleAt: futureTransactions[0]?.maturityAt ?? "",
     hasOpenPayoutRequest: payoutRequests.some((request) => request.status === "requested" || request.status === "processing"),
@@ -756,4 +759,78 @@ export async function incrementWalletRefundBalance(args: {
     source: args.reason,
     orderId: args.referenceOrderId,
   });
+}
+
+export async function getWalletBalance(userId: string): Promise<number> {
+  const uid = userId.trim();
+  if (!uid) return 0;
+  const db = getAdminDb();
+  const doc = await walletsCollection(db).doc(uid).get();
+  if (!doc.exists) return 0;
+  const data = doc.data() as Partial<WalletDocument>;
+  return toRoundedAmount(toNumber(data.balance));
+}
+
+export async function deductWalletForCheckout(args: {
+  userId: string;
+  orderId: string;
+  amount: number;
+  source: string;
+}): Promise<{ alreadyDebited: boolean; debitedAmount: number; balance: number }> {
+  const debitAmount = toRoundedAmount(args.amount);
+  if (debitAmount <= 0) {
+    throw new Error("Invalid checkout debit amount.");
+  }
+
+  const db = getAdminDb();
+  const result = await db.runTransaction(async (transaction) => {
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const userId = args.userId.trim();
+    const orderId = args.orderId.trim();
+
+    const existingDebitQuery = walletTransactionsCollection(db)
+      .where("userId", "==", userId)
+      .where("referenceOrderId", "==", orderId)
+      .where("type", "==", "checkout_debit")
+      .limit(1);
+    const existingDebitSnapshot = await transaction.get(existingDebitQuery);
+    if (!existingDebitSnapshot.empty) {
+      const wallet = await resolveWalletDocument(transaction, db, userId, nowIso);
+      return { alreadyDebited: true, debitedAmount: debitAmount, balance: wallet.data.balance };
+    }
+
+    const wallet = await resolveWalletDocument(transaction, db, userId, nowIso);
+    if (wallet.data.balance < debitAmount) {
+      throw new Error("Insufficient wallet balance.");
+    }
+
+    const nextBalance = toRoundedAmount(wallet.data.balance - debitAmount);
+    const transactionRef = walletTransactionsCollection(db).doc();
+
+    transaction.set(transactionRef, {
+      userId,
+      type: "checkout_debit" as WalletTransactionType,
+      amount: debitAmount,
+      source: toText(args.source, 300) || `Checkout payment for order ${orderId}`,
+      referenceOrderId: orderId,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      maturityAt: "",
+      withdrawalStatus: "available",
+      payoutRequestId: "",
+      payoutRequestNumber: "",
+    } satisfies WalletTransactionDocument);
+
+    transaction.update(wallet.ref, {
+      userId,
+      balance: nextBalance,
+      reservedBalance: wallet.data.reservedBalance,
+      updatedAt: nowIso,
+    });
+
+    return { alreadyDebited: false, debitedAmount: debitAmount, balance: nextBalance };
+  });
+
+  return result;
 }

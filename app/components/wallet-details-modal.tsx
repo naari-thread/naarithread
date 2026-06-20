@@ -8,7 +8,7 @@ import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
 
 type WalletTransaction = {
   id: string;
-  type: "refund_credit" | "withdrawal_paid" | "withdrawal_released";
+  type: "refund_credit" | "checkout_debit" | "withdrawal_paid" | "withdrawal_released";
   amount: number;
   source: string;
   date: string;
@@ -112,6 +112,15 @@ function getTransactionPresentation(transaction: WalletTransaction): {
       toneClass: "bg-emerald-100 text-emerald-700",
       icon: "Add01Icon",
       amountPrefix: "+",
+    };
+  }
+
+  if (transaction.type === "checkout_debit") {
+    return {
+      title: "Used at checkout",
+      toneClass: "bg-blue-100 text-blue-700",
+      icon: "Remove01Icon",
+      amountPrefix: "-",
     };
   }
 

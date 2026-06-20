@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, memo, type ReactNode } from "react";
+import { memo, useMemo, useState, type ReactNode } from "react";
 
 import { CloudinaryImage } from "@/app/components/cloudinary-image";
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
+import { SizeColorPickerModal } from "@/app/components/size-color-picker-modal";
 import type { ProductRecord } from "@/lib/appwrite/products";
+import { writeCartItemSelection } from "@/lib/cart-state";
 import { getProductBadgeLabel } from "@/lib/product-badges";
+import { writeWishlistItemSelection } from "@/lib/wishlist-state";
 
 type ProductCardProps = {
   product: ProductRecord;
@@ -120,12 +123,52 @@ function ProductCardInternal({
   const productHref = `/products/${product.category}/${product.subCategory}/${product.slug}`;
   const badgeLabel = getProductBadgeLabel(product.badge);
 
+  const hasOptions = product.colorOptions.length > 0 || product.sizeOptions.length > 0;
+  const [pickerAction, setPickerAction] = useState<"cart" | "wishlist" | null>(null);
+
+  const handleAddToCartClick = () => {
+    if (hasOptions) {
+      setPickerAction("cart");
+    } else {
+      onAddToCart(product.id);
+    }
+  };
+
+  const handleWishlistClick = () => {
+    if (!isWishlisted && hasOptions) {
+      setPickerAction("wishlist");
+    } else {
+      if (isWishlisted) writeWishlistItemSelection(product.id, null);
+      onToggleWishlist(product.id);
+    }
+  };
+
+  const handlePickerConfirm = ({ size, color }: { size: string; color: string }) => {
+    setPickerAction(null);
+    if (pickerAction === "cart") {
+      writeCartItemSelection(product.id, { size, color });
+      onAddToCart(product.id);
+    } else if (pickerAction === "wishlist") {
+      writeWishlistItemSelection(product.id, { size, color });
+      onToggleWishlist(product.id);
+    }
+  };
+
   return (
+    <>
+    {pickerAction !== null && (
+      <SizeColorPickerModal
+        product={product}
+        actionLabel={pickerAction === "cart" ? "Add to Cart" : "Save to Wishlist"}
+        onConfirm={handlePickerConfirm}
+        onClose={() => setPickerAction(null)}
+      />
+    )}
     <article className="group relative flex h-[15rem] flex-row overflow-hidden rounded-3xl border border-primary/10 bg-[#fbf5e6] shadow-sm transition duration-300 hover:border-primary/20 hover:shadow-md sm:h-full sm:flex-col sm:hover:sm:-translate-y-1">
       <button
         type="button"
         aria-label={`${isWishlisted ? "Remove" : "Save"} ${product.name} ${isWishlisted ? "from" : "to"} wishlist`}
-        onClick={() => onToggleWishlist(product.id)}
+        onClick={handleWishlistClick}
         className={`absolute right-2.5 top-2.5 z-[4] flex h-9 w-9 items-center justify-center rounded-full border backdrop-blur-sm transition sm:right-4 sm:top-4 ${
           isWishlisted
             ? "border-primary bg-primary text-secondary shadow-[0_10px_24px_rgba(120,0,0,0.24)]"
@@ -242,7 +285,7 @@ function ProductCardInternal({
                 <button
                   type="button"
                   aria-label={`Add ${product.name} to cart`}
-                  onClick={() => onAddToCart(product.id)}
+                  onClick={handleAddToCartClick}
                   disabled={isOutOfStock}
                   className="flex h-full w-full items-center justify-center gap-1.5 rounded-full bg-primary px-3 text-[0.65rem] font-semibold uppercase tracking-widest text-[#fbf5e6] transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-45 sm:gap-2 sm:px-4 sm:text-xs"
                 >
@@ -256,6 +299,7 @@ function ProductCardInternal({
         </div>
       </div>
     </article>
+    </>
   );
 }
 

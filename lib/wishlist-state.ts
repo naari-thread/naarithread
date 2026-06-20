@@ -1,5 +1,10 @@
 export type WishlistItemsMap = Record<string, true>;
 
+export type WishlistItemSelection = { size?: string; color?: string };
+export type WishlistItemSelectionsMap = Record<string, WishlistItemSelection>;
+
+const WISHLIST_SELECTIONS_KEY = "nt-wishlist-item-selections-v1";
+
 const WISHLIST_STORAGE_KEY = "nt-wishlist-items-v1";
 const WISHLIST_CHANGE_EVENT = "nt-wishlist-change";
 
@@ -80,6 +85,42 @@ export function toggleWishlistItem(productId: string) {
   next[safeId] = true;
   writeWishlistItems(next);
   return true;
+}
+
+export function readWishlistItemSelections(): WishlistItemSelectionsMap {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(WISHLIST_SELECTIONS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return {};
+    const result: WishlistItemSelectionsMap = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (!k.trim() || !v || typeof v !== "object") continue;
+      const item = v as Record<string, unknown>;
+      const size = typeof item.size === "string" ? item.size.trim() : "";
+      const color = typeof item.color === "string" ? item.color.trim() : "";
+      if (size || color) result[k.trim()] = { ...(size ? { size } : {}), ...(color ? { color } : {}) };
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+export function writeWishlistItemSelection(productId: string, selection: WishlistItemSelection | null) {
+  if (typeof window === "undefined") return;
+  const safeId = productId.trim();
+  if (!safeId) return;
+  const current = readWishlistItemSelections();
+  if (!selection || (!selection.size && !selection.color)) {
+    delete current[safeId];
+  } else {
+    current[safeId] = { ...(selection.size ? { size: selection.size } : {}), ...(selection.color ? { color: selection.color } : {}) };
+  }
+  try {
+    window.localStorage.setItem(WISHLIST_SELECTIONS_KEY, JSON.stringify(current));
+  } catch {}
 }
 
 export function subscribeToWishlistChanges(listener: (items: WishlistItemsMap) => void) {

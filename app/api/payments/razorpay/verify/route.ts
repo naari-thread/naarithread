@@ -4,7 +4,9 @@ import { Permission, Query, Role, type Models } from "node-appwrite";
 
 import { createDatabasesWithApiKey, getDatabaseId, getUserFromJwt } from "@/lib/appwrite/admin-server";
 import { createUserNotification } from "@/lib/appwrite/notifications";
+import { deductWalletForCheckout } from "@/lib/appwrite/wallet-server";
 import { PRODUCT_CATALOG_CACHE_TAG } from "@/lib/cache-tags";
+import { getWalletCheckout } from "@/lib/firebase/wallet-checkouts";
 import { errorMessage, log, newCorrelationId } from "@/lib/logger";
 import { markCouponRedeemedForPaidOrder } from "@/lib/payments/coupon-usage";
 import { sendPaidOrderConfirmationOnce } from "@/lib/payments/order-confirmation";
@@ -104,7 +106,9 @@ export async function POST(request: Request): Promise<NextResponse> {
       return NextResponse.json({ error: "Razorpay payment does not belong to this payment order." }, { status: 400 });
     }
 
-    const expectedAmount = toPaise(Number(order.totalAmount ?? 0));
+    const walletCheckout = await getWalletCheckout(internalOrderId);
+    const walletAmountRs = walletCheckout?.walletAmount ?? 0;
+    const expectedAmount = toPaise(Number(order.totalAmount ?? 0) - walletAmountRs);
     const paidAmount = Number(razorpayPayment.amount ?? 0);
     const paidCurrency = String(razorpayPayment.currency ?? "").toUpperCase();
     if (paidAmount !== expectedAmount || paidCurrency !== "INR") {
@@ -186,6 +190,16 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
 
     if (isPaid && shouldRunPostPayment) {
+      if (walletAmountRs > 0) {
+        await deductWalletForCheckout({
+          userId: user.$id,
+          orderId: internalOrderId,
+          amount: walletAmountRs,
+          source: `Wallet payment for order ${String(order.orderNumber ?? internalOrderId)}`,
+        }).catch((err: unknown) => {
+          log("warn", SCOPE, "wallet_deduct_failed", { correlationId, internalOrderId, message: errorMessage(err) });
+        });
+      }
       await reduceStockForPaidOrder(internalOrderId);
       await markCouponRedeemedForPaidOrder(internalOrderId);
       await sendPaidOrderConfirmationOnce(internalOrderId);

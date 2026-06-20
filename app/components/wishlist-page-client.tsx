@@ -7,9 +7,10 @@ import { useEffect, useMemo, useState } from "react";
 import { AuthModal } from "@/app/components/auth-modal";
 import { useAuth } from "@/app/components/auth-provider";
 import { CloudinaryImage } from "@/app/components/cloudinary-image";
+import { SizeColorPickerModal } from "@/app/components/size-color-picker-modal";
 import type { ProductRecord } from "@/lib/appwrite/products";
-import { readWishlistItems, toggleWishlistItem, writeWishlistItems, type WishlistItemsMap } from "@/lib/wishlist-state";
-import { readCartItems, writeCartItems } from "@/lib/cart-state";
+import { readWishlistItems, readWishlistItemSelections, toggleWishlistItem, writeWishlistItemSelection, writeWishlistItems, type WishlistItemsMap, type WishlistItemSelectionsMap } from "@/lib/wishlist-state";
+import { readCartItems, writeCartItemSelection, writeCartItems } from "@/lib/cart-state";
 import { showActionToast } from "@/lib/action-toast";
 import { readUserWishlistMap, upsertUserWishlistMap, upsertUserCartMap } from "@/lib/appwrite/shop-sync";
 import {
@@ -22,13 +23,16 @@ import {
 export function WishlistPageClient() {
   const { isLoading, isAuthenticated, user, createAuthJwt } = useAuth();
   const [wishlistItems, setWishlistItems] = useState<WishlistItemsMap>({});
+  const [wishlistSelections, setWishlistSelections] = useState<WishlistItemSelectionsMap>({});
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [hasCompletedCatalogSync, setHasCompletedCatalogSync] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [pickerProduct, setPickerProduct] = useState<ProductRecord | null>(null);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       setWishlistItems(readWishlistItems());
+      setWishlistSelections(readWishlistItemSelections());
     });
 
     return () => {
@@ -122,6 +126,9 @@ export function WishlistPageClient() {
       toggleWishlistItem(productId);
     }
 
+    writeWishlistItemSelection(productId, null);
+    setWishlistSelections(readWishlistItemSelections());
+
     const next = readWishlistItems();
     setWishlistItems(next);
     const productName = products.find((product) => product.id === productId)?.name ?? "Item";
@@ -146,11 +153,25 @@ export function WishlistPageClient() {
     }
   };
 
-  const moveToCart = async (product: ProductRecord) => {
+  const handleMoveToCartClick = (product: ProductRecord) => {
+    const stored = wishlistSelections[product.id];
+    const needsPicker = product.sizeOptions.length > 0 && !stored?.size;
+    if (needsPicker || (product.colorOptions.length > 0 && !stored)) {
+      setPickerProduct(product);
+    } else {
+      void doMoveToCart(product, stored?.size ?? "", stored?.color ?? (product.colorOptions[0] ?? ""));
+    }
+  };
+
+  const doMoveToCart = async (product: ProductRecord, size: string, color: string) => {
+    writeCartItemSelection(product.id, { size, color });
+    writeWishlistItemSelection(product.id, null);
+    setWishlistSelections(readWishlistItemSelections());
+
     const currentCart = readCartItems();
     const quantity = currentCart[product.id] || 0;
     const nextCart = { ...currentCart, [product.id]: quantity + 1 };
-    
+
     writeCartItems(nextCart);
     void removeItem(product.id, false);
     showActionToast({
@@ -171,6 +192,18 @@ export function WishlistPageClient() {
 
   return (
     <>
+      {pickerProduct !== null && (
+        <SizeColorPickerModal
+          product={pickerProduct}
+          actionLabel="Move to Cart"
+          onConfirm={({ size, color }) => {
+            const p = pickerProduct;
+            setPickerProduct(null);
+            void doMoveToCart(p, size, color);
+          }}
+          onClose={() => setPickerProduct(null)}
+        />
+      )}
       <main className="min-h-screen bg-paper px-4 pb-32 pt-7 text-primary sm:px-6 md:px-8 md:pb-20 md:pt-30">
         <section className="mx-auto w-full max-w-6xl">
           <header className="pb-6 border-b border-primary/15">
@@ -242,7 +275,26 @@ export function WishlistPageClient() {
                         <p className="mt-1 text-xs uppercase tracking-[0.18em] text-primary/65">
                           {product.categoryValue} • {product.subCategoryValue}
                         </p>
-                        
+
+                        {(() => {
+                          const sel = wishlistSelections[product.id];
+                          if (!sel?.size && !sel?.color) return null;
+                          return (
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {sel.color && (
+                                <span className="rounded-full border border-primary/15 bg-primary/5 px-2.5 py-0.5 text-[0.65rem] font-medium text-primary/70">
+                                  {sel.color}
+                                </span>
+                              )}
+                              {sel.size && (
+                                <span className="rounded-full border border-primary/15 bg-primary/5 px-2.5 py-0.5 text-[0.65rem] font-medium text-primary/70">
+                                  Size: {sel.size}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
+
                         <div className="mt-3 flex items-baseline gap-2">
                           <span className="text-base font-semibold">₹{sellingPrice.toLocaleString("en-IN")}</span>
                           {product.originalPrice > sellingPrice && (
@@ -256,7 +308,7 @@ export function WishlistPageClient() {
                       <button
                         type="button"
                         aria-label={`Move ${product.name} to cart`}
-                        onClick={() => void moveToCart(product)}
+                        onClick={() => handleMoveToCartClick(product)}
                         className="inline-flex h-9 w-full items-center justify-center rounded-xl border border-primary bg-primary px-4 text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-secondary transition hover:bg-primary/90"
                       >
                         Move to Cart
