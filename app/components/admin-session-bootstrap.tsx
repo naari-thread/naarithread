@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { AdminLoader } from "@/app/components/admin-loader";
 import { useAuth } from "@/app/components/auth-provider";
 
 export function AdminSessionBootstrap() {
   const router = useRouter();
   const { isLoading, isAuthenticated, isAdmin, createAuthJwt, normalizeError } = useAuth();
   const [message, setMessage] = useState("Checking admin access...");
+  const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
     if (isLoading) {
@@ -16,6 +18,7 @@ export function AdminSessionBootstrap() {
     }
 
     if (!isAuthenticated || !isAdmin) {
+      setHasError(true);
       setMessage("Sign in with your admin account first, then revisit this page.");
       return;
     }
@@ -42,6 +45,7 @@ export function AdminSessionBootstrap() {
         }
       } catch (error) {
         if (!isCancelled) {
+          setHasError(true);
           setMessage(normalizeError(error));
         }
       }
@@ -53,6 +57,16 @@ export function AdminSessionBootstrap() {
       isCancelled = true;
     };
   }, [createAuthJwt, isAdmin, isAuthenticated, isLoading, normalizeError, router]);
+
+  if (!hasError) {
+    return (
+      <AdminLoader
+        fullScreen={false}
+        label="Verifying admin access"
+        description="Checking your secure session and dashboard permissions..."
+      />
+    );
+  }
 
   return (
     <section className="mx-auto w-full max-w-2xl rounded-3xl border border-primary/20 bg-secondary p-7 shadow-sm sm:p-9">
