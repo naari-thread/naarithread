@@ -14,6 +14,7 @@ import { AdminMobileBottomBar } from "@/app/components/admin-mobile-bottom-bar";
 import { AdminProductTaxonomyFields } from "@/app/components/admin-product-taxonomy-fields";
 import { AdminSessionBootstrap } from "@/app/components/admin-session-bootstrap";
 import { AdminSubmitButton } from "@/app/components/admin-submit-button";
+import { AdminBadgeSelector } from "@/app/components/admin-badge-selector";
 import { CloudinaryImage } from "@/app/components/cloudinary-image";
 import { createDatabasesWithApiKey, getDatabaseId } from "@/lib/appwrite/admin-server";
 import { listRefundWalletPayoutRequests, type WalletPayoutRequest } from "@/lib/appwrite/wallet-server";
@@ -21,7 +22,8 @@ import { PRODUCT_CATALOG_CACHE_TAG } from "@/lib/cache-tags";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { timestampToIso } from "@/lib/firebase/document";
 import { hasVerifiedAdminSession } from "@/lib/firebase/admin-session";
-import { PRODUCT_BADGES, getProductBadgeLabel, isProductBadgeValue } from "@/lib/product-badges";
+import { listCustomBadges } from "@/lib/firebase/product-badges-server";
+import { PRODUCT_BADGES, getProductBadgeLabel } from "@/lib/product-badges";
 import {
   getCategoryLabelBySlug,
   getSubCategoryLabelBySlug,
@@ -311,7 +313,7 @@ function mapProduct(document: Record<string, unknown>): AdminProduct {
     colorOptions: toStringArray(document.colorOptions),
     isActive: toBoolean(document.isActive, true),
     createdAt: String(document.$createdAt ?? ""),
-    badge: isProductBadgeValue(badge) ? badge : "",
+    badge: badge || "",
   };
 }
 
@@ -447,9 +449,17 @@ async function getProductFormOptions() {
     }
   }
 
+  const customBadges = await listCustomBadges().catch(() => []);
+  const hardcodedValues = new Set<string>(PRODUCT_BADGES.map((b) => b.value));
+  const mergedBadges = [
+    ...PRODUCT_BADGES.map((b) => ({ value: b.value, label: b.label })),
+    ...customBadges.filter((b) => !hardcodedValues.has(b.value)),
+  ];
+
   return {
     sizes: enumOf("size"),
     colors: Array.from(colors).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })),
+    badges: mergedBadges,
   };
 }
 
@@ -762,7 +772,7 @@ async function saveProductAction(formData: FormData) {
     sizeOptions,
     colorOptions: parseCommaSeparated(String(formData.get("colorOptions") ?? "")),
     otherImageUrls: parseCommaSeparated(String(formData.get("otherImageUrls") ?? "")),
-    badge: isProductBadgeValue(badge) ? badge : "",
+    badge: badge || "",
     isActive: true,
   };
 
@@ -1787,22 +1797,13 @@ export default async function AdminPage({
               <input aria-label="Stock quantity" name="stockQty" type="number" min="0" defaultValue={String(modalDocument?.stockQty ?? 0)} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" required />
               <span className="text-[0.62rem] text-primary/55">In-stock is set automatically when quantity is above 0.</span>
             </label>
-            <label className="sm:col-span-2 flex flex-col gap-1.5">
+            <div className="sm:col-span-2 flex flex-col gap-1.5">
               <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Product Badge</span>
-              <select
-                aria-label="Product badge"
-                name="badge"
+              <AdminBadgeSelector
+                badges={productFormOptions?.badges ?? PRODUCT_BADGES.map((b) => ({ value: b.value, label: b.label }))}
                 defaultValue={String(modalDocument?.badge ?? modalDocument?.productBadge ?? "")}
-                className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm"
-              >
-                <option value="">No badge</option>
-                {PRODUCT_BADGES.map((badge) => (
-                  <option key={badge.value} value={badge.value}>
-                    {badge.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+              />
+            </div>
             <label className="sm:col-span-2 flex flex-col gap-1.5">
               <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Description</span>
               <textarea aria-label="Product description" name="description" rows={4} defaultValue={String(modalDocument?.description ?? "")} className="rounded-xl border border-primary/18 bg-paper px-3 py-2.5 text-sm" required />

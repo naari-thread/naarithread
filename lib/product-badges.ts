@@ -4,12 +4,16 @@ export const PRODUCT_BADGES = [
   { value: "back-in-stock", label: "Back in Stock" },
 ] as const;
 
-export type ProductBadgeValue = (typeof PRODUCT_BADGES)[number]["value"];
+export type ProductBadgeValue = string;
 
 export function isProductBadgeValue(value: string): value is ProductBadgeValue {
-  return PRODUCT_BADGES.some((badge) => badge.value === value);
+  return value.trim().length > 0;
 }
 
 export function getProductBadgeLabel(value: string): string {
-  return PRODUCT_BADGES.find((badge) => badge.value === value)?.label ?? "";
+  if (!value) return "";
+  const hardcoded = PRODUCT_BADGES.find((badge) => badge.value === value);
+  if (hardcoded) return hardcoded.label;
+  // Humanise custom badge values (e.g. "festival-special" → "Festival Special")
+  return value.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
