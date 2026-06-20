@@ -478,44 +478,39 @@ export function LandingPage({ banners = [] }: LandingPageProps) {
               fashion that speaks your language.
             </motion.p>
 
-            {/* Trust Badges — Premium Stat Cards */}
+            {/* Trust Badges — clean inline stats with separators */}
             <motion.div
               variants={revealItem}
-              className="hidden max-w-xl grid-cols-3 gap-3 sm:grid md:gap-4"
+              className="hidden items-center gap-5 sm:flex md:gap-6"
             >
               {/* Stat 1: Reviews */}
-              <div className="group flex flex-col gap-2.5 rounded-2xl border border-primary/10 bg-primary/[0.035] p-3.5 transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/20 hover:bg-primary/[0.06] hover:shadow-[0_12px_30px_-18px_rgba(0,0,0,0.45)] md:p-4">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-secondary">
-                  <DynamicHugeIcon name="StarIcon" className="h-4 w-4" iconStrokeWidth={2} />
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  <span className="font-display text-lg font-semibold leading-none text-primary md:text-xl">2.5k+</span>
-                  <span className="text-[0.6rem] font-semibold uppercase tracking-[0.12em] text-primary/55">Reviews</span>
-                  <span className="text-[0.58rem] font-medium text-primary/40">4.8/5 rating</span>
+              <div className="flex items-center gap-2">
+                <DynamicHugeIcon name="StarIcon" className="h-3.5 w-3.5 text-primary/55" iconStrokeWidth={2} />
+                <div className="flex flex-col">
+                  <span className="text-[0.82rem] font-medium leading-tight text-primary/90">2.5k+ Reviews</span>
+                  <span className="text-[0.6rem] font-medium uppercase tracking-[0.08em] text-primary/40">4.8 / 5 Rating</span>
                 </div>
               </div>
+
+              <span className="h-8 w-px bg-primary/15" aria-hidden="true" />
 
               {/* Stat 2: Community */}
-              <div className="group flex flex-col gap-2.5 rounded-2xl border border-primary/10 bg-primary/[0.035] p-3.5 transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/20 hover:bg-primary/[0.06] hover:shadow-[0_12px_30px_-18px_rgba(0,0,0,0.45)] md:p-4">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-secondary">
-                  <DynamicHugeIcon name="UserIcon" className="h-4 w-4" iconStrokeWidth={2} />
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  <span className="font-display text-lg font-semibold leading-none text-primary md:text-xl">10k+</span>
-                  <span className="text-[0.6rem] font-semibold uppercase tracking-[0.12em] text-primary/55">Community</span>
-                  <span className="text-[0.58rem] font-medium text-primary/40">Happy customers</span>
+              <div className="flex items-center gap-2">
+                <DynamicHugeIcon name="UserIcon" className="h-3.5 w-3.5 text-primary/55" iconStrokeWidth={2} />
+                <div className="flex flex-col">
+                  <span className="text-[0.82rem] font-medium leading-tight text-primary/90">10k+ Community</span>
+                  <span className="text-[0.6rem] font-medium uppercase tracking-[0.08em] text-primary/40">Happy Customers</span>
                 </div>
               </div>
 
+              <span className="h-8 w-px bg-primary/15" aria-hidden="true" />
+
               {/* Stat 3: Payments */}
-              <div className="group flex flex-col gap-2.5 rounded-2xl border border-primary/10 bg-primary/[0.035] p-3.5 transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/20 hover:bg-primary/[0.06] hover:shadow-[0_12px_30px_-18px_rgba(0,0,0,0.45)] md:p-4">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-secondary">
-                  <DynamicHugeIcon name="ShoppingCart01Icon" className="h-4 w-4" iconStrokeWidth={2} />
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  <span className="font-display text-lg font-semibold leading-none text-primary md:text-xl">Secure</span>
-                  <span className="text-[0.6rem] font-semibold uppercase tracking-[0.12em] text-primary/55">Payments</span>
-                  <span className="text-[0.58rem] font-medium text-primary/40">All methods</span>
+              <div className="flex items-center gap-2">
+                <DynamicHugeIcon name="ShoppingCart01Icon" className="h-3.5 w-3.5 text-primary/55" iconStrokeWidth={2} />
+                <div className="flex flex-col">
+                  <span className="text-[0.82rem] font-medium leading-tight text-primary/90">Secure Pay</span>
+                  <span className="text-[0.6rem] font-medium uppercase tracking-[0.08em] text-primary/40">All Methods</span>
                 </div>
               </div>
 
@@ -592,7 +587,7 @@ export function LandingPage({ banners = [] }: LandingPageProps) {
               </div>
             </div>
 
-            <div className="relative hidden h-[66vh] min-h-[430px] w-full overflow-hidden rounded-b-[2rem] border border-primary/20 bg-primary/5 sm:block">
+            <div className="relative hidden h-[66vh] min-h-[430px] w-full overflow-hidden rounded-[2rem] border border-primary/20 bg-primary/5 sm:block">
               <div className="absolute inset-0 bg-gradient-to-tr from-primary/20 via-transparent to-secondary/50" />
               <CloudinaryImage
                 src={heroImage}
