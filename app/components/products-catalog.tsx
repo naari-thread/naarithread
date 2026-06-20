@@ -248,7 +248,7 @@ function SelectDropdown({
             exit={{ opacity: 0, y: 6, scale: 0.98 }}
             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
             className={`absolute top-[calc(100%+6px)] z-[100] min-w-[190px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-primary/16 bg-secondary shadow-[0_18px_36px_rgba(120,0,0,0.16)] ${
-              alignRightOnMobile ? "right-0 sm:left-0 sm:right-auto" : "left-0"
+              alignRightOnMobile ? "right-0" : "left-0"
             }`}
           >
             <button
