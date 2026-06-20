@@ -145,7 +145,7 @@ export function AccountDetailsModal({ onClose }: AccountDetailsModalProps) {
   const addressIsBlank = !formData.address.houseNo && !formData.address.city && !formData.address.state;
 
   return (
-    <div className="flex flex-col max-h-[65vh] overflow-y-auto overscroll-contain space-y-4 px-1 pb-1 sm:px-2 sm:pb-2">
+    <div className="flex flex-col space-y-4 px-1 pb-1 sm:px-2 sm:pb-2">
       {isLoading ? (
         <div className="flex min-h-40 items-center justify-center">
           <div className="inline-flex flex-col items-center gap-2">

@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { Query } from "node-appwrite";
 
 import { createDatabasesWithApiKey, getDatabaseId } from "@/lib/appwrite/admin-server";
+import { createUserNotification } from "@/lib/appwrite/notifications";
 import { creditRefundToWallet } from "@/lib/appwrite/wallet-server";
+import { sendOrderStatusEmail } from "@/lib/email/send";
 import { hasVerifiedAdminSession } from "@/lib/firebase/admin-session";
 
 export const runtime = "nodejs";
@@ -62,12 +64,38 @@ export async function POST(request: Request): Promise<NextResponse> {
       return NextResponse.redirect(new URL(addStatusToReturnUrl(returnTo, "not-paid"), request.url), 303);
     }
 
+    const userEmail = String(order.userEmail ?? "").trim().toLowerCase();
+    let customerName = "Customer";
+    try {
+      const addr = typeof order.shippingAddress === "string" ? JSON.parse(order.shippingAddress) as Record<string, unknown> : {};
+      customerName = String(addr.fullName ?? "Customer").trim() || "Customer";
+    } catch { /* ignore parse errors */ }
+
     const creditResult = await creditRefundToWallet({
       userId: orderUserId,
       orderId,
       amount,
       source: `${reason} - ${orderNumber}`,
     });
+
+    if (!creditResult.alreadyCredited && userEmail) {
+      await Promise.all([
+        createUserNotification({
+          userId: orderUserId,
+          title: "Refund added to your wallet",
+          body: `₹${amount.toLocaleString("en-IN")} for order ${orderNumber} has been credited to your Refund Wallet. It will be eligible for transfer after 7 days.`,
+          type: "wallet",
+          metadata: { orderId, orderNumber, amount },
+        }).catch(() => undefined),
+        sendOrderStatusEmail(userEmail, {
+          customerName,
+          customerEmail: userEmail,
+          orderNumber,
+          status: "refunded_to_wallet",
+          total: amount,
+        }).catch(() => undefined),
+      ]);
+    }
 
     const paymentList = await databases.listDocuments(databaseId, PAYMENTS_COL, [
       Query.equal("orderId", orderId),

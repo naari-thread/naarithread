@@ -242,7 +242,7 @@ export function OrdersDetailsModal({ onClose }: OrdersDetailsModalProps) {
   }
 
   return (
-    <div className="flex flex-col max-h-[60vh] overflow-y-auto overscroll-contain space-y-3 px-1 pb-1 sm:px-2 sm:pb-2">
+    <div className="flex flex-col space-y-3 px-1 pb-1 sm:px-2 sm:pb-2">
       {error ? (
         <div className="rounded-xl border border-red-200 bg-red-50 p-3">
           <p className="text-xs text-red-700">{error}</p>

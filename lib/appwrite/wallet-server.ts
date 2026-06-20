@@ -381,18 +381,22 @@ export async function listWalletSummary(args: { userId: string }): Promise<Walle
     walletsCollection(db).doc(userId).get(),
     walletTransactionsCollection(db)
       .where("userId", "==", userId)
-      .orderBy("createdAt", "desc")
-      .limit(40)
+      .limit(60)
       .get(),
     walletPayoutRequestsCollection(db)
       .where("userId", "==", userId)
-      .orderBy("createdAt", "desc")
-      .limit(10)
+      .limit(20)
       .get(),
   ]);
 
-  const transactions = transactionsSnapshot.docs.map(mapWalletTransaction);
-  const payoutRequests = payoutRequestsSnapshot.docs.map(mapWalletPayoutRequest);
+  const transactions = transactionsSnapshot.docs
+    .map(mapWalletTransaction)
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 40);
+  const payoutRequests = payoutRequestsSnapshot.docs
+    .map(mapWalletPayoutRequest)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 10);
   const walletData = walletSnapshot.data() as Partial<WalletDocument> | undefined;
   const nowIso = new Date().toISOString();
 

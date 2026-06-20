@@ -246,7 +246,7 @@ export function WalletDetailsModal(props: WalletDetailsModalProps): ReactElement
   }
 
   return (
-    <div className="flex max-h-[68vh] flex-col space-y-4 overflow-y-auto overscroll-contain px-1 pb-1 sm:px-2 sm:pb-2">
+    <div className="flex flex-col space-y-4 px-1 pb-1 sm:px-2 sm:pb-2">
       <div className="rounded-2xl border border-primary/16 bg-gradient-to-br from-primary/[0.04] via-secondary to-primary/[0.08] p-4">
         <p className="text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-primary/58">Refund Wallet</p>
         <h3 className="mt-2 text-2xl font-bold text-primary">{formatCurrency(wallet?.balance ?? 0)}</h3>

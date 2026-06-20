@@ -246,6 +246,11 @@ const STATUS_COPY: Record<string, { emoji: string; heading: string; message: str
     heading: "Order Cancelled",
     message: "Your order has been cancelled. If you paid online, your refund will be processed within 5–7 business days. For queries, reach us on WhatsApp.",
   },
+  refunded_to_wallet: {
+    emoji: "💰",
+    heading: "Refund Added to Your Wallet",
+    message: "Your refund has been credited to your NaariThread Refund Wallet. It will be eligible for transfer to your bank or UPI after 7 days. You can request a transfer from the Refund Wallet section in your account.",
+  },
 };
 
 export function orderStatusHtml(data: OrderStatusData): string {
