@@ -20,9 +20,9 @@ type ActionItem = {
 };
 
 const actions: ActionItem[] = [
-  { id: "orders",  label: "Orders",       icon: "ShoppingBag01Icon" },
-  { id: "wallet",  label: "Refund Wallet",icon: "ShoppingCart01Icon" },
-  { id: "profile", label: "Edit Profile", icon: "UserIcon" },
+  { id: "orders",  label: "Orders",        icon: "ShoppingBag01Icon" },
+  { id: "wallet",  label: "Refund Wallet", icon: "ShoppingCart01Icon" },
+  { id: "profile", label: "Edit Profile",  icon: "UserIcon" },
 ];
 
 export default function AccountPage() {
@@ -39,10 +39,10 @@ export default function AccountPage() {
 
   if (isLoading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-paper md:hidden">
+      <main className="flex min-h-screen items-center justify-center bg-paper">
         <div className="inline-flex flex-col items-center gap-2">
           <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
-          <span className="text-sm text-primary/60">Loading...</span>
+          <span className="text-sm text-primary/60">Loading…</span>
         </div>
       </main>
     );
@@ -50,13 +50,13 @@ export default function AccountPage() {
 
   if (!isAuthenticated) {
     return (
-      <main className="flex min-h-[100dvh] flex-col items-center justify-center bg-paper px-6 pb-32 md:hidden">
-        <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-primary/8">
-          <DynamicHugeIcon name="UserIcon" className="h-8 w-8 text-primary/60" iconStrokeWidth={1.8} />
+      <main className="flex min-h-screen flex-col items-center justify-center bg-paper px-6 pb-32 pt-20 md:pb-16 md:pt-32">
+        <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-primary/8 md:h-20 md:w-20">
+          <DynamicHugeIcon name="UserIcon" className="h-8 w-8 text-primary/60 md:h-10 md:w-10" iconStrokeWidth={1.8} />
         </div>
-        <h1 className="font-display mb-2 text-center text-2xl font-semibold text-primary">Your Profile</h1>
-        <p className="mb-8 text-center text-sm leading-relaxed text-primary/60">
-          Sign in to view your orders, manage your account, and save your wishlist.
+        <h1 className="font-display mb-2 text-center text-2xl font-semibold text-primary md:text-3xl">Your Profile</h1>
+        <p className="mb-8 max-w-sm text-center text-sm leading-relaxed text-primary/60">
+          Sign in to view your orders, manage your account, and save your wishlist across devices.
         </p>
         <button
           type="button"
@@ -82,21 +82,22 @@ export default function AccountPage() {
   const displayName = user?.name ?? "";
 
   return (
-    <main className="min-h-screen bg-paper pb-32 pt-14 md:hidden">
-      {/* Sticky header — sticks just below the fixed global navbar */}
-      <div className="sticky top-14 z-10 border-b border-primary/10 bg-paper/95 px-4 py-3 backdrop-blur-md">
+    <main className="min-h-screen bg-paper pb-32 pt-14 md:pb-16 md:pt-28">
+      {/* Mobile-only sticky header */}
+      <div className="sticky top-14 z-10 border-b border-primary/10 bg-paper/95 px-4 py-3 backdrop-blur-md md:hidden">
         <p className="text-[0.62rem] font-semibold uppercase tracking-[0.2em] text-primary/55">Profile</p>
       </div>
 
-      <div className="px-4 pt-5">
+      <div className="mx-auto max-w-xl px-4 pt-5 md:max-w-2xl md:px-6 md:pt-0">
+
         {/* Avatar + identity */}
-        <div className="mb-6 flex items-center gap-4">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <DynamicHugeIcon name="UserIcon" className="h-7 w-7" iconStrokeWidth={1.8} />
+        <div className="mb-6 flex items-center gap-4 md:mb-8 md:flex-col md:items-center md:gap-4 md:border-b md:border-primary/10 md:pb-8 md:text-center">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary md:h-20 md:w-20">
+            <DynamicHugeIcon name="UserIcon" className="h-7 w-7 md:h-10 md:w-10" iconStrokeWidth={1.8} />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 md:text-center">
             {displayName ? (
-              <p className="truncate text-base font-semibold text-primary">{displayName}</p>
+              <p className="truncate text-base font-semibold text-primary md:text-xl">{displayName}</p>
             ) : null}
             <p className="truncate text-sm text-primary/60">{email}</p>
           </div>
@@ -185,7 +186,7 @@ export default function AccountPage() {
           ) : null}
         </AnimatePresence>
 
-        {/* Logout — text button, clearly labelled */}
+        {/* Logout */}
         <button
           type="button"
           onClick={() => void handleLogout()}
