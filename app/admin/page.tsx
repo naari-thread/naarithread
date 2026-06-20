@@ -8,6 +8,7 @@ import { AdminImageUploadField } from "@/app/components/admin-image-upload-field
 import { AdminActionToast } from "@/app/components/admin-action-toast";
 import { AdminModalClose } from "@/app/components/admin-modal-close";
 import { AdminTransactionFilters } from "@/app/components/admin-transaction-filters";
+import { AdminRefundConfirm } from "@/app/components/admin-refund-confirm";
 import { AdminMultiSelectField } from "@/app/components/admin-multi-select-field";
 import { AdminMobileBottomBar } from "@/app/components/admin-mobile-bottom-bar";
 import { AdminProductTaxonomyFields } from "@/app/components/admin-product-taxonomy-fields";
@@ -1465,9 +1466,9 @@ export default async function AdminPage({
               ) : (
                 orderItems.map((order) => (
                   <article key={order.id} className="rounded-xl border border-primary/12 bg-secondary p-3.5">
-                    <p className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-primary/60">{formatDate(order.createdAt)}</p>
-                    <div className="mt-1 flex items-center justify-between gap-2">
-                      <div>
+                    <div className="flex items-start justify-between gap-3">
+                      {/* Left: title + badge + subtitle */}
+                      <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="text-sm font-semibold text-primary">{order.title}</p>
                           {(() => {
@@ -1481,30 +1482,27 @@ export default async function AdminPage({
                         </div>
                         {order.subtitle ? <p className="mt-1 text-xs text-primary/72">{order.subtitle}</p> : null}
                       </div>
-                      <div className="flex items-center gap-2 flex-wrap justify-end">
-                        <span className="text-sm font-semibold text-primary/90">{order.amount > 0 ? formatPrice(order.amount) : "-"}</span>
-                        {String(order.raw.paymentStatus ?? "").toLowerCase() === "paid" &&
-                        String(order.raw.status ?? "").toLowerCase() !== "refunded_to_wallet" ? (
-                          <form action="/api/admin/orders/refund-to-wallet" method="POST">
-                            <input type="hidden" name="orderId" value={order.id} />
-                            <input type="hidden" name="reason" value="Admin approved wallet refund" />
-                            <input type="hidden" name="returnTo" value={buildAdminHref(resolvedSearchParams, {})} />
-                            <button
-                              type="submit"
-                              aria-label={`Refund order ${order.id} to wallet`}
-                              className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-emerald-700"
-                            >
-                              Refund to Wallet
-                            </button>
-                          </form>
-                        ) : null}
-                        <Link
-                          href={buildAdminHref(resolvedSearchParams, { modal: "order-view", id: order.id })}
-                          aria-label={`View order ${order.id}`}
-                          className="rounded-lg border border-primary/20 px-2.5 py-1.5 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-primary/80"
-                        >
-                          View
-                        </Link>
+                      {/* Right: date + amount + actions */}
+                      <div className="flex shrink-0 flex-col items-end gap-2">
+                        <p className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-primary/60 whitespace-nowrap">{formatDate(order.createdAt)}</p>
+                        <div className="flex items-center gap-2 flex-wrap justify-end">
+                          <span className="text-sm font-semibold text-primary/90">{order.amount > 0 ? formatPrice(order.amount) : "-"}</span>
+                          {String(order.raw.paymentStatus ?? "").toLowerCase() === "paid" &&
+                          String(order.raw.status ?? "").toLowerCase() !== "refunded_to_wallet" ? (
+                            <AdminRefundConfirm
+                              orderId={order.id}
+                              orderTitle={order.title}
+                              returnTo={buildAdminHref(resolvedSearchParams, {})}
+                            />
+                          ) : null}
+                          <Link
+                            href={buildAdminHref(resolvedSearchParams, { modal: "order-view", id: order.id })}
+                            aria-label={`View order ${order.id}`}
+                            className="rounded-lg border border-primary/20 px-2.5 py-1.5 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-primary/80"
+                          >
+                            View
+                          </Link>
+                        </div>
                       </div>
                     </div>
 

@@ -20,6 +20,7 @@ const ORDER_STATUS_OPTIONS = [
   { value: "delivered", label: "Delivered" },
   { value: "completed", label: "Completed" },
   { value: "cancelled", label: "Cancelled" },
+  { value: "refunded_to_wallet", label: "Refunded to Wallet" },
 ];
 
 const PERIOD_OPTIONS = [
