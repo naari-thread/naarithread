@@ -337,6 +337,7 @@ export function CartPageClient() {
   const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
   const [couponLoading, setCouponLoading] = useState(false);
   const [couponError, setCouponError] = useState("");
+  const [isMobileCheckoutOpen, setIsMobileCheckoutOpen] = useState(false);
 
   const handleProceedToBuyRef = useRef<(() => Promise<void>) | null>(null);
 
@@ -1434,16 +1435,249 @@ export function CartPageClient() {
             </div>
             <button
               type="button"
-              aria-label="Proceed to buy"
-              onClick={() => void handleProceedToBuy()}
-              disabled={isProcessingCheckout}
-              className="inline-flex h-11 shrink-0 items-center justify-center rounded-xl border border-primary bg-primary px-5 text-xs font-semibold uppercase tracking-[0.2em] text-secondary transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Open order summary and proceed to checkout"
+              onClick={() => setIsMobileCheckoutOpen(true)}
+              className="inline-flex h-11 shrink-0 items-center justify-center rounded-xl border border-primary bg-primary px-5 text-xs font-semibold uppercase tracking-[0.2em] text-secondary transition hover:bg-primary/90"
             >
-              {isProcessingCheckout ? "Processing…" : "Proceed to Buy"}
+              Proceed to Checkout
             </button>
           </div>
         </div>
       ) : null}
+
+      {/* Mobile Amount Breakup bottom sheet */}
+      <AnimatePresence>
+        {isMobileCheckoutOpen ? (
+          <>
+            <motion.div
+              key="mobile-checkout-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 z-[90] bg-primary/30 backdrop-blur-sm lg:hidden"
+              aria-hidden="true"
+              onClick={() => setIsMobileCheckoutOpen(false)}
+            />
+            <motion.div
+              key="mobile-checkout-sheet"
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", stiffness: 380, damping: 40, mass: 0.8 }}
+              className="fixed inset-x-0 bottom-0 z-[91] flex max-h-[92dvh] flex-col overflow-hidden rounded-t-3xl border-t border-primary/15 bg-secondary shadow-[0_-20px_60px_rgba(42,15,15,0.22)] lg:hidden"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Order summary"
+            >
+              {/* Sheet header */}
+              <div className="flex shrink-0 items-center justify-between border-b border-primary/10 px-5 py-4">
+                <h3 className="text-base font-semibold">Amount Breakup</h3>
+                <button
+                  type="button"
+                  aria-label="Close order summary"
+                  onClick={() => setIsMobileCheckoutOpen(false)}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-primary/18 bg-paper text-primary transition hover:border-primary/35"
+                >
+                  <span className="relative h-3 w-3">
+                    <span className="absolute left-0 top-[5px] block h-[1.5px] w-3 rotate-45 rounded-full bg-current" />
+                    <span className="absolute left-0 top-[5px] block h-[1.5px] w-3 -rotate-45 rounded-full bg-current" />
+                  </span>
+                </button>
+              </div>
+
+              {/* Scrollable content */}
+              <div className="relative flex-1 overflow-y-auto p-5 pb-10">
+
+                {/* Shipping address */}
+                <div className="rounded-xl border border-primary/12 bg-paper p-3.5">
+                  <p className="text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-primary/62">
+                    Shipping Address
+                  </p>
+                  <div className="mt-3 grid grid-cols-2 gap-2.5">
+                    <input aria-label="Shipping full name" placeholder="Full name" value={shippingAddress.fullName}
+                      onChange={(e) => setShippingAddress((p) => ({ ...p, fullName: e.target.value }))}
+                      className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45" />
+                    <input aria-label="Shipping phone" placeholder="Phone" value={shippingAddress.phone}
+                      onChange={(e) => setShippingAddress((p) => ({ ...p, phone: e.target.value }))}
+                      className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45" />
+                    <input aria-label="House / flat number" placeholder="House / Flat No." value={shippingAddress.houseNo}
+                      onChange={(e) => setShippingAddress((p) => ({ ...p, houseNo: e.target.value }))}
+                      className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45" />
+                    <input aria-label="Locality / area" placeholder="Locality / Area" value={shippingAddress.locality}
+                      onChange={(e) => setShippingAddress((p) => ({ ...p, locality: e.target.value }))}
+                      className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45" />
+                    <input aria-label="Landmark (optional)" placeholder="Landmark (optional)" value={shippingAddress.landmark}
+                      onChange={(e) => setShippingAddress((p) => ({ ...p, landmark: e.target.value }))}
+                      className="col-span-2 h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45" />
+                    <div className="relative col-span-2">
+                      <input aria-label="Shipping postal code" placeholder="Pincode — auto-fills city & state"
+                        maxLength={6} value={shippingAddress.postalCode}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, "").slice(0, 6);
+                          setShippingAddress((p) => ({ ...p, postalCode: val, city: val.length === 6 ? "" : p.city, state: val.length === 6 ? "" : p.state }));
+                        }}
+                        className="h-10 w-full rounded-lg border border-primary/16 bg-secondary px-3 pr-8 text-sm outline-none transition focus:border-primary/45" />
+                      {postalLookupPending ? (
+                        <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center">
+                          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary/20 border-t-primary/60" />
+                        </span>
+                      ) : null}
+                    </div>
+                    {postalLookupFailed ? (
+                      <p className="col-span-2 text-xs text-amber-700">Pincode not found — please fill in City and State manually.</p>
+                    ) : null}
+                    {deliveryEstimate && !postalLookupPending ? (
+                      <div className="col-span-2 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                        <span className="text-base leading-none">🚚</span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-emerald-800">Est. delivery in {deliveryEstimate.days} working day{deliveryEstimate.days === "1" ? "" : "s"}</p>
+                          <p className="text-[0.68rem] text-emerald-700/70">Indicative estimate based on your location</p>
+                        </div>
+                      </div>
+                    ) : null}
+                    <input aria-label="Shipping city" placeholder="City" value={shippingAddress.city}
+                      onChange={(e) => setShippingAddress((p) => ({ ...p, city: e.target.value }))}
+                      className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45" />
+                    <input aria-label="Shipping state" placeholder="State" value={shippingAddress.state}
+                      onChange={(e) => setShippingAddress((p) => ({ ...p, state: e.target.value }))}
+                      className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45" />
+                    <input aria-label="Shipping country" placeholder="Country" value={shippingAddress.country}
+                      onChange={(e) => setShippingAddress((p) => ({ ...p, country: e.target.value }))}
+                      className="col-span-2 h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45" />
+                    {isAuthenticated && (shippingAddress.fullName || shippingAddress.phone || shippingAddress.houseNo || shippingAddress.city) ? (
+                      <label className="col-span-2 flex cursor-pointer items-center gap-2.5 pt-0.5">
+                        <input type="checkbox" checked={saveAddress} onChange={(e) => setSaveAddress(e.target.checked)}
+                          className="h-4 w-4 rounded border-primary/30 accent-primary" />
+                        <span className="text-xs text-primary/65">Save delivery details for next time</span>
+                      </label>
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* Coupon code */}
+                <div className="mt-4">
+                  <p className="mb-2 text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-primary/62">Coupon Code</p>
+                  {appliedCoupon ? (
+                    <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+                      className="flex items-center justify-between rounded-xl border border-green-300/60 bg-green-50 px-3.5 py-2.5">
+                      <div>
+                        <p className="text-xs font-semibold text-green-800">{appliedCoupon.code}</p>
+                        <p className="text-xs text-green-700/80">{appliedCoupon.description} applied</p>
+                      </div>
+                      <button type="button" aria-label="Remove coupon"
+                        onClick={() => { setAppliedCoupon(null); setCouponCode(""); setCouponError(""); toast.info("Coupon removed", { id: "coupon-removed" }); }}
+                        className="ml-2 text-green-600/70 hover:text-green-800">
+                        <DynamicHugeIcon name="Cancel01Icon" className="h-4 w-4" iconStrokeWidth={2.5} />
+                      </button>
+                    </motion.div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <input aria-label="Coupon code" placeholder="Enter coupon code" value={couponCode}
+                        onChange={(e) => { setCouponCode(e.target.value.toUpperCase()); setCouponError(""); }}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void handleApplyCoupon(); } }}
+                        className="h-10 flex-1 rounded-lg border border-primary/16 bg-paper px-3 text-sm uppercase tracking-wide outline-none transition focus:border-primary/45" />
+                      <button type="button" onClick={() => void handleApplyCoupon()} disabled={couponLoading || !couponCode.trim()} aria-label="Apply coupon"
+                        className="inline-flex h-10 items-center justify-center rounded-lg border border-primary/22 px-3.5 text-xs font-semibold uppercase tracking-[0.12em] text-primary/80 transition hover:border-primary/45 disabled:cursor-not-allowed disabled:opacity-45">
+                        {couponLoading ? "…" : "Apply"}
+                      </button>
+                    </div>
+                  )}
+                  {couponError ? <p className="mt-1.5 text-xs text-red-600">{couponError}</p> : null}
+                </div>
+
+                {/* Price breakdown */}
+                <div className="mt-5 space-y-2.5 border-t border-primary/12 pt-4 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-primary/75">Subtotal</span>
+                    <span>{formatPrice(subtotal)}</span>
+                  </div>
+                  {productDiscount > 0 ? (
+                    <div className="flex items-center justify-between">
+                      <span className="text-primary/75">Product discount</span>
+                      <span className="text-green-700">- {formatPrice(productDiscount)}</span>
+                    </div>
+                  ) : null}
+                  {couponDiscount > 0 ? (
+                    <div className="flex items-center justify-between">
+                      <span className="text-primary/75">Coupon{appliedCoupon ? ` (${appliedCoupon.code})` : ""}</span>
+                      <span className="text-green-700">- {formatPrice(couponDiscount)}</span>
+                    </div>
+                  ) : null}
+                  <div className="flex items-center justify-between">
+                    <span className="text-primary/75">Delivery</span>
+                    <span>{delivery === 0 ? "Free" : formatPrice(delivery)}</span>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex items-center justify-between border-t border-primary/12 pt-4">
+                  <span className="text-base font-semibold">Total</span>
+                  <span className="text-xl font-semibold">{formatPrice(total)}</span>
+                </div>
+
+                {/* Checkout state banners */}
+                <div className="mt-4">
+                  {checkoutPhase === "dismissed" ? (
+                    <DismissedBanner
+                      onRetry={() => void handleProceedToBuy()}
+                      onDismiss={() => { setPendingOrder(null); setCheckoutPhase("shopping"); }}
+                    />
+                  ) : null}
+                  {checkoutPhase === "error" ? (
+                    <ErrorBanner
+                      message={checkoutError || "Something went wrong. Please try again."}
+                      onDismiss={() => setCheckoutPhase("shopping")}
+                    />
+                  ) : null}
+                </div>
+
+                <button
+                  type="button"
+                  aria-label="Proceed to buy"
+                  onClick={() => void handleProceedToBuy()}
+                  disabled={lines.length === 0 || isProcessingCheckout}
+                  className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-xl border border-primary bg-primary px-4 text-xs font-semibold uppercase tracking-[0.2em] text-secondary transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isProcessingCheckout ? "Processing..." : "Proceed to Buy"}
+                </button>
+
+                {delivery > 0 ? (
+                  <p className="mt-3 text-center text-[0.67rem] text-primary/50">Free delivery on orders above ₹2,999</p>
+                ) : null}
+
+                {/* Sign-in gate overlay */}
+                {!isLoading && !isAuthenticated ? (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.2 }}
+                    className="absolute inset-0 z-20 flex flex-col items-center justify-end"
+                    style={{ background: "linear-gradient(to top, var(--color-secondary, #fdf6ee) 55%, transparent 100%)" }}
+                  >
+                    <div className="flex w-full flex-col items-center gap-3 px-6 pb-7 pt-12 text-center">
+                      <span className="flex h-11 w-11 items-center justify-center rounded-full border border-primary/18 bg-paper">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-primary/60" aria-hidden="true">
+                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                        </svg>
+                      </span>
+                      <div>
+                        <p className="text-sm font-semibold text-primary">Sign in to checkout</p>
+                        <p className="mt-1 text-xs leading-relaxed text-primary/60">Create an account or sign in to place your order securely.</p>
+                      </div>
+                      <button type="button" onClick={() => { setIsMobileCheckoutOpen(false); setIsAuthModalOpen(true); }}
+                        className="mt-1 inline-flex h-11 w-full items-center justify-center rounded-xl border border-primary bg-primary px-4 text-xs font-semibold uppercase tracking-[0.2em] text-secondary transition hover:bg-primary/90">
+                        Sign in / Create Account
+                      </button>
+                      <p className="text-[0.65rem] text-primary/45">Free · No spam · Secure email link</p>
+                    </div>
+                  </motion.div>
+                ) : null}
+              </div>
+            </motion.div>
+          </>
+        ) : null}
+      </AnimatePresence>
 
       <AuthModal
         open={isAuthModalOpen}
