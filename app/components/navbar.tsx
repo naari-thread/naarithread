@@ -11,6 +11,7 @@ import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
 import { AccountDetailsModal } from "@/app/components/account-details-modal";
 import { OrdersDetailsModal } from "@/app/components/orders-details-modal";
 import { WalletDetailsModal } from "@/app/components/wallet-details-modal";
+import { CloudinaryImage } from "@/app/components/cloudinary-image";
 import { getCartItemsCount, readCartItems, subscribeToCartChanges } from "@/lib/cart-state";
 import { getWishlistItemsCount, readWishlistItems, subscribeToWishlistChanges } from "@/lib/wishlist-state";
 
@@ -35,7 +36,59 @@ type NotificationItem = {
   sentAt: string;
   createdAt: string; // formatted relative string
   type?: string;
+  order: NotificationOrderDetails | null;
 };
+
+type NotificationOrderDetails = {
+  orderNumber: string;
+  totalAmount: number;
+  items: Array<{
+    productId: string;
+    productName: string;
+    imageUrl: string;
+    quantity: number;
+    size: string;
+    color: string;
+    unitAmount: number;
+    lineAmount: number;
+  }>;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function parseNotificationOrder(value: unknown): NotificationOrderDetails | null {
+  if (!isRecord(value) || !Array.isArray(value.items)) return null;
+
+  const items = value.items.flatMap((entry): NotificationOrderDetails["items"] => {
+    if (!isRecord(entry)) return [];
+    return [{
+      productId: String(entry.productId ?? ""),
+      productName: String(entry.productName ?? "Product"),
+      imageUrl: String(entry.imageUrl ?? ""),
+      quantity: Number(entry.quantity ?? 0),
+      size: String(entry.size ?? ""),
+      color: String(entry.color ?? ""),
+      unitAmount: Number(entry.unitAmount ?? 0),
+      lineAmount: Number(entry.lineAmount ?? 0),
+    }];
+  });
+
+  return {
+    orderNumber: String(value.orderNumber ?? ""),
+    totalAmount: Number(value.totalAmount ?? 0),
+    items,
+  };
+}
+
+function formatNotificationPrice(value: number): string {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(Math.max(0, value));
+}
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -43,6 +96,25 @@ function timeAgo(iso: string): string {
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
   return `${Math.floor(diff / 86_400_000)}d ago`;
+}
+
+function parseNotificationsPayload(value: unknown): NotificationItem[] {
+  if (!isRecord(value) || !Array.isArray(value.notifications)) return [];
+
+  return value.notifications.flatMap((entry): NotificationItem[] => {
+    if (!isRecord(entry)) return [];
+    const sentAt = String(entry.sentAt ?? "");
+    return [{
+      id: String(entry.id ?? ""),
+      title: String(entry.title ?? ""),
+      body: String(entry.body ?? ""),
+      isRead: Boolean(entry.isRead),
+      sentAt,
+      createdAt: timeAgo(sentAt),
+      type: String(entry.type ?? ""),
+      order: parseNotificationOrder(entry.order),
+    }];
+  });
 }
 
 const navCategories: NavCategory[] = [
@@ -261,18 +333,8 @@ export function Navbar() {
           headers: { Authorization: `Bearer ${jwt}` },
         });
         if (!res.ok) return;
-        const data = await res.json() as { notifications: Array<{ id: string; title: string; body: string; isRead: boolean; sentAt: string; type: string }> };
-        setNotifications(
-          data.notifications.map((n) => ({
-            id: n.id,
-            title: n.title,
-            body: n.body,
-            isRead: n.isRead,
-            sentAt: n.sentAt,
-            createdAt: timeAgo(n.sentAt),
-            type: n.type,
-          }))
-        );
+        const data: unknown = await res.json();
+        setNotifications(parseNotificationsPayload(data));
       } catch {
         // non-blocking — notifications are best-effort
       } finally {
@@ -529,7 +591,7 @@ export function Navbar() {
                   />
                   {typeof item.badgeCount === "number" && item.badgeCount > 0 ? (
                     <span
-                      className={`absolute right-0 top-0 -translate-y-[20%] translate-x-[20%] z-20 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full px-1 text-[0.54rem] font-bold leading-none ring-2 ring-secondary ${
+                      className={`absolute right-0 top-0 z-20 grid h-4 min-w-4 translate-x-[20%] -translate-y-[20%] place-items-center rounded-full px-1 text-center text-[0.54rem] font-bold leading-[1] tabular-nums ring-2 ring-secondary ${
                         item.isActive ? "bg-secondary text-primary" : "bg-primary text-secondary"
                       }`}
                       aria-hidden={true}
@@ -589,7 +651,7 @@ export function Navbar() {
                   />
                   {typeof item.badgeCount === "number" && item.badgeCount > 0 ? (
                     <span
-                      className={`absolute right-0 top-0 -translate-y-[20%] translate-x-[20%] z-20 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full px-1 text-[0.54rem] font-bold leading-none ring-2 ring-secondary ${
+                      className={`absolute right-0 top-0 z-20 grid h-4 min-w-4 translate-x-[20%] -translate-y-[20%] place-items-center rounded-full px-1 text-center text-[0.54rem] font-bold leading-[1] tabular-nums ring-2 ring-secondary ${
                         item.isActive ? "bg-secondary text-primary" : "bg-primary text-secondary"
                       }`}
                       aria-hidden={true}
@@ -707,7 +769,7 @@ export function Navbar() {
                   <span className="relative z-10">{item.label}</span>
                   {typeof item.badgeCount === "number" && item.badgeCount > 0 ? (
                     <span
-                      className={`absolute right-0 top-0 -translate-y-[20%] translate-x-[20%] z-20 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full px-1 text-[0.54rem] font-bold leading-none ring-2 ring-secondary ${
+                      className={`absolute right-0 top-0 z-20 grid h-4 min-w-4 translate-x-[20%] -translate-y-[20%] place-items-center rounded-full px-1 text-center text-[0.54rem] font-bold leading-[1] tabular-nums ring-2 ring-secondary ${
                         item.isActive ? "bg-secondary text-primary" : "bg-primary text-secondary"
                       }`}
                       aria-hidden={true}
@@ -743,7 +805,7 @@ export function Navbar() {
                       />
                       {unreadCount > 0 && (
                         <span
-                          className="absolute right-0 top-0 -translate-y-[20%] translate-x-[20%] z-20 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-primary px-1 text-[0.54rem] font-bold leading-none text-secondary ring-2 ring-secondary"
+                          className="absolute right-0 top-0 z-20 grid h-4 min-w-4 translate-x-[20%] -translate-y-[20%] place-items-center rounded-full bg-primary px-1 text-center text-[0.54rem] font-bold leading-[1] tabular-nums text-secondary ring-2 ring-secondary"
                           aria-hidden={true}
                         >
                           {unreadCount > 9 ? "9+" : unreadCount}
@@ -841,14 +903,14 @@ export function Navbar() {
                       </button>
                       <button
                         type="button"
-                        aria-label="Open wallet details"
+                        aria-label="Open refund wallet details"
                         onClick={() => {
                           setSelectedAccountAction("wallet");
                           setIsAccountMenuOpen(false);
                         }}
                         className="mb-1 inline-flex h-10 w-full items-center justify-between rounded-xl px-3 text-sm text-primary/82 transition hover:bg-primary/[0.04]"
                       >
-                        <span>Wallet</span>
+                        <span>Refund Wallet</span>
                         <DynamicHugeIcon name="ArrowRight01Icon" className="h-4 w-4" iconStrokeWidth={2} />
                       </button>
                       <button
@@ -960,8 +1022,8 @@ export function Navbar() {
                   <h3 className="mt-1 text-base sm:text-lg font-semibold text-primary truncate">
                     {selectedNotification
                       ? selectedNotification.title
-                      : selectedAccountAction === "wallet"
-                        ? "Wallet"
+                        : selectedAccountAction === "wallet"
+                          ? "Refund Wallet"
                         : selectedAccountAction === "orders"
                           ? "Orders"
                         : "My Account"}
@@ -983,6 +1045,55 @@ export function Navbar() {
                 {selectedNotification ? (
                   <div className="space-y-3 overflow-y-auto overscroll-contain h-full">
                     <p className="text-xs sm:text-sm leading-relaxed text-primary/82">{selectedNotification.body}</p>
+                    {selectedNotification.order ? (
+                      <section aria-label="Order summary" className="overflow-hidden rounded-xl border border-primary/12 bg-paper">
+                        <div className="flex items-center justify-between gap-3 border-b border-primary/10 px-3 py-2.5">
+                          <div className="min-w-0">
+                            <p className="text-[0.58rem] font-semibold uppercase tracking-[0.16em] text-primary/52">Order</p>
+                            <p className="truncate text-xs font-semibold text-primary sm:text-sm">
+                              {selectedNotification.order.orderNumber}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[0.58rem] font-semibold uppercase tracking-[0.16em] text-primary/52">Amount paid</p>
+                            <p className="text-sm font-semibold text-primary">
+                              {formatNotificationPrice(selectedNotification.order.totalAmount)}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="divide-y divide-primary/8">
+                          {selectedNotification.order.items.map((item) => (
+                            <article key={`${item.productId}-${item.size}-${item.color}`} className="flex gap-3 p-3">
+                              <div className="relative h-20 w-16 shrink-0 overflow-hidden rounded-lg border border-primary/10 bg-secondary">
+                                <CloudinaryImage
+                                  src={item.imageUrl}
+                                  alt={item.productName}
+                                  fill={true}
+                                  sizes="64px"
+                                  className="object-cover"
+                                />
+                              </div>
+                              <div className="flex min-w-0 flex-1 flex-col justify-between py-0.5">
+                                <div>
+                                  <h4 className="line-clamp-2 text-xs font-semibold leading-snug text-primary sm:text-sm">
+                                    {item.productName}
+                                  </h4>
+                                  <p className="mt-1 text-[0.68rem] text-primary/62">
+                                    {[item.size && `Size ${item.size}`, item.color].filter(Boolean).join(" / ") || "Standard option"}
+                                  </p>
+                                </div>
+                                <div className="flex items-end justify-between gap-2 text-xs">
+                                  <span className="font-medium text-primary/68">Qty {item.quantity}</span>
+                                  <span className="font-semibold text-primary">
+                                    {formatNotificationPrice(item.lineAmount || item.unitAmount * item.quantity)}
+                                  </span>
+                                </div>
+                              </div>
+                            </article>
+                          ))}
+                        </div>
+                      </section>
+                    ) : null}
                     <p className="text-[0.6rem] sm:text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-primary/56">
                       {selectedNotification.createdAt}
                     </p>
@@ -1276,7 +1387,7 @@ export function Navbar() {
         open={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         title="Sign up / Login"
-        description="Use Email OTP to continue to your account, wishlist, and cart sync."
+        description="Use a secure email link to continue to your account, wishlist, and cart sync."
       />
     </>
   );

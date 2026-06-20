@@ -1,17 +1,16 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { Query } from "node-appwrite";
 
 import { createDatabasesWithApiKey, getDatabaseId } from "@/lib/appwrite/admin-server";
 import { creditRefundToWallet } from "@/lib/appwrite/wallet-server";
+import { hasVerifiedAdminSession } from "@/lib/firebase/admin-session";
 
 export const runtime = "nodejs";
 
-const ADMIN_GATE_COOKIE = "nt_admin_session";
 const ORDERS_COL = "orders";
 const PAYMENTS_COL = "payments";
 
-function toNumber(value: unknown, fallback = 0) {
+function toNumber(value: unknown, fallback = 0): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string") {
     const parsed = Number(value.trim());
@@ -20,12 +19,12 @@ function toNumber(value: unknown, fallback = 0) {
   return fallback;
 }
 
-function normalize(value: unknown, maxLength = 300) {
+function normalize(value: unknown, maxLength = 300): string {
   if (typeof value !== "string") return "";
   return value.trim().slice(0, maxLength);
 }
 
-function addStatusToReturnUrl(returnTo: string, status: string) {
+function addStatusToReturnUrl(returnTo: string, status: string): string {
   const safeReturn = returnTo.startsWith("/admin") ? returnTo : "/admin";
   const [path, query = ""] = safeReturn.split("?");
   const params = new URLSearchParams(query);
@@ -33,9 +32,8 @@ function addStatusToReturnUrl(returnTo: string, status: string) {
   return `${path}?${params.toString()}`;
 }
 
-export async function POST(request: Request) {
-  const cookieStore = await cookies();
-  if (!cookieStore.get(ADMIN_GATE_COOKIE)?.value) {
+export async function POST(request: Request): Promise<NextResponse> {
+  if (!(await hasVerifiedAdminSession())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -51,7 +49,6 @@ export async function POST(request: Request) {
   try {
     const databases = createDatabasesWithApiKey();
     const databaseId = getDatabaseId();
-
     const order = await databases.getDocument(databaseId, ORDERS_COL, orderId);
     const orderUserId = String(order.userId ?? "").trim();
     const orderNumber = String(order.orderNumber ?? order.$id).trim();
@@ -65,7 +62,12 @@ export async function POST(request: Request) {
       return NextResponse.redirect(new URL(addStatusToReturnUrl(returnTo, "not-paid"), request.url), 303);
     }
 
-    const creditResult = await creditRefundToWallet({ databases, databaseId, userId: orderUserId, orderId, amount, source: `${reason} • ${orderNumber}` });
+    const creditResult = await creditRefundToWallet({
+      userId: orderUserId,
+      orderId,
+      amount,
+      source: `${reason} - ${orderNumber}`,
+    });
 
     const paymentList = await databases.listDocuments(databaseId, PAYMENTS_COL, [
       Query.equal("orderId", orderId),
@@ -81,7 +83,7 @@ export async function POST(request: Request) {
             status: "refunded_to_wallet",
             paymentMeta: JSON.stringify({
               ...(typeof paymentDoc.paymentMeta === "string" ? { previousMeta: paymentDoc.paymentMeta } : {}),
-              refundMode: "wallet_credit",
+              refundMode: "refund_wallet_credit",
               refundAmount: amount,
               refundReason: reason,
               refundedAt: new Date().toISOString(),
@@ -91,7 +93,10 @@ export async function POST(request: Request) {
         : Promise.resolve(),
     ]);
 
-    return NextResponse.redirect(new URL(addStatusToReturnUrl(returnTo, creditResult.alreadyCredited ? "duplicate" : "success"), request.url), 303);
+    return NextResponse.redirect(
+      new URL(addStatusToReturnUrl(returnTo, creditResult.alreadyCredited ? "duplicate" : "success"), request.url),
+      303,
+    );
   } catch {
     return NextResponse.redirect(new URL(addStatusToReturnUrl(returnTo, "failed"), request.url), 303);
   }

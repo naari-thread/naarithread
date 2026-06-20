@@ -160,7 +160,7 @@ export async function createProductReview(input: {
 }) {
   const databases = getBrowserDatabases(input.jwt);
   if (!databases || !appwritePublicConfig.databaseId) {
-    throw new Error("Appwrite database is not configured.");
+    throw new Error("Firebase database is not configured.");
   }
 
   const collectionId = await resolveReviewsCollectionId(input.jwt);
@@ -199,7 +199,8 @@ export async function createProductReview(input: {
     title: safeTitle,
     comment: safeComment,
     imageUrls: safeImageUrls,
-    isVerifiedPurchase: true,
+    // Purchase verification requires a server-side paid-order lookup.
+    isVerifiedPurchase: false,
     isApproved: true,
   };
 

@@ -27,7 +27,7 @@ Razorpay is integrated end-to-end with:
 - server-side order creation
 - server-side signature verification
 - webhook reconciliation for async payment updates
-- Appwrite order and payment persistence
+- Firebase Firestore order and payment persistence
 
 ### Routes
 

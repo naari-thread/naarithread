@@ -16,7 +16,7 @@ type SignatureResponse = {
  * Uploads a single image directly to Cloudinary using a short-lived signature
  * minted by our server. Returns the Cloudinary `secure_url`.
  *
- * `authToken` is the Appwrite JWT, required for review uploads (user-gated).
+ * `authToken` is the Firebase ID token, required for review uploads (user-gated).
  * Product uploads are gated by the admin session cookie and need no token.
  */
 export async function uploadImageToCloudinary(

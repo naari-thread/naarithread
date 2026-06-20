@@ -30,23 +30,10 @@ function toPositiveInt(value: unknown) {
   return Math.max(0, Math.trunc(parsed));
 }
 
-async function resolveCollectionId(jwt: string, candidates: readonly string[]) {
-  const databases = getBrowserDatabases(jwt);
-  if (!databases || !appwritePublicConfig.databaseId) {
-    return null;
-  }
-
-  for (const collectionId of candidates) {
-    try {
-      await databases.listDocuments(appwritePublicConfig.databaseId, collectionId, [Query.limit(1)]);
-      return collectionId;
-    } catch {
-      // Silently continue fallback lookup - CORS errors are expected in development
-      // Console logging for errors is suppressed to avoid cluttering the console
-    }
-  }
-
-  return null;
+function resolveCollectionId(candidates: readonly string[]): string {
+  // Firebase aliases map legacy and canonical names to the same collection.
+  // Probing a protected collection without an ownership query is denied by design.
+  return candidates[0];
 }
 
 async function listUserCartDocs(jwt: string, userId: string) {
@@ -55,10 +42,7 @@ async function listUserCartDocs(jwt: string, userId: string) {
     return [] as CartDocument[];
   }
 
-  const collectionId = await resolveCollectionId(jwt, CART_COLLECTION_CANDIDATES);
-  if (!collectionId) {
-    return [] as CartDocument[];
-  }
+  const collectionId = resolveCollectionId(CART_COLLECTION_CANDIDATES);
 
   const list = await databases.listDocuments<CartDocument>(
     appwritePublicConfig.databaseId,
@@ -75,10 +59,7 @@ async function listUserWishlistDocs(jwt: string, userId: string) {
     return [] as WishlistDocument[];
   }
 
-  const collectionId = await resolveCollectionId(jwt, WISHLIST_COLLECTION_CANDIDATES);
-  if (!collectionId) {
-    return [] as WishlistDocument[];
-  }
+  const collectionId = resolveCollectionId(WISHLIST_COLLECTION_CANDIDATES);
 
   const list = await databases.listDocuments<WishlistDocument>(
     appwritePublicConfig.databaseId,
@@ -136,13 +117,15 @@ export async function upsertUserCartMap(jwt: string, userId: string, items: Cart
     return;
   }
 
-  const collectionId = await resolveCollectionId(jwt, CART_COLLECTION_CANDIDATES);
-  if (!collectionId) {
-    return;
-  }
+  const collectionId = resolveCollectionId(CART_COLLECTION_CANDIDATES);
 
   const existing = await listUserCartDocs(jwt, userId);
   const existingByProduct = new Map(existing.map((doc) => [doc.productId, doc] as const));
+  const retainedProductIds = new Set(
+    Object.entries(items)
+      .filter(([, quantity]) => toPositiveInt(quantity) > 0)
+      .map(([productId]) => productId)
+  );
 
   for (const [productId, quantityRaw] of Object.entries(items)) {
     const quantity = toPositiveInt(quantityRaw);
@@ -178,6 +161,12 @@ export async function upsertUserCartMap(jwt: string, userId: string, items: Cart
       ]
     );
   }
+
+  await Promise.all(
+    existing
+      .filter((doc) => !retainedProductIds.has(doc.productId))
+      .map((doc) => databases.deleteDocument(appwritePublicConfig.databaseId, collectionId, doc.$id))
+  );
 }
 
 export async function upsertUserWishlistMap(jwt: string, userId: string, items: WishlistItemsMap) {
@@ -186,13 +175,11 @@ export async function upsertUserWishlistMap(jwt: string, userId: string, items: 
     return;
   }
 
-  const collectionId = await resolveCollectionId(jwt, WISHLIST_COLLECTION_CANDIDATES);
-  if (!collectionId) {
-    return;
-  }
+  const collectionId = resolveCollectionId(WISHLIST_COLLECTION_CANDIDATES);
 
   const existing = await listUserWishlistDocs(jwt, userId);
   const existingByProduct = new Map(existing.map((doc) => [doc.productId, doc] as const));
+  const retainedProductIds = new Set(Object.keys(items).filter((productId) => productId.trim()));
 
   for (const productId of Object.keys(items)) {
     if (!productId.trim() || existingByProduct.has(productId)) {
@@ -215,6 +202,12 @@ export async function upsertUserWishlistMap(jwt: string, userId: string, items: 
       ]
     );
   }
+
+  await Promise.all(
+    existing
+      .filter((doc) => !retainedProductIds.has(doc.productId))
+      .map((doc) => databases.deleteDocument(appwritePublicConfig.databaseId, collectionId, doc.$id))
+  );
 }
 
 export async function mergeLocalAndRemoteShopState(args: {

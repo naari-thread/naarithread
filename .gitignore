@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -42,3 +43,11 @@ next-env.d.ts
 scripts/appwrite/setup-database.mjs
 
 public/implementation_plan.md
+
+# MCP config (contains API keys)
+.mcp.json
+
+# Local AI tooling and conversation attachments
+.claude/
+.codex/
+.codex-remote-attachments/

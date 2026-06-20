@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { ID, Permission, Role, type Models } from "node-appwrite";
 
 import { createDatabasesWithApiKey, getDatabaseId } from "@/lib/appwrite/admin-server";
 import { errorMessage, log, newCorrelationId } from "@/lib/logger";
 import { sendOrderStatusEmail } from "@/lib/email/send";
+import { hasVerifiedAdminSession } from "@/lib/firebase/admin-session";
 
 export const runtime = "nodejs";
 
 const SCOPE = "admin.orders.status";
-const ADMIN_GATE_COOKIE = "nt_admin_session";
 const ORDERS_COL = "orders";
 const NOTIFICATIONS_COL = "notifications";
 
@@ -47,10 +46,9 @@ function isValidTransition(current: string, target: string) {
   return currentIndex >= 0 && targetIndex > currentIndex;
 }
 
-export async function POST(request: Request) {
+export async function POST(request: Request): Promise<NextResponse> {
   const correlationId = newCorrelationId();
-  const cookieStore = await cookies();
-  if (!cookieStore.get(ADMIN_GATE_COOKIE)?.value) {
+  if (!(await hasVerifiedAdminSession())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -103,9 +101,9 @@ export async function POST(request: Request) {
       }));
     } catch { /* ignore */ }
 
-    // Send status email — fire-and-forget
+    // Await delivery before returning so Vercel cannot freeze the function early.
     if (userEmail) {
-      void sendOrderStatusEmail(userEmail, {
+      await sendOrderStatusEmail(userEmail, {
         customerName,
         customerEmail: userEmail,
         orderNumber,

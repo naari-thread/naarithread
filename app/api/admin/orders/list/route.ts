@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { Query } from "node-appwrite";
 
 import { createDatabasesWithApiKey, getDatabaseId } from "@/lib/appwrite/admin-server";
+import { hasVerifiedAdminSession } from "@/lib/firebase/admin-session";
 
 export const runtime = "nodejs";
 
-const ADMIN_GATE_COOKIE = "nt_admin_session";
 const ORDERS_COL = "orders";
 
 function toNumber(v: unknown, fallback = 0) {
@@ -27,9 +26,8 @@ function parseItems(raw: unknown) {
   } catch { return []; }
 }
 
-export async function GET(request: Request) {
-  const cookieStore = await cookies();
-  if (!cookieStore.get(ADMIN_GATE_COOKIE)?.value) {
+export async function GET(request: Request): Promise<NextResponse> {
+  if (!(await hasVerifiedAdminSession())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

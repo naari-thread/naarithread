@@ -110,9 +110,11 @@ const policyContent: Record<string, PolicyData> = {
       {
         heading: "Refund Policy",
         items: [
-          "Approved refunds will be processed to the original payment method or to store wallet credit, depending on the payment mode and order status.",
-          "Refund processing may take 5–7 business days after the return is approved and verified.",
-          "COD orders are eligible for store wallet credit only.",
+          "Approved refunds may be processed either to the original payment method or as Refund Wallet credit, depending on the payment mode, order status, and the refund path approved by NaariThread.",
+          "Refund Wallet credits stay in your NaariThread account first and become eligible for transfer request after 7 days from the credit date.",
+          "Refund Wallet transfer requests are reviewed manually by the NaariThread team and paid out to the UPI ID or bank details provided by the customer.",
+          "Refund processing to the original payment method may take 5–7 business days after the return is approved and verified.",
+          "COD orders are eligible for Refund Wallet credit only.",
           "Original shipping charges are non-refundable unless the return is due to a product defect or error on our part.",
         ],
       },
@@ -130,7 +132,7 @@ const policyContent: Record<string, PolicyData> = {
           "Orders can be cancelled only before they are dispatched from our warehouse.",
           "Once an order is shipped, cancellation is not permitted.",
           "To cancel, contact us immediately at naarithread@gmail.com or call +91 84878 49852 with your order details.",
-          "Refunds for cancelled prepaid orders will be processed within 5–7 business days to the original payment method.",
+          "Refunds for cancelled prepaid orders will be processed within 5–7 business days to the original payment method unless NaariThread and the customer agree to Refund Wallet credit instead.",
         ],
       },
       {
@@ -175,6 +177,7 @@ const policyContent: Record<string, PolicyData> = {
           "Prices displayed on the platform are in Indian Rupees (INR) and are inclusive of applicable taxes.",
           "NaariThread reserves the right to change product prices without prior notice.",
           "In the event of a pricing error, NaariThread will cancel the order and notify you before any charge is processed.",
+          "If multiple successful payment captures are detected for the same internal order, NaariThread may automatically initiate a refund of the duplicate captured amount to the original payment source.",
         ],
       },
       {
@@ -207,6 +210,7 @@ const policyContent: Record<string, PolicyData> = {
           "Payment information is processed securely through our payment partners and is not stored on our servers.",
           "Order history, browsing behaviour, and preferences to improve your shopping experience.",
           "Device and usage data collected automatically when you visit our platform (e.g., browser type, IP address).",
+          "If you request a Refund Wallet transfer, we collect the payout details you submit, such as UPI ID or bank transfer details, only for processing that transfer request.",
         ],
       },
       {
@@ -223,6 +227,7 @@ const policyContent: Record<string, PolicyData> = {
         items: [
           "We share your delivery address and contact details with our logistics and courier partners solely for order fulfilment.",
           "Your payment details are handled solely by our secure payment gateway partners and are never stored by NaariThread.",
+          "Refund Wallet payout details are reviewed only by the NaariThread operations team and are used solely to process your approved transfer request.",
           "We may share information when required by law or regulatory authority.",
         ],
       },
@@ -264,6 +269,7 @@ const policyContent: Record<string, PolicyData> = {
           "All prices are listed in INR and are subject to change without prior notice.",
           "Orders are confirmed only after successful payment authorization or verified COD confirmation, where applicable.",
           "Payment processing is handled by trusted third-party payment providers. NaariThread does not store full card details.",
+          "Refund Wallet credits, where offered, remain subject to NaariThread review, refund approval, and the transfer process described in the applicable refund policy.",
         ],
       },
       {
@@ -295,6 +301,7 @@ const policyContent: Record<string, PolicyData> = {
           "For account and order workflows, we may receive name, email address, and delivery address details provided by the user.",
           "Payment information is processed by payment gateway partners and is not stored directly by NaariThread.",
           "We use Google Sign-In for authentication. When you sign in with Google, we access your name, email address, and profile picture solely for account creation and identification purposes. We do not store your Google password.",
+          "If you request a Refund Wallet transfer, we store the payout details you submit, such as UPI ID or bank account details, to process and audit that request.",
         ],
       },
       {
@@ -303,6 +310,7 @@ const policyContent: Record<string, PolicyData> = {
           "To create and manage user accounts securely.",
           "To process orders, coordinate delivery, and provide customer support.",
           "To maintain account integrity, prevent misuse, and operate core platform functionality.",
+          "To process approved Refund Wallet transfer requests and maintain an audit trail of those payouts.",
         ],
       },
       {

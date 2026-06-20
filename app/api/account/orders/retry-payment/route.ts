@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ID, Query } from "node-appwrite";
+import { Query } from "node-appwrite";
 
 import { createDatabasesWithApiKey, getDatabaseId, getUserFromJwt } from "@/lib/appwrite/admin-server";
 import { getRazorpayClient, toPaise } from "@/lib/payments/razorpay-server";
@@ -92,7 +92,7 @@ export async function POST(request: Request) {
     await Promise.all([
       paymentDoc
         ? databases.updateDocument(databaseId, PAYMENTS_COL, paymentDoc.$id, { status: "created", providerPaymentId: "", paymentMeta, paidAt: null })
-        : databases.createDocument(databaseId, PAYMENTS_COL, ID.unique(), { userId: user.$id, orderId, provider: "razorpay", providerPaymentId: "", status: "created", amount: total, currency: "INR", paymentMeta, paidAt: null }),
+        : databases.createDocument(databaseId, PAYMENTS_COL, orderId, { userId: user.$id, orderId, provider: "razorpay", providerPaymentId: "", status: "created", amount: total, currency: "INR", paymentMeta, paidAt: null }),
       databases.updateDocument(databaseId, ORDERS_COL, orderId, { paymentStatus: "created", status: "initiated", paymentId: razorpayOrder.id }),
     ]);
 
@@ -104,7 +104,7 @@ export async function POST(request: Request) {
       internalOrderId: orderId,
       customer: { name: user.name ?? "", email: user.email ?? "" },
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Failed to initialize retry payment." }, { status: 500 });
   }
 }

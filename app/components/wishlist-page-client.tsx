@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 
 import { AuthModal } from "@/app/components/auth-modal";
 import { useAuth } from "@/app/components/auth-provider";
@@ -11,6 +10,7 @@ import { CloudinaryImage } from "@/app/components/cloudinary-image";
 import type { ProductRecord } from "@/lib/appwrite/products";
 import { readWishlistItems, toggleWishlistItem, writeWishlistItems, type WishlistItemsMap } from "@/lib/wishlist-state";
 import { readCartItems, writeCartItems } from "@/lib/cart-state";
+import { showActionToast } from "@/lib/action-toast";
 import { readUserWishlistMap, upsertUserWishlistMap, upsertUserCartMap } from "@/lib/appwrite/shop-sync";
 import {
   areProductsEquivalent,
@@ -115,7 +115,7 @@ export function WishlistPageClient() {
 
   const selectedCount = Object.keys(wishlistItems).length;
 
-  const removeItem = async (productId: string) => {
+  const removeItem = async (productId: string, showConfirmation = true): Promise<void> => {
     const wasAdded = toggleWishlistItem(productId);
     if (wasAdded) {
       // toggle added it, but remove action should only remove.
@@ -124,6 +124,15 @@ export function WishlistPageClient() {
 
     const next = readWishlistItems();
     setWishlistItems(next);
+    const productName = products.find((product) => product.id === productId)?.name ?? "Item";
+    if (showConfirmation) {
+      showActionToast({
+        id: `wishlist-removed-${productId}`,
+        message: "Removed from wishlist",
+        description: productName,
+        tone: "info",
+      });
+    }
 
     if (!isAuthenticated || !user?.$id) {
       return;
@@ -143,8 +152,12 @@ export function WishlistPageClient() {
     const nextCart = { ...currentCart, [product.id]: quantity + 1 };
     
     writeCartItems(nextCart);
-    removeItem(product.id);
-    toast.success("Moved to cart");
+    void removeItem(product.id, false);
+    showActionToast({
+      id: `wishlist-moved-${product.id}`,
+      message: "Moved to cart",
+      description: product.name,
+    });
 
     if (isAuthenticated && user?.$id) {
       try {
@@ -309,7 +322,7 @@ export function WishlistPageClient() {
         open={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         title="Sign up / Login"
-        description="Use Email OTP to sync your wishlist across devices."
+        description="Use a secure email link to sync your wishlist across devices."
       />
     </>
   );

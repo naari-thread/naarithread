@@ -118,6 +118,30 @@ type SuccessInfo = {
   deliveryDays?: string;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isCreateOrderResponse(value: unknown): value is CreateOrderResponse {
+  if (!isRecord(value) || !isRecord(value.customer) || !isRecord(value.summary)) return false;
+
+  return (
+    typeof value.keyId === "string" &&
+    typeof value.currency === "string" &&
+    typeof value.amount === "number" &&
+    typeof value.razorpayOrderId === "string" &&
+    typeof value.internalOrderId === "string" &&
+    typeof value.orderNumber === "string" &&
+    typeof value.customer.name === "string" &&
+    typeof value.customer.email === "string" &&
+    typeof value.summary.subtotal === "number" &&
+    typeof value.summary.discount === "number" &&
+    typeof value.summary.couponDiscount === "number" &&
+    typeof value.summary.delivery === "number" &&
+    typeof value.summary.total === "number"
+  );
+}
+
 function formatPrice(value: number) {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
@@ -292,7 +316,7 @@ export function CartPageClient() {
   const [checkoutPhase, setCheckoutPhase] = useState<CheckoutPhase>("shopping");
   const [checkoutError, setCheckoutError] = useState("");
   const [successInfo, setSuccessInfo] = useState<SuccessInfo | null>(null);
-  const [pendingOrderId, setPendingOrderId] = useState<string>("");
+  const [pendingOrder, setPendingOrder] = useState<CreateOrderResponse | null>(null);
   const [shippingAddress, setShippingAddress] = useState<ShippingAddressForm>({
     fullName: "",
     phone: "",
@@ -486,7 +510,7 @@ export function CartPageClient() {
       try {
         const serverProducts = await fetchProductsByIds(cartIds, controller.signal);
         if (!alive) return;
-        // serverProducts contains exactly what Appwrite returned for these IDs.
+        // serverProducts contains exactly what Firestore returned for these IDs.
         // Any cartId absent from the response genuinely doesn't exist anymore.
         if (serverProducts.length > 0) {
           setProducts(serverProducts);
@@ -535,13 +559,6 @@ export function CartPageClient() {
       alive = false;
     };
   }, [createAuthJwt, isAuthenticated, user?.$id]);
-
-  // Pre-load the Razorpay checkout script as soon as the cart page mounts so
-  // it's ready before the user clicks "Proceed to Buy". Avoids a race where
-  // the script hasn't loaded when the button is clicked.
-  useEffect(() => {
-    void loadRazorpayCheckoutScript();
-  }, []);
 
   // Auto-remove stale cart entries (IDs not in the catalog) once the catalog
   // finishes loading. Silently clears leftover dev/test data without scaring
@@ -627,6 +644,7 @@ export function CartPageClient() {
   const updateQuantity = async (productId: string, quantity: number) => {
     const next = { ...cartItems };
     const normalized = Math.max(0, Math.min(99, Math.trunc(quantity)));
+    const previousQuantity = cartItems[productId] ?? 0;
 
     if (normalized <= 0) {
       delete next[productId];
@@ -641,6 +659,14 @@ export function CartPageClient() {
     }
 
     await persistCart(next);
+
+    if (previousQuantity > 0 && normalized <= 0) {
+      const productName = products.find((product) => product.id === productId)?.name ?? "Item";
+      toast.info("Removed from cart", {
+        id: `cart-removed-${productId}`,
+        description: productName,
+      });
+    }
   };
 
   const handleApplyCoupon = async () => {
@@ -676,10 +702,14 @@ export function CartPageClient() {
         setAppliedCoupon({ code: data.code!, discountAmount: data.discountAmount, description: data.description! });
         toast.success(data.message);
       } else {
-        setCouponError(data.message || "Invalid coupon code.");
+        const message = data.message || "Invalid coupon code.";
+        setCouponError(message);
+        toast.error(message, { id: "coupon-invalid" });
       }
     } catch {
-      setCouponError("Unable to validate coupon right now.");
+      const message = "Unable to validate coupon right now.";
+      setCouponError(message);
+      toast.error(message, { id: "coupon-validation-error" });
     } finally {
       setCouponLoading(false);
     }
@@ -739,27 +769,36 @@ export function CartPageClient() {
         couponCode: appliedCoupon?.code ?? "",
       });
 
-      const fetchOrder = () =>
-        fetch("/api/payments/razorpay/create-order", {
+      const orderResponse = pendingOrder
+        ? await fetch("/api/account/orders/retry-payment", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}` },
+            body: JSON.stringify({ orderId: pendingOrder.internalOrderId }),
+          })
+        : await fetch("/api/payments/razorpay/create-order", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}` },
           body: orderBody,
         });
 
-      let orderResponse = await fetchOrder();
+      const responsePayload: unknown = await orderResponse.json();
+      const orderPayload = pendingOrder
+        ? {
+            ...pendingOrder,
+            ...(isRecord(responsePayload) ? responsePayload : {}),
+            summary: pendingOrder.summary,
+            orderNumber: pendingOrder.orderNumber,
+          }
+        : responsePayload;
 
-      // Retry once on server error — handles Vercel cold-start timeouts where
-      // the first call fails but the second succeeds on a warm function.
-      if (!orderResponse.ok) {
-        await new Promise((r) => setTimeout(r, 800));
-        orderResponse = await fetchOrder();
+      if (!orderResponse.ok || !isCreateOrderResponse(orderPayload)) {
+        const message = isRecord(responsePayload) && typeof responsePayload.error === "string"
+          ? responsePayload.error
+          : "Unable to create payment order.";
+        throw new Error(message);
       }
 
-      const orderPayload = (await orderResponse.json()) as Partial<CreateOrderResponse> & { error?: string };
-
-      if (!orderResponse.ok || !orderPayload.razorpayOrderId || !orderPayload.keyId || !orderPayload.internalOrderId) {
-        throw new Error(orderPayload.error ?? "Unable to create payment order.");
-      }
+      setPendingOrder(orderPayload);
 
       const scriptReady = await loadRazorpayCheckoutScript();
       if (!scriptReady || !window.Razorpay) {
@@ -767,8 +806,7 @@ export function CartPageClient() {
       }
 
       const serverTotal = orderPayload.summary?.total ?? total;
-      const currentInternalOrderId = orderPayload.internalOrderId!;
-      setPendingOrderId(currentInternalOrderId);
+      const currentInternalOrderId = orderPayload.internalOrderId;
 
       const checkout = new window.Razorpay({
         key: orderPayload.keyId,
@@ -819,11 +857,25 @@ export function CartPageClient() {
                     deliveryDays: deliveryEstimate?.days,
                   });
                   setCheckoutPhase("success");
+                  setPendingOrder(null);
                   return;
                 }
               }
             } catch {
               // Fall through to cancelled state if check fails.
+            }
+            try {
+              const cancelJwt = await createAuthJwt();
+              await fetch("/api/payments/razorpay/cancel-order", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${cancelJwt}`,
+                },
+                body: JSON.stringify({ orderId: currentInternalOrderId }),
+              });
+            } catch {
+              // Keep the same in-memory order available for retry if cancellation sync fails.
             }
             setCheckoutPhase("dismissed");
           },
@@ -845,8 +897,8 @@ export function CartPageClient() {
               }),
             });
 
-            const verifyPayload = (await verifyResponse.json()) as { error?: string };
-            if (!verifyResponse.ok) {
+            const verifyPayload = (await verifyResponse.json()) as { error?: string; paymentState?: string };
+            if (!verifyResponse.ok || verifyPayload.paymentState !== "paid") {
               throw new Error(verifyPayload.error ?? "Payment verification failed.");
             }
 
@@ -857,6 +909,7 @@ export function CartPageClient() {
             setCartSelections({});
             setAppliedCoupon(null);
             setCouponCode("");
+            setPendingOrder(null);
 
             setSuccessInfo({
               orderNumber: orderPayload.orderNumber ?? "",
@@ -894,7 +947,7 @@ export function CartPageClient() {
           open={isAuthModalOpen}
           onClose={() => setIsAuthModalOpen(false)}
           title="Sign up / Login"
-          description="Use Email OTP to sync and protect your cart across devices."
+          description="Use a secure email link to sync and protect your cart across devices."
         />
       </>
     );
@@ -1224,6 +1277,7 @@ export function CartPageClient() {
                         setAppliedCoupon(null);
                         setCouponCode("");
                         setCouponError("");
+                        toast.info("Coupon removed", { id: "coupon-removed" });
                       }}
                       className="ml-2 text-green-600/70 hover:text-green-800"
                     >
@@ -1300,7 +1354,10 @@ export function CartPageClient() {
                 {checkoutPhase === "dismissed" ? (
                   <DismissedBanner
                     onRetry={() => void handleProceedToBuy()}
-                    onDismiss={() => setCheckoutPhase("shopping")}
+                    onDismiss={() => {
+                      setPendingOrder(null);
+                      setCheckoutPhase("shopping");
+                    }}
                   />
                 ) : null}
                 {checkoutPhase === "error" ? (
@@ -1358,7 +1415,7 @@ export function CartPageClient() {
                     >
                       Sign in / Create Account
                     </button>
-                    <p className="text-[0.65rem] text-primary/45">Free · No spam · OTP login</p>
+                    <p className="text-[0.65rem] text-primary/45">Free · No spam · Secure email link</p>
                   </div>
                 </motion.div>
               ) : null}
@@ -1371,7 +1428,7 @@ export function CartPageClient() {
         open={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         title="Sign up / Login"
-        description="Use Email OTP to sync and protect your cart across devices."
+        description="Use a secure email link to sync and protect your cart across devices."
       />
     </>
   );

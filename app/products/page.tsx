@@ -9,7 +9,8 @@ export default async function ProductsPage() {
 
   try {
     products = await listProductsFromCollection();
-  } catch {
+  } catch (error) {
+    console.error("[products-page] Failed to load products", error);
     hasFetchError = true;
   }
 
@@ -19,7 +20,7 @@ export default async function ProductsPage() {
 
       {hasFetchError ? (
         <section className="mx-auto mt-4 w-full max-w-7xl rounded-2xl border border-primary/20 bg-secondary p-3.5 text-sm text-primary/80">
-          We could not load products from Appwrite right now. Please verify Appwrite project and database environment configuration.
+          We could not load products from Firebase right now. Please verify Firebase project and Firestore environment configuration.
         </section>
       ) : null}
     </main>

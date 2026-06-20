@@ -1,24 +1,35 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { ID, Query } from "node-appwrite";
 
 import { AdminImageUploadField } from "@/app/components/admin-image-upload-field";
+import { AdminActionToast } from "@/app/components/admin-action-toast";
 import { AdminModalClose } from "@/app/components/admin-modal-close";
 import { AdminTransactionFilters } from "@/app/components/admin-transaction-filters";
 import { AdminMultiSelectField } from "@/app/components/admin-multi-select-field";
 import { AdminMobileBottomBar } from "@/app/components/admin-mobile-bottom-bar";
+import { AdminProductTaxonomyFields } from "@/app/components/admin-product-taxonomy-fields";
 import { AdminSessionBootstrap } from "@/app/components/admin-session-bootstrap";
 import { CloudinaryImage } from "@/app/components/cloudinary-image";
 import { createDatabasesWithApiKey, getDatabaseId } from "@/lib/appwrite/admin-server";
+import { listRefundWalletPayoutRequests, type WalletPayoutRequest } from "@/lib/appwrite/wallet-server";
+import { PRODUCT_CATALOG_CACHE_TAG } from "@/lib/cache-tags";
+import { timestampToIso } from "@/lib/firebase/document";
+import { hasVerifiedAdminSession } from "@/lib/firebase/admin-session";
+import { PRODUCT_BADGES, getProductBadgeLabel, isProductBadgeValue } from "@/lib/product-badges";
+import {
+  getCategoryLabelBySlug,
+  getSubCategoryLabelBySlug,
+  normalizeProductCategory,
+} from "@/lib/product-taxonomy";
 import { ensureSlug } from "@/lib/slug";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type SearchParams = Record<string, string | string[] | undefined>;
-type AdminTab = "products" | "addons" | "orders" | "payments";
+type AdminTab = "products" | "addons" | "orders" | "payments" | "refund-wallet";
 type AddonType = "banners" | "coupons";
 
 type AdminProduct = {
@@ -39,6 +50,9 @@ type AdminProduct = {
   colorOptions: string[];
   isActive: boolean;
   createdAt: string;
+  badge: string;
+  categoryLabel: string;
+  subCategoryLabel: string;
 };
 
 type AdminAddon = {
@@ -66,6 +80,49 @@ type AdminTransaction = {
   createdAt: string;
   raw: Record<string, unknown>;
 };
+
+type AdminOrderLine = {
+  productId: string;
+  productName: string;
+  imageUrl: string;
+  quantity: number;
+  size: string;
+  color: string;
+  unitAmount: number;
+  lineAmount: number;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function parseAdminOrderLines(value: unknown): AdminOrderLine[] {
+  if (typeof value !== "string" || !value.trim()) return [];
+
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed.flatMap((entry): AdminOrderLine[] => {
+      if (!isRecord(entry)) return [];
+      const productId = String(entry.productId ?? "").trim();
+      if (!productId) return [];
+
+      return [{
+        productId,
+        productName: String(entry.productName ?? "Product"),
+        imageUrl: String(entry.imageUrl ?? ""),
+        quantity: Math.max(1, Math.trunc(toNumber(entry.quantity, 1))),
+        size: String(entry.size ?? ""),
+        color: String(entry.color ?? ""),
+        unitAmount: toNumber(entry.unitAmount),
+        lineAmount: toNumber(entry.lineAmount),
+      }];
+    });
+  } catch {
+    return [];
+  }
+}
 
 function toNumber(value: unknown, fallback = 0) {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -186,18 +243,60 @@ function formatDate(value: string) {
   }).format(date);
 }
 
+function getOrderStatusPresentation(status: string): { label: string; className: string } {
+  const normalized = status.trim().toLowerCase();
+  const fallbackLabel = normalized.replace(/_/g, " ") || "Unknown";
+  const styles: Record<string, string> = {
+    initiated: "border-amber-200 bg-amber-50 text-amber-800",
+    payment_pending: "border-amber-200 bg-amber-50 text-amber-800",
+    payment_failed: "border-red-200 bg-red-50 text-red-700",
+    placed: "border-sky-200 bg-sky-50 text-sky-800",
+    confirmed: "border-blue-200 bg-blue-50 text-blue-800",
+    shipped: "border-cyan-200 bg-cyan-50 text-cyan-800",
+    out_for_delivery: "border-orange-200 bg-orange-50 text-orange-800",
+    delivered: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    completed: "border-green-200 bg-green-50 text-green-800",
+    cancelled: "border-red-200 bg-red-50 text-red-700",
+    refunded_to_wallet: "border-teal-200 bg-teal-50 text-teal-800",
+  };
+  return {
+    label: ORDER_STATUS_LABELS[normalized] ?? fallbackLabel,
+    className: styles[normalized] ?? "border-zinc-200 bg-zinc-50 text-zinc-700",
+  };
+}
+
+function toDateMs(value: string): number {
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function sortAdminProductsByRecency(products: AdminProduct[]): AdminProduct[] {
+  return [...products].sort((first, second) => toDateMs(second.createdAt) - toDateMs(first.createdAt));
+}
+
 function mapProduct(document: Record<string, unknown>): AdminProduct {
   const stockQty = toNumber(document.stockQty);
   const inStockField = toBoolean(document.inStock, stockQty > 0);
+  const name = String(document.name ?? "Untitled Product");
+  const description = String(document.description ?? "");
+  const normalizedCategory = normalizeProductCategory({
+    categoryRaw: String(document.category ?? ""),
+    subCategoryRaw: String(document.subCategory ?? document.subcategory ?? ""),
+    name,
+    description,
+  });
+  const badge = String(document.badge ?? document.productBadge ?? "").trim();
 
   return {
     id: String(document.$id ?? ""),
-    name: String(document.name ?? "Untitled Product"),
-    description: String(document.description ?? ""),
+    name,
+    description,
     sku: String(document.sku ?? ""),
     slug: String(document.slug ?? ""),
-    category: String(document.category ?? ""),
-    subCategory: String(document.subCategory ?? document.subcategory ?? ""),
+    category: normalizedCategory.category,
+    subCategory: normalizedCategory.subCategory,
+    categoryLabel: getCategoryLabelBySlug(normalizedCategory.category),
+    subCategoryLabel: getSubCategoryLabelBySlug(normalizedCategory.subCategory),
     mainImageUrl: String(document.mainImageUrl ?? document.mainImage ?? ""),
     otherImageUrls: toStringArray(document.otherImageUrls),
     discountPrice: toNumber(document.discountPrice),
@@ -208,6 +307,7 @@ function mapProduct(document: Record<string, unknown>): AdminProduct {
     colorOptions: toStringArray(document.colorOptions),
     isActive: toBoolean(document.isActive, true),
     createdAt: String(document.$createdAt ?? ""),
+    badge: isProductBadgeValue(badge) ? badge : "",
   };
 }
 
@@ -232,11 +332,14 @@ function mapAddon(document: Record<string, unknown>): AdminAddon {
 function mapTransaction(document: Record<string, unknown>, fallbackLabel: string): AdminTransaction {
   return {
     id: String(document.$id ?? ""),
-    title: String(document.orderId ?? document.reference ?? document.title ?? fallbackLabel),
-    subtitle: String(document.customerName ?? document.email ?? document.phone ?? ""),
+    title: String(document.orderNumber ?? document.orderId ?? document.reference ?? document.title ?? fallbackLabel),
+    subtitle: String(document.customerName ?? document.userEmail ?? document.email ?? document.phone ?? ""),
     amount: toNumber(document.amount ?? document.totalAmount ?? document.payableAmount),
     status: String(document.status ?? document.paymentStatus ?? "Pending"),
-    createdAt: String(document.transactionDate ?? document.createdAt ?? document.$createdAt ?? ""),
+    createdAt:
+      timestampToIso(document.transactionDate) ||
+      timestampToIso(document.$createdAt) ||
+      timestampToIso(document.createdAt),
     raw: document,
   };
 }
@@ -339,11 +442,100 @@ async function getProductFormOptions() {
   }
 
   return {
-    categories: enumOf("category"),
-    subcategories: enumOf("subcategory"),
     sizes: enumOf("size"),
     colors: Array.from(colors).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })),
   };
+}
+
+function withAdminNotice(href: string, message: string): string {
+  const [path, query = ""] = href.split("?");
+  const params = new URLSearchParams(query);
+  params.set("notice", message);
+  return `${path || "/admin"}?${params.toString()}`;
+}
+
+type AdminFeedback = {
+  message: string;
+  tone: "success" | "info" | "error";
+};
+
+function getAdminFeedback(
+  notice: string,
+  refundStatus: string,
+  orderStatus: string,
+  walletPayoutStatus: string,
+): AdminFeedback | null {
+  if (notice) {
+    return { message: notice, tone: "success" };
+  }
+
+  if (refundStatus) {
+    if (refundStatus === "success") {
+      return { message: "Refund credited to the customer wallet.", tone: "success" };
+    }
+    if (refundStatus === "duplicate") {
+      return { message: "This refund was already credited to the customer wallet.", tone: "info" };
+    }
+    if (refundStatus === "not-paid") {
+      return { message: "Only paid orders can be refunded to wallet.", tone: "error" };
+    }
+    if (refundStatus === "invalid-order") {
+      return { message: "The order data is invalid for a wallet refund.", tone: "error" };
+    }
+    if (refundStatus === "missing-order") {
+      return { message: "Select an order before issuing a refund.", tone: "error" };
+    }
+    return { message: "The refund could not be completed. Please retry.", tone: "error" };
+  }
+
+  if (orderStatus) {
+    if (orderStatus === "success") {
+      return { message: "Order status updated and the customer was notified.", tone: "success" };
+    }
+    if (orderStatus === "invalid") {
+      return { message: "That order status change is not allowed.", tone: "error" };
+    }
+    if (orderStatus === "missing") {
+      return { message: "Select an order and status before updating.", tone: "error" };
+    }
+    return { message: "The order status could not be updated. Please retry.", tone: "error" };
+  }
+
+  if (walletPayoutStatus) {
+    if (walletPayoutStatus === "success") {
+      return { message: "Refund Wallet transfer request updated.", tone: "success" };
+    }
+    if (walletPayoutStatus === "invalid-transition") {
+      return { message: "That Refund Wallet status change is not allowed.", tone: "error" };
+    }
+    if (walletPayoutStatus === "not-found" || walletPayoutStatus === "invalid") {
+      return { message: "The Refund Wallet request could not be found.", tone: "error" };
+    }
+    return { message: "The Refund Wallet request could not be updated. Please retry.", tone: "error" };
+  }
+
+  return null;
+}
+
+function revalidateProductSurfaces(category: string, subCategory: string, slug: string): void {
+  updateTag(PRODUCT_CATALOG_CACHE_TAG);
+  revalidatePath("/");
+  revalidatePath("/products");
+  revalidatePath("/products", "layout");
+  revalidatePath("/api/catalog/products");
+  revalidatePath("/api/catalog/filters");
+
+  if (category) {
+    revalidatePath(`/products/${category}`);
+  }
+
+  if (category && subCategory) {
+    revalidatePath(`/products/${category}/${subCategory}`);
+  }
+
+  if (category && subCategory && slug) {
+    revalidatePath(`/products/${category}/${subCategory}/${slug}`);
+  }
 }
 
 async function listDocumentsFromCandidates(
@@ -399,6 +591,27 @@ async function getDocumentFromCandidates(collectionIds: string[], id: string) {
   };
 }
 
+async function enrichOrderProductImages(document: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const items = parseAdminOrderLines(document.itemsJson);
+  const missingProductIds = [...new Set(items.filter((item) => !item.imageUrl).map((item) => item.productId))];
+  if (missingProductIds.length === 0) return document;
+
+  const imageEntries = await Promise.all(missingProductIds.map(async (productId) => {
+    const result = await getDocumentFromCandidates(["sku"], productId);
+    const imageUrl = String(result.document?.mainImageUrl ?? result.document?.mainImage ?? "");
+    return [productId, imageUrl] as const;
+  }));
+  const imageByProductId = new Map(imageEntries);
+
+  return {
+    ...document,
+    itemsJson: JSON.stringify(items.map((item) => ({
+      ...item,
+      imageUrl: item.imageUrl || imageByProductId.get(item.productId) || "",
+    }))),
+  };
+}
+
 function buildAdminHref(searchParams: SearchParams, patch: Record<string, string | null>) {
   const params = new URLSearchParams();
 
@@ -421,7 +634,7 @@ function buildAdminHref(searchParams: SearchParams, patch: Record<string, string
 }
 
 function getActiveTab(value: string): AdminTab {
-  if (value === "products" || value === "addons" || value === "orders" || value === "payments") {
+  if (value === "products" || value === "addons" || value === "orders" || value === "payments" || value === "refund-wallet") {
     return value;
   }
 
@@ -452,10 +665,11 @@ async function toggleProductStockAction(formData: FormData) {
   const nextStockQty = nextInStock ? Math.max(1, currentStockQty) : 0;
 
   const databases = createDatabasesWithApiKey();
-  // sku/slug are required by Appwrite on every updateDocument; fall back to productId if null in the row.
+  // sku/slug are required by existing product records; fall back to productId if null in the row.
   const existingDoc = await databases.getDocument(getDatabaseId(), "sku", productId).catch(() => null);
   const existingSku = String(existingDoc?.sku ?? "").trim() || productId;
   const existingSlug = String(existingDoc?.slug ?? "").trim() || productId;
+  const existingProduct = existingDoc ? mapProduct(existingDoc as Record<string, unknown>) : null;
   await databases.updateDocument(getDatabaseId(), "sku", productId, {
     sku: existingSku,
     slug: existingSlug,
@@ -463,14 +677,12 @@ async function toggleProductStockAction(formData: FormData) {
     stockQty: nextStockQty,
   });
 
-  revalidatePath("/products", "layout");
-  revalidatePath("/api/catalog/products");
-  redirect(returnTo);
+  revalidateProductSurfaces(existingProduct?.category ?? "", existingProduct?.subCategory ?? "", existingSlug);
+  redirect(withAdminNotice(returnTo, "Product stock updated."));
 }
 
 async function assertAdminSession() {
-  const cookieStore = await cookies();
-  if (!cookieStore.get("nt_admin_session")?.value) {
+  if (!(await hasVerifiedAdminSession())) {
     throw new Error("Unauthorized: admin session required.");
   }
 }
@@ -509,18 +721,32 @@ async function saveProductAction(formData: FormData) {
   const returnTo = String(formData.get("returnTo") ?? "/admin").trim() || "/admin";
 
   const name = String(formData.get("name") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
   const stockQty = toNumber(formData.get("stockQty"));
   const sizeOptions = parseCommaSeparated(String(formData.get("sizeOptions") ?? ""));
   const primarySize = sizeOptions.find((value) => SIZE_ENUM.includes(value)) ?? "M";
+  const category = String(formData.get("category") ?? "").trim();
+  const subCategory = String(formData.get("subcategory") ?? "").trim();
+  const badge = String(formData.get("badge") ?? "").trim();
+  const oldCategory = String(formData.get("existingCategory") ?? "").trim();
+  const oldSubCategory = String(formData.get("existingSubCategory") ?? "").trim();
+  const oldSlug = String(formData.get("existingSlug") ?? "").trim();
+  const normalizedCategory = normalizeProductCategory({
+    categoryRaw: category,
+    subCategoryRaw: subCategory,
+    name,
+    description,
+  });
 
   // Common fields written on both create and edit. Keys match the live `sku`
   // schema exactly (note: `subcategory` is lowercase; `inStock` is derived from
   // stock; `size` is a required single enum; `isActive` defaults to true).
   const payload: Record<string, unknown> = {
     name,
-    description: String(formData.get("description") ?? "").trim(),
-    category: String(formData.get("category") ?? "").trim(),
-    subcategory: String(formData.get("subcategory") ?? "").trim(),
+    description,
+    category: normalizedCategory.category,
+    subCategory: normalizedCategory.subCategory,
+    subcategory: normalizedCategory.subCategory,
     mainImageUrl: String(formData.get("mainImageUrl") ?? "").trim(),
     discountPrice: toNumber(formData.get("discountPrice")),
     originalPrice: toNumber(formData.get("originalPrice")),
@@ -530,22 +756,26 @@ async function saveProductAction(formData: FormData) {
     sizeOptions,
     colorOptions: parseCommaSeparated(String(formData.get("colorOptions") ?? "")),
     otherImageUrls: parseCommaSeparated(String(formData.get("otherImageUrls") ?? "")),
+    badge: isProductBadgeValue(badge) ? badge : "",
     isActive: true,
   };
 
   const databases = createDatabasesWithApiKey();
   const databaseId = getDatabaseId();
+  let savedSlug = "";
 
   if (productId) {
     // Include sku/slug in the payload so required fields are satisfied (TablesDB enforces required on every write).
     const existingSku = String(formData.get("existingSku") ?? "").trim();
-    const existingSlug = String(formData.get("existingSlug") ?? "").trim();
+    const existingSlug = oldSlug;
     // Fall back to productId/generated slug if the row had null values (pre-existing rows before schema update).
     payload.sku = existingSku || productId;
     payload.slug = existingSlug || await generateUniqueSlug(databases, databaseId, name);
+    savedSlug = String(payload.slug);
     await databases.updateDocument(databaseId, "sku", productId, payload);
   } else {
     const slug = await generateUniqueSlug(databases, databaseId, name);
+    savedSlug = slug;
     await databases.createDocument(databaseId, "sku", ID.unique(), {
       ...payload,
       sku: generateSkuCode(name),
@@ -553,9 +783,12 @@ async function saveProductAction(formData: FormData) {
     });
   }
 
-  revalidatePath("/products", "layout");
-  revalidatePath("/api/catalog/products");
-  redirect(returnTo);
+  revalidateProductSurfaces(normalizedCategory.category, normalizedCategory.subCategory, savedSlug);
+  if (oldCategory || oldSubCategory || oldSlug) {
+    revalidateProductSurfaces(oldCategory, oldSubCategory, oldSlug);
+  }
+
+  redirect(withAdminNotice(returnTo, productId ? "Product updated successfully." : "Product created successfully."));
 }
 
 async function saveAddonAction(formData: FormData) {
@@ -599,7 +832,54 @@ async function saveAddonAction(formData: FormData) {
     await databases.createDocument(getDatabaseId(), collectionId, ID.unique(), payload);
   }
 
-  redirect(returnTo);
+  if (addonType === "banners") {
+    revalidatePath("/");
+  } else {
+    revalidatePath("/cart");
+    revalidatePath("/api/cart/validate-coupon");
+  }
+
+  redirect(withAdminNotice(returnTo, addonType === "banners" ? "Banner saved successfully." : "Coupon saved successfully."));
+}
+
+async function deleteAddonAction(formData: FormData) {
+  "use server";
+
+  await assertAdminSession();
+
+  const addonType = String(formData.get("addonType") ?? "").trim().toLowerCase() === "coupons" ? "coupons" : "banners";
+  const addonId = String(formData.get("addonId") ?? "").trim();
+  const returnTo = String(formData.get("returnTo") ?? "/admin?tab=addons").trim() || "/admin?tab=addons";
+
+  if (!addonId) {
+    redirect(returnTo);
+  }
+
+  const databases = createDatabasesWithApiKey();
+  const databaseId = getDatabaseId();
+  const collectionIds = addonType === "banners" ? ["banners", "banner"] : ["coupons", "coupon"];
+
+  let deleted = false;
+  for (const collectionId of collectionIds) {
+    try {
+      await databases.deleteDocument(databaseId, collectionId, addonId);
+      deleted = true;
+      break;
+    } catch (error) {
+      if (!isDocumentMissingError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  if (deleted && addonType === "banners") {
+    revalidatePath("/");
+  } else if (deleted) {
+    revalidatePath("/cart");
+    revalidatePath("/api/cart/validate-coupon");
+  }
+
+  redirect(withAdminNotice(returnTo, addonType === "banners" ? "Banner deleted successfully." : "Coupon deleted successfully."));
 }
 
 const ORDER_FLOW = ["placed", "confirmed", "shipped", "out_for_delivery", "delivered", "completed"] as const;
@@ -755,10 +1035,12 @@ export default async function AdminPage({
   const entityId = getFirstParam(resolvedSearchParams, "id");
   const refundStatus = getFirstParam(resolvedSearchParams, "refund");
   const orderStatusUpdate = getFirstParam(resolvedSearchParams, "orderStatus");
+  const walletPayoutStatus = getFirstParam(resolvedSearchParams, "walletPayout");
+  const adminNotice = getFirstParam(resolvedSearchParams, "notice");
+  const adminFeedback = getAdminFeedback(adminNotice, refundStatus, orderStatusUpdate, walletPayoutStatus);
   const productPageSize = 12;
 
-  const cookieStore = await cookies();
-  const hasAdminSession = Boolean(cookieStore.get("nt_admin_session")?.value);
+  const hasAdminSession = await hasVerifiedAdminSession();
 
   if (!hasAdminSession) {
     return (
@@ -773,12 +1055,10 @@ export default async function AdminPage({
   if (activeTab === "products") {
     if (productQuery) {
       const result = await listDocumentsFromCandidates(["sku"], [
-        Query.limit(100),
-        Query.orderDesc("$createdAt"),
+        Query.limit(500),
       ]);
 
-      const filtered = result.documents
-        .map((document) => mapProduct(document))
+      const filtered = sortAdminProductsByRecency(result.documents.map((document) => mapProduct(document)))
         .filter((product) => {
           const haystack = `${product.name} ${product.sku} ${product.category} ${product.subCategory}`.toLowerCase();
           return haystack.includes(productQuery);
@@ -789,13 +1069,12 @@ export default async function AdminPage({
       products = filtered.slice(offset, offset + productPageSize);
     } else {
       const result = await listDocumentsFromCandidates(["sku"], [
-        Query.limit(productPageSize),
-        Query.offset((productPage - 1) * productPageSize),
-        Query.orderDesc("$createdAt"),
+        Query.limit(500),
       ]);
 
       productsTotal = result.total;
-      products = result.documents.map((document) => mapProduct(document));
+      const sorted = sortAdminProductsByRecency(result.documents.map((document) => mapProduct(document)));
+      products = sorted.slice((productPage - 1) * productPageSize, productPage * productPageSize);
     }
   }
 
@@ -811,6 +1090,7 @@ export default async function AdminPage({
 
   let orderItems: AdminTransaction[] = [];
   let paymentItems: AdminTransaction[] = [];
+  let walletPayoutItems: WalletPayoutRequest[] = [];
   let paymentStatusSummary = {
     paid: 0,
     failed: 0,
@@ -827,6 +1107,7 @@ export default async function AdminPage({
     orderItems = ordersResult.documents
       .filter(
         (document) =>
+          String(document.status ?? "").toLowerCase() !== "payment_cancelled" &&
           matchesTransactionQuery(document, txnQuery) &&
           withinDateRange(String(document.$createdAt ?? document.placedAt ?? ""), dateFrom, dateTo)
       )
@@ -857,11 +1138,15 @@ export default async function AdminPage({
     };
   }
 
+  if (activeTab === "refund-wallet") {
+    walletPayoutItems = await listRefundWalletPayoutRequests();
+  }
+
   const productFormOptions =
     modal === "product-create" || modal === "product-edit" ? await getProductFormOptions() : null;
 
   let modalDocument: Record<string, unknown> | null = null;
-  let modalDocumentType: "product" | "banner" | "coupon" | "order" | "payment" | null = null;
+  let modalDocumentType: "product" | "banner" | "coupon" | "order" | "payment" | "wallet-payout" | null = null;
 
   if (entityId && modal) {
     if (modal.startsWith("product-")) {
@@ -878,12 +1163,16 @@ export default async function AdminPage({
       modalDocumentType = result.document ? "coupon" : null;
     } else if (modal.startsWith("order-")) {
       const result = await getDocumentFromCandidates(["orders"], entityId);
-      modalDocument = result.document;
+      modalDocument = result.document ? await enrichOrderProductImages(result.document) : null;
       modalDocumentType = result.document ? "order" : null;
     } else if (modal.startsWith("payment-")) {
       const result = await getDocumentFromCandidates(["payments"], entityId);
       modalDocument = result.document;
       modalDocumentType = result.document ? "payment" : null;
+    } else if (modal.startsWith("wallet-payout-")) {
+      const payoutDocument = walletPayoutItems.find((item) => item.id === entityId) ?? null;
+      modalDocument = payoutDocument ? { ...payoutDocument } : null;
+      modalDocumentType = payoutDocument ? "wallet-payout" : null;
     }
   }
 
@@ -891,47 +1180,22 @@ export default async function AdminPage({
 
   return (
     <main className="min-h-screen bg-paper px-5 pb-24 pt-2 text-primary sm:px-5 sm:pt-16 md:px-8 md:pb-10 md:pt-24">
-      {refundStatus ? (
-        <section className="mx-auto mb-3 w-full max-w-7xl rounded-2xl border border-primary/16 bg-secondary px-4 py-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary/62">Refund Update</p>
-          <p className="mt-1 text-sm text-primary/84">
-            {refundStatus === "success"
-              ? "Refund credited to user wallet successfully."
-              : refundStatus === "duplicate"
-                ? "Refund already credited to wallet for this order."
-                : refundStatus === "not-paid"
-                  ? "Only paid orders can be refunded to wallet."
-                  : refundStatus === "invalid-order"
-                    ? "Order data is invalid for wallet refund."
-                    : refundStatus === "missing-order"
-                      ? "Order was not provided for refund action."
-                      : "Refund action failed. Please retry."}
-          </p>
-        </section>
-      ) : null}
-
-      {orderStatusUpdate ? (
-        <section className="mx-auto mb-3 w-full max-w-7xl rounded-2xl border border-primary/16 bg-secondary px-4 py-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary/62">Order Status</p>
-          <p className="mt-1 text-sm text-primary/84">
-            {orderStatusUpdate === "success"
-              ? "Order status updated and customer notified."
-              : orderStatusUpdate === "invalid"
-                ? "That status change is not allowed from the current state."
-                : orderStatusUpdate === "missing"
-                  ? "Order or status was missing for the update."
-                  : "Could not update order status. Please retry."}
-          </p>
-        </section>
+      {adminFeedback ? (
+          <AdminActionToast
+            message={adminFeedback.message}
+            tone={adminFeedback.tone}
+            clearParams={["notice", "refund", "orderStatus", "walletPayout"]}
+          />
       ) : null}
 
       <section className="mx-auto hidden w-full max-w-7xl md:block">
-        <nav aria-label="Admin sections" className="grid grid-cols-4 gap-2">
+        <nav aria-label="Admin sections" className="grid grid-cols-5 gap-2">
           {[
             { id: "products", label: "Products" },
             { id: "addons", label: "AddOns" },
             { id: "orders", label: "Orders" },
             { id: "payments", label: "Payments" },
+            { id: "refund-wallet", label: "Refund Wallet" },
           ].map((item) => {
             const href = buildAdminHref(resolvedSearchParams, {
               tab: item.id,
@@ -1025,6 +1289,12 @@ export default async function AdminPage({
                       ) : null}
                     </div>
                     <p className="line-clamp-2 text-sm font-semibold leading-tight text-primary">{product.name}</p>
+                    <p className="mt-0.5 text-xs text-primary/55">{product.categoryLabel} · {product.subCategoryLabel}</p>
+                    {product.badge ? (
+                      <span className="mt-2 inline-flex w-fit rounded-full border border-primary/18 bg-secondary px-2 py-0.5 text-[0.58rem] font-semibold uppercase tracking-[0.12em] text-primary/72">
+                        {getProductBadgeLabel(product.badge)}
+                      </span>
+                    ) : null}
                     <p className="mt-1 text-sm font-semibold text-primary/90">{formatPrice(price)}</p>
 
                     <div className="mt-2 grid grid-cols-3 gap-1.5">
@@ -1121,18 +1391,31 @@ export default async function AdminPage({
           ) : (
             <div className="max-h-[70vh] divide-y divide-primary/10 overflow-y-auto rounded-2xl border border-primary/12 bg-paper">
               {addons.map((addon) => (
-                <article key={addon.id} className="relative p-3.5 pr-[5.5rem]">
-                  {/* Edit button pinned top-right */}
-                  <Link
-                    href={buildAdminHref(resolvedSearchParams, {
-                      modal: activeAddon === "banners" ? "banner-edit" : "coupon-edit",
-                      id: addon.id,
-                    })}
-                    aria-label={`Edit ${activeAddon === "coupons" ? addon.code || addon.title : addon.title}`}
-                    className="absolute right-3 top-3 rounded-lg border border-primary/20 bg-paper px-2.5 py-1.5 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-primary/80 transition hover:border-primary/40"
-                  >
-                    Edit
-                  </Link>
+                <article key={addon.id} className="relative p-3.5 pr-[6.25rem]">
+                  <div className="absolute right-3 top-3 flex flex-col gap-1.5">
+                    <Link
+                      href={buildAdminHref(resolvedSearchParams, {
+                        modal: activeAddon === "banners" ? "banner-edit" : "coupon-edit",
+                        id: addon.id,
+                      })}
+                      aria-label={`Edit ${activeAddon === "coupons" ? addon.code || addon.title : addon.title}`}
+                      className="rounded-lg border border-primary/20 bg-paper px-2.5 py-1.5 text-center text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-primary/80 transition hover:border-primary/40"
+                    >
+                      Edit
+                    </Link>
+                    <form action={deleteAddonAction}>
+                      <input type="hidden" name="addonType" value={activeAddon} />
+                      <input type="hidden" name="addonId" value={addon.id} />
+                      <input type="hidden" name="returnTo" value={buildAdminHref(resolvedSearchParams, { modal: null, id: null })} />
+                      <button
+                        type="submit"
+                        aria-label={`Delete ${activeAddon === "coupons" ? addon.code || addon.title : addon.title}`}
+                        className="w-full rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-red-700 transition hover:border-red-300 hover:bg-red-100"
+                      >
+                        Delete
+                      </button>
+                    </form>
+                  </div>
                   <p className="text-sm font-semibold text-primary">
                     {activeAddon === "coupons" ? addon.code || addon.title : addon.title}
                   </p>
@@ -1177,8 +1460,18 @@ export default async function AdminPage({
                     <p className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-primary/60">{formatDate(order.createdAt)}</p>
                     <div className="mt-1 flex items-center justify-between gap-2">
                       <div>
-                        <p className="text-sm font-semibold text-primary">{order.title}</p>
-                        <p className="text-xs text-primary/72">{order.subtitle || order.status}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold text-primary">{order.title}</p>
+                          {(() => {
+                            const presentation = getOrderStatusPresentation(String(order.raw.status ?? order.status));
+                            return (
+                              <span className={`rounded-full border px-2.5 py-1 text-[0.6rem] font-bold uppercase tracking-[0.12em] ${presentation.className}`}>
+                                {presentation.label}
+                              </span>
+                            );
+                          })()}
+                        </div>
+                        {order.subtitle ? <p className="mt-1 text-xs text-primary/72">{order.subtitle}</p> : null}
                       </div>
                       <div className="flex items-center gap-2 flex-wrap justify-end">
                         <span className="text-sm font-semibold text-primary/90">{order.amount > 0 ? formatPrice(order.amount) : "-"}</span>
@@ -1221,9 +1514,7 @@ export default async function AdminPage({
                         >
                           <input type="hidden" name="orderId" value={order.id} />
                           <input type="hidden" name="returnTo" value={buildAdminHref(resolvedSearchParams, {})} />
-                          <span className="rounded-md bg-secondary px-2 py-1 text-[0.6rem] font-semibold uppercase tracking-[0.12em] text-primary/70">
-                            {currentStatus.replace(/_/g, " ") || "—"}
-                          </span>
+                          <span className="text-[0.6rem] font-semibold uppercase tracking-[0.12em] text-primary/55">Move to</span>
                           <select
                             name="status"
                             aria-label={`Update status for order ${order.id}`}
@@ -1291,7 +1582,18 @@ export default async function AdminPage({
                     <div className="mt-1 flex items-center justify-between gap-2">
                       <div>
                         <p className="text-sm font-semibold text-primary">{payment.title}</p>
-                        <p className="text-xs text-primary/72">{payment.subtitle || payment.status}</p>
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          {payment.subtitle ? <p className="text-xs text-primary/72">{payment.subtitle}</p> : null}
+                          <span className={`rounded-full border px-2.5 py-1 text-[0.6rem] font-bold uppercase tracking-[0.12em] ${
+                            payment.status.toLowerCase() === "paid"
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                              : payment.status.toLowerCase() === "failed"
+                                ? "border-red-200 bg-red-50 text-red-700"
+                                : "border-amber-200 bg-amber-50 text-amber-800"
+                          }`}>
+                            {payment.status.replace(/_/g, " ")}
+                          </span>
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold text-primary/90">{payment.amount > 0 ? formatPrice(payment.amount) : "-"}</span>
@@ -1312,18 +1614,97 @@ export default async function AdminPage({
         </section>
       ) : null}
 
+      {activeTab === "refund-wallet" ? (
+        <section className="mx-auto mt-4 w-full max-w-7xl sm:mt-5">
+          <h2 className="text-xl font-semibold sm:text-2xl">Refund Wallet</h2>
+          <p className="mt-1 text-sm text-primary/74">Customer transfer requests for matured Refund Wallet credits.</p>
+
+          <div className="mt-4">
+            <div className="mt-2 max-h-[68vh] divide-y divide-primary/10 overflow-y-auto rounded-2xl border border-primary/12 bg-paper">
+              {walletPayoutItems.length === 0 ? (
+                <p className="p-3 text-sm text-primary/70">No Refund Wallet transfer requests found.</p>
+              ) : (
+                walletPayoutItems.map((request) => (
+                  <article key={request.id} className="p-3.5">
+                    <p className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-primary/60">{formatDate(request.createdAt)}</p>
+                    <div className="mt-1 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold text-primary">{request.requestNumber}</p>
+                          <span className={`rounded-full border px-2.5 py-1 text-[0.6rem] font-bold uppercase tracking-[0.12em] ${request.status === "paid" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : request.status === "processing" ? "border-sky-200 bg-sky-50 text-sky-800" : request.status === "requested" ? "border-amber-200 bg-amber-50 text-amber-800" : "border-red-200 bg-red-50 text-red-700"}`}>
+                            {request.status.replace(/_/g, " ")}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-primary/72">
+                          {request.customerName || "Customer"}{request.customerEmail ? ` - ${request.customerEmail}` : ""}
+                        </p>
+                        <p className="mt-0.5 text-xs text-primary/62">
+                          {request.payoutMethod === "upi"
+                            ? `UPI: ${request.upiId || "Not provided"}`
+                            : `Bank: ${request.bankName || "Bank transfer"}${request.ifscCode ? ` / ${request.ifscCode}` : ""}`}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-primary/90">{request.amount > 0 ? formatPrice(request.amount) : "-"}</span>
+                        <Link
+                          href={buildAdminHref(resolvedSearchParams, { modal: "wallet-payout-view", id: request.id })}
+                          aria-label={`View Refund Wallet request ${request.requestNumber}`}
+                          className="rounded-lg border border-primary/20 px-2.5 py-1.5 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-primary/80"
+                        >
+                          View
+                        </Link>
+                      </div>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       {modal === "product-view" && modalDocumentType === "product" && modalDocument ? (
         <AdminModal title="Product Details" backHref={baseWithoutModal} maxWidth="max-w-lg">
           {(() => {
             const p = mapProduct(modalDocument);
+            const galleryImages = [p.mainImageUrl, ...p.otherImageUrls].filter(Boolean);
             return (
               <div className="space-y-4 text-sm">
-                {p.mainImageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={p.mainImageUrl} alt={p.name} className="h-48 w-full rounded-xl object-cover border border-primary/10" />
+                {galleryImages.length > 0 ? (
+                  <div className="space-y-2">
+                    <div className="relative h-56 w-full overflow-hidden rounded-xl border border-primary/10 bg-paper">
+                      <CloudinaryImage
+                        src={galleryImages[0]}
+                        alt={p.name}
+                        fill
+                        sizes="(max-width: 640px) 90vw, 560px"
+                        className="object-contain"
+                      />
+                    </div>
+                    {galleryImages.length > 1 ? (
+                      <div className="grid grid-cols-4 gap-2">
+                        {galleryImages.slice(1).map((imageUrl, index) => (
+                          <div key={`${imageUrl}-${index}`} className="relative aspect-square overflow-hidden rounded-lg border border-primary/10 bg-paper">
+                            <CloudinaryImage
+                              src={imageUrl}
+                              alt={`${p.name} view ${index + 2}`}
+                              fill
+                              sizes="96px"
+                              className="object-contain"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                 ) : null}
                 <div>
                   <p className="text-base font-semibold text-primary">{p.name}</p>
+                  {p.badge ? (
+                    <span className="mt-2 inline-flex rounded-full border border-primary/18 bg-secondary px-2.5 py-1 text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-primary/72">
+                      {getProductBadgeLabel(p.badge)}
+                    </span>
+                  ) : null}
                   <p className="mt-0.5 text-xs text-primary/60">{p.category}{p.subCategory ? ` · ${p.subCategory}` : ""}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -1375,48 +1756,18 @@ export default async function AdminPage({
             <input type="hidden" name="returnTo" value={baseWithoutModal} />
             {modal === "product-edit" && <input type="hidden" name="existingSku" value={String(modalDocument?.sku ?? "")} />}
             {modal === "product-edit" && <input type="hidden" name="existingSlug" value={String(modalDocument?.slug ?? "")} />}
+            {modal === "product-edit" && <input type="hidden" name="existingCategory" value={mapProduct(modalDocument ?? {}).category} />}
+            {modal === "product-edit" && <input type="hidden" name="existingSubCategory" value={mapProduct(modalDocument ?? {}).subCategory} />}
             <label className="sm:col-span-2 flex flex-col gap-1.5">
               <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Name</span>
               <input aria-label="Product name" name="name" defaultValue={String(modalDocument?.name ?? "")} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" required />
             </label>
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Category</span>
-              <select
-                aria-label="Product category"
-                name="category"
-                defaultValue={String(modalDocument?.category ?? "")}
-                className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm"
-                required
-              >
-                <option value="" disabled>
-                  Select category
-                </option>
-                {(productFormOptions?.categories ?? []).map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Sub Category</span>
-              <select
-                aria-label="Product sub category"
-                name="subcategory"
-                defaultValue={String(modalDocument?.subcategory ?? modalDocument?.subCategory ?? "")}
-                className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm"
-                required
-              >
-                <option value="" disabled>
-                  Select sub category
-                </option>
-                {(productFormOptions?.subcategories ?? []).map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <AdminProductTaxonomyFields
+              initialCategory={String(modalDocument?.category ?? "")}
+              initialSubCategory={String(modalDocument?.subcategory ?? modalDocument?.subCategory ?? "")}
+              productName={String(modalDocument?.name ?? "")}
+              productDescription={String(modalDocument?.description ?? "")}
+            />
             <label className="flex flex-col gap-1.5">
               <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Original Price</span>
               <input aria-label="Original price" name="originalPrice" type="number" min="0" defaultValue={String(modalDocument?.originalPrice ?? 0)} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" required />
@@ -1429,6 +1780,22 @@ export default async function AdminPage({
               <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Stock Qty</span>
               <input aria-label="Stock quantity" name="stockQty" type="number" min="0" defaultValue={String(modalDocument?.stockQty ?? 0)} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" required />
               <span className="text-[0.62rem] text-primary/55">In-stock is set automatically when quantity is above 0.</span>
+            </label>
+            <label className="sm:col-span-2 flex flex-col gap-1.5">
+              <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Product Badge</span>
+              <select
+                aria-label="Product badge"
+                name="badge"
+                defaultValue={String(modalDocument?.badge ?? modalDocument?.productBadge ?? "")}
+                className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm"
+              >
+                <option value="">No badge</option>
+                {PRODUCT_BADGES.map((badge) => (
+                  <option key={badge.value} value={badge.value}>
+                    {badge.label}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="sm:col-span-2 flex flex-col gap-1.5">
               <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Description</span>
@@ -1628,8 +1995,7 @@ export default async function AdminPage({
             const status = String(doc.status ?? "").toLowerCase();
             const payStatus = String(doc.paymentStatus ?? "").toLowerCase();
 
-            let items: Array<{productId: string; productName: string; quantity: number; size?: string; color?: string; unitAmount: number}> = [];
-            try { items = JSON.parse(String(doc.itemsJson ?? "[]")); } catch { items = []; }
+            const items = parseAdminOrderLines(doc.itemsJson);
 
             let address: Record<string, unknown> = {};
             try { address = JSON.parse(String(doc.shippingAddress ?? "{}")); } catch { address = {}; }
@@ -1681,15 +2047,31 @@ export default async function AdminPage({
                 {items.length > 0 ? (
                   <div className="rounded-xl border border-primary/12 bg-paper p-3">
                     <p className="mb-2 text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-primary/55">Items ({items.length})</p>
-                    <div className="space-y-2">
+                    <div className="divide-y divide-primary/8">
                       {items.map((item, i) => (
-                        <div key={i} className="flex items-center justify-between gap-2 border-t border-primary/8 pt-2 first:border-0 first:pt-0">
-                          <div className="min-w-0">
-                            <p className="truncate font-semibold text-primary">{item.productName || item.productId}</p>
-                            <p className="text-xs text-primary/60">{[item.size, item.color].filter(Boolean).join(" · ")} · Qty {item.quantity}</p>
+                        <article key={`${item.productId}-${item.size}-${item.color}-${i}`} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                          <div className="relative h-20 w-16 shrink-0 overflow-hidden rounded-lg border border-primary/10 bg-secondary">
+                            <CloudinaryImage
+                              src={item.imageUrl}
+                              alt={item.productName || "Ordered product"}
+                              fill={true}
+                              sizes="64px"
+                              className="object-cover"
+                            />
                           </div>
-                          <p className="shrink-0 font-semibold text-primary/90">{formatPrice(item.unitAmount * item.quantity)}</p>
-                        </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="line-clamp-2 font-semibold leading-snug text-primary">{item.productName || item.productId}</p>
+                            <p className="mt-1 text-xs text-primary/60">
+                              {[item.size && `Size ${item.size}`, item.color].filter(Boolean).join(" / ") || "Standard option"}
+                            </p>
+                            <div className="mt-2 flex items-end justify-between gap-2 text-xs">
+                              <span className="font-medium text-primary/68">Qty {item.quantity}</span>
+                              <span className="font-semibold text-primary/90">
+                                {formatPrice(item.lineAmount || item.unitAmount * item.quantity)}
+                              </span>
+                            </div>
+                          </div>
+                        </article>
                       ))}
                     </div>
                   </div>
@@ -1756,6 +2138,8 @@ export default async function AdminPage({
                     ["Provider", doc.provider],
                     ["Razorpay Payment ID", meta.razorpayPaymentId || doc.providerPaymentId],
                     ["Razorpay Order ID", meta.razorpayOrderId],
+                    ["Primary Payment ID", meta.primaryPaymentId],
+                    ["Duplicate Captures", Array.isArray(meta.duplicateCaptures) ? String(meta.duplicateCaptures.length) : ""],
                     ["Method", meta.method],
                     ["Bank / Wallet", meta.bank || meta.wallet],
                     ["Customer", meta.email || doc.userEmail],
@@ -1771,6 +2155,106 @@ export default async function AdminPage({
                       </div>
                     ))}
                 </div>
+              </div>
+            );
+          })()}
+        </AdminModal>
+      ) : null}
+
+      {modal === "wallet-payout-view" && modalDocumentType === "wallet-payout" && modalDocument ? (
+        <AdminModal title="Refund Wallet Request" backHref={baseWithoutModal} maxWidth="max-w-lg">
+          {(() => {
+            const request = modalDocument as unknown as WalletPayoutRequest;
+            const statusClass =
+              request.status === "paid"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : request.status === "processing"
+                  ? "border-sky-200 bg-sky-50 text-sky-800"
+                  : request.status === "requested"
+                    ? "border-amber-200 bg-amber-50 text-amber-800"
+                    : "border-red-200 bg-red-50 text-red-700";
+
+            return (
+              <div className="space-y-4 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-base font-semibold text-primary">{request.requestNumber}</p>
+                  <span className={`rounded-full border px-2.5 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.14em] ${statusClass}`}>
+                    {request.status.replace(/_/g, " ")}
+                  </span>
+                  <span className="text-sm font-semibold text-primary">{formatPrice(request.amount)}</span>
+                </div>
+
+                <div className="rounded-xl border border-primary/12 bg-paper divide-y divide-primary/8">
+                  {[
+                    ["Requested", formatDate(request.createdAt)],
+                    ["Customer", request.customerName || "Customer"],
+                    ["Email", request.customerEmail],
+                    ["Method", request.payoutMethod === "upi" ? "UPI" : "Bank transfer"],
+                    ["Account Holder", request.accountHolderName],
+                    ["UPI ID", request.upiId],
+                    ["Bank Name", request.bankName],
+                    ["Account Number", request.bankAccountNumber],
+                    ["IFSC", request.ifscCode],
+                    ["Customer Note", request.note],
+                    ["Admin Note", request.adminNote],
+                    ["Transfer Ref", request.transferReference],
+                    ["Updated", formatDate(request.updatedAt)],
+                  ]
+                    .filter(([, value]) => value && String(value).trim())
+                    .map(([label, value]) => (
+                      <div key={String(label)} className="flex items-start justify-between gap-3 px-3 py-2.5">
+                        <p className="shrink-0 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-primary/55">{String(label)}</p>
+                        <p className="break-all text-right text-sm text-primary/84">{String(value)}</p>
+                      </div>
+                    ))}
+                </div>
+
+                {request.status === "paid" || request.status === "rejected" || request.status === "cancelled" ? null : (
+                  <form action="/api/admin/wallet-payouts/status" method="POST" className="space-y-3 rounded-xl border border-primary/12 bg-paper p-3">
+                    <input type="hidden" name="payoutRequestId" value={request.id} />
+                    <input type="hidden" name="returnTo" value={buildAdminHref(resolvedSearchParams, { tab: "refund-wallet", modal: null, id: null })} />
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Next status</span>
+                      <select
+                        name="status"
+                        aria-label={`Update Refund Wallet request ${request.requestNumber}`}
+                        defaultValue={request.status === "requested" ? "processing" : "paid"}
+                        className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm text-primary"
+                      >
+                        {request.status === "requested" ? <option value="processing">Processing</option> : null}
+                        <option value="paid">Paid</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="cancelled">Cancelled</option>
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Transfer reference</span>
+                      <input
+                        aria-label="Transfer reference"
+                        name="transferReference"
+                        defaultValue={request.transferReference}
+                        className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm text-primary"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Admin note</span>
+                      <textarea
+                        aria-label="Admin note"
+                        name="adminNote"
+                        defaultValue={request.adminNote}
+                        rows={3}
+                        className="rounded-xl border border-primary/18 bg-paper px-3 py-2 text-sm text-primary"
+                      />
+                    </label>
+                    <button
+                      type="submit"
+                      aria-label={`Update Refund Wallet request ${request.requestNumber}`}
+                      className="rounded-xl border border-primary bg-primary px-4 py-2 text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-paper"
+                    >
+                      Update request
+                    </button>
+                  </form>
+                )}
               </div>
             );
           })()}

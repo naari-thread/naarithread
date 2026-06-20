@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { ID, Permission, Query, Role } from "node-appwrite";
 
-import { createDatabasesWithApiKey, getDatabaseId, getUserFromJwt } from "@/lib/appwrite/admin-server";
+import { createDatabasesWithApiKey, getDatabaseId, getUserFromJwt, isAllowedAdminEmail } from "@/lib/appwrite/admin-server";
 
 export const runtime = "nodejs";
 
-function getBearerToken(request: Request) {
+function getBearerToken(request: Request): string {
   const header = request.headers.get("authorization") ?? "";
   if (!header.toLowerCase().startsWith("bearer ")) {
     return "";
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     const databases = createDatabasesWithApiKey();
     const databaseId = getDatabaseId();
     const usersCollectionId = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID ?? "users";
-    const isAdmin = false;
+    const isAdmin = isAllowedAdminEmail(user.email);
 
     console.info("[auth-profile-api] sync start", {
       userId: user.$id,
@@ -47,12 +47,30 @@ export async function POST(request: Request) {
         documentId: existing.$id,
         userId: user.$id,
       });
-      const updated = await databases.updateDocument(databaseId, usersCollectionId, existing.$id, {
+
+      const targetProfileId = existing.$id === user.$id ? existing.$id : user.$id;
+      const updated = existing.$id === user.$id
+        ? await databases.updateDocument(databaseId, usersCollectionId, targetProfileId, {
+            userId: user.$id,
+            fullName: user.name ?? "",
+            email: user.email,
+            isAdmin,
+          })
+        : await databases.createDocument(databaseId, usersCollectionId, targetProfileId, {
+            userId: user.$id,
+            fullName: user.name ?? String(existing.fullName ?? ""),
+            email: user.email,
+            phone: String(existing.phone ?? ""),
+            address: String(existing.address ?? ""),
+            isAdmin,
+          });
+
+      await databases.updateDocument(databaseId, usersCollectionId, existing.$id, {
         userId: user.$id,
         fullName: user.name ?? "",
         email: user.email,
         isAdmin,
-      });
+      }).catch(() => null);
 
       console.info("[auth-profile-api] update success", {
         profileId: updated.$id,

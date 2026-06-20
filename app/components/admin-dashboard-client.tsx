@@ -913,7 +913,7 @@ export function AdminDashboardClient() {
                   </label>
                 </div>
                 <button type="button" aria-label="Save banner" className="cta-thread mt-4">Save Banner</button>
-                {/* TODO: Persist banners to Appwrite collection when banner APIs are ready. */}
+                {/* TODO: Persist banners to Firestore when banner APIs are ready. */}
               </article>
 
               <article className="rounded-3xl border border-primary/14 bg-secondary p-4 sm:p-6">

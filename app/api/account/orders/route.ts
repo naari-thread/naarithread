@@ -115,7 +115,9 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({
-      orders: ordersList.documents.map((doc) => {
+      orders: ordersList.documents.filter(
+        (doc) => String((doc as Record<string, unknown>).status ?? "").toLowerCase() !== "payment_cancelled",
+      ).map((doc) => {
         const payment = paymentsByOrderId.get(doc.$id);
         const totalAmount = Math.max(0, toNumber((doc as Record<string, unknown>).totalAmount));
         const shippingAmount = Math.max(0, toNumber((doc as Record<string, unknown>).shippingAmount));
@@ -140,7 +142,7 @@ export async function GET(request: Request) {
                 createdAt: String(payment.$createdAt ?? ""),
               }
             : null,
-          canRetryPayment: ["created", "authorized", "failed", "payment_failed", "initiated", "payment_pending"].includes(
+          canRetryPayment: ["created", "authorized", "failed", "payment_failed", "initiated", "payment_pending", "cancelled"].includes(
             String((doc as Record<string, unknown>).paymentStatus ?? "").toLowerCase()
           ),
         };

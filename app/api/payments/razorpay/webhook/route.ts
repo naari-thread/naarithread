@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server";
-import { Query, type Models } from "node-appwrite";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { type Models } from "node-appwrite";
 
 import { createDatabasesWithApiKey, getDatabaseId } from "@/lib/appwrite/admin-server";
 import { createUserNotification } from "@/lib/appwrite/notifications";
+import { PRODUCT_CATALOG_CACHE_TAG } from "@/lib/cache-tags";
 import { errorMessage, log, newCorrelationId } from "@/lib/logger";
+import { markCouponRedeemedForPaidOrder } from "@/lib/payments/coupon-usage";
+import { sendPaidOrderConfirmationOnce } from "@/lib/payments/order-confirmation";
+import { reduceStockForPaidOrder } from "@/lib/payments/order-stock";
+import { reconcileCapturedPayment, refundDuplicateCapturedPayment } from "@/lib/payments/payment-reconciliation";
 import {
   applyPaymentTransition,
-  canPaymentUpdateOrderStatus,
+  getRazorpayClient,
   getWebhookSecret,
   mapRazorpayPaymentStatus,
   toOrderStatus,
@@ -28,12 +34,25 @@ type RazorpayWebhookPayload = {
   };
 };
 
-function normalize(value: unknown, limit = 140) {
+function normalize(value: unknown, limit = 140): string {
   if (typeof value !== "string") return "";
   return value.trim().slice(0, limit);
 }
 
-export async function POST(request: Request) {
+function parseMeta(value: unknown): Record<string, unknown> {
+  if (typeof value !== "string" || !value.trim()) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+export async function POST(request: Request): Promise<NextResponse> {
   const correlationId = newCorrelationId();
   const signature = request.headers.get("x-razorpay-signature") ?? "";
   const eventId = normalize(request.headers.get("x-razorpay-event-id"), 64);
@@ -44,7 +63,6 @@ export async function POST(request: Request) {
   try {
     const rawBody = await request.text();
     const webhookSecret = getWebhookSecret();
-
     const valid = verifyWebhookSignature({ payload: rawBody, signature, webhookSecret });
     if (!valid) {
       log("warn", SCOPE, "signature_invalid", { correlationId, eventId });
@@ -55,7 +73,6 @@ export async function POST(request: Request) {
     const event = normalize(payload.event, 60);
     const paymentEntity = payload.payload?.payment?.entity;
     const orderEntity = payload.payload?.order?.entity;
-
     const internalOrderId =
       normalize(paymentEntity?.notes?.internalOrderId, 64) ||
       normalize(orderEntity?.notes?.internalOrderId, 64);
@@ -73,80 +90,137 @@ export async function POST(request: Request) {
 
     const databases = createDatabasesWithApiKey();
     const databaseId = getDatabaseId();
-
-    const [paymentsList, order] = await Promise.all([
-      databases.listDocuments(databaseId, PAYMENTS_COL, [
-        Query.equal("orderId", internalOrderId),
-        Query.equal("provider", "razorpay"),
-        Query.limit(1),
-      ]),
+    const [paymentSnapshot, order] = await Promise.all([
+      databases.getDocument(databaseId, PAYMENTS_COL, internalOrderId).catch(() => null),
       databases.getDocument(databaseId, ORDERS_COL, internalOrderId).catch(() => null),
     ]);
 
-    const paymentDoc = paymentsList.documents[0] ?? null;
-
-    let previousMeta: Record<string, unknown> = {};
-    if (paymentDoc?.paymentMeta) {
-      try { previousMeta = JSON.parse(String(paymentDoc.paymentMeta)) as Record<string, unknown>; } catch { previousMeta = {}; }
-    }
-
-    if (eventId && previousMeta.lastEventId === eventId) {
+    const paymentMeta = parseMeta(paymentSnapshot?.paymentMeta);
+    if (eventId && String(paymentMeta.lastEventId ?? "") === eventId) {
       log("info", SCOPE, "duplicate_event_skipped", { correlationId, event, eventId, internalOrderId });
       return NextResponse.json({ ok: true, duplicate: true });
     }
 
-    const currentPaymentStatus = String(paymentDoc?.status ?? order?.paymentStatus ?? "created");
+    if (!order) {
+      return NextResponse.json({ ok: true, ignored: true });
+    }
+
+    const currentPaymentStatus = String(paymentSnapshot?.status ?? order.paymentStatus ?? "created");
     const transition = applyPaymentTransition(currentPaymentStatus, incomingState);
     const nextPaymentStatus = transition.next;
     const isPaid = nextPaymentStatus === "paid";
+    const baseMeta = {
+      ...paymentMeta,
+      lastEventId: eventId || String(paymentMeta.lastEventId ?? ""),
+      webhookEvent: event,
+      razorpayOrderId,
+      razorpayPaymentId: paymentId,
+      razorpayStatus: paymentEntity?.status ?? (event === "order.paid" ? "paid" : ""),
+      method: paymentEntity?.method ?? "",
+      bank: paymentEntity?.bank ?? "",
+      wallet: paymentEntity?.wallet ?? "",
+      email: paymentEntity?.email ?? "",
+      contact: paymentEntity?.contact ?? "",
+    };
 
-    const writes: Promise<unknown>[] = [];
+    let orderStatus = toOrderStatus(nextPaymentStatus as never);
+    let shouldRunPostPayment = false;
+    let duplicateCapture: Awaited<ReturnType<typeof reconcileCapturedPayment>>["duplicateCapture"] = null;
 
-    if (paymentDoc) {
-      writes.push(
-        databases.updateDocument<Models.DefaultDocument>(databaseId, PAYMENTS_COL, paymentDoc.$id, {
-          providerPaymentId: paymentId || String(paymentDoc.providerPaymentId ?? ""),
+    if (isPaid && paymentId) {
+      const razorpay = getRazorpayClient();
+      const fullPayment = await razorpay.client.payments.fetch(paymentId);
+      const reconciliation = await reconcileCapturedPayment({
+        correlationId,
+        internalOrderId,
+        userId: String(order.userId ?? ""),
+        orderStatusWhenPaid: orderStatus,
+        razorpayOrderId,
+        razorpayPaymentId: paymentId,
+        amount: Number(order.totalAmount ?? 0),
+        currency: String(fullPayment.currency ?? "INR").toUpperCase() || "INR",
+        metaPatch: {
+          ...baseMeta,
+          razorpayStatus: fullPayment.status,
+          method: fullPayment.method,
+          bank: fullPayment.bank,
+          wallet: fullPayment.wallet,
+          email: fullPayment.email,
+          contact: fullPayment.contact,
+          webhookVerifiedAt: new Date().toISOString(),
+        },
+      });
+      orderStatus = reconciliation.orderStatus;
+      shouldRunPostPayment = reconciliation.shouldRunPostPayment;
+      duplicateCapture = reconciliation.duplicateCapture;
+    } else {
+      await databases.createDocument<Models.DefaultDocument>(databaseId, PAYMENTS_COL, internalOrderId, {
+        userId: String(order.userId ?? ""),
+        orderId: internalOrderId,
+        provider: "razorpay",
+        providerPaymentId: paymentId,
+        status: nextPaymentStatus,
+        amount: Number(order.totalAmount ?? 0),
+        currency: "INR",
+        paymentMeta: JSON.stringify(baseMeta),
+      }).catch(async () => {
+        await databases.updateDocument<Models.DefaultDocument>(databaseId, PAYMENTS_COL, internalOrderId, {
+          providerPaymentId: paymentId || String(paymentSnapshot?.providerPaymentId ?? ""),
           status: nextPaymentStatus,
-          paymentMeta: JSON.stringify({
-            ...previousMeta,
-            lastEventId: eventId || previousMeta.lastEventId || "",
-            webhookEvent: event,
-            razorpayOrderId,
-            razorpayPaymentId: paymentId,
-            razorpayStatus: paymentEntity?.status ?? (event === "order.paid" ? "paid" : ""),
-            method: paymentEntity?.method ?? "",
-            bank: paymentEntity?.bank ?? "",
-            wallet: paymentEntity?.wallet ?? "",
-            email: paymentEntity?.email ?? "",
-            contact: paymentEntity?.contact ?? "",
-          }),
-          ...(isPaid ? { paidAt: new Date().toISOString() } : paymentDoc.paidAt ? { paidAt: paymentDoc.paidAt } : {}),
-        })
-      );
-    }
+          paymentMeta: JSON.stringify(baseMeta),
+          ...(paymentSnapshot?.paidAt ? { paidAt: paymentSnapshot.paidAt } : {}),
+        });
+      });
 
-    if (transition.changed && order && canPaymentUpdateOrderStatus(String(order.status ?? ""))) {
-      writes.push(
-        databases.updateDocument<Models.DefaultDocument>(databaseId, ORDERS_COL, internalOrderId, {
+      if (transition.changed) {
+        await databases.updateDocument<Models.DefaultDocument>(databaseId, ORDERS_COL, internalOrderId, {
           paymentStatus: nextPaymentStatus,
-          status: toOrderStatus(nextPaymentStatus as never),
-        })
-      );
+          status: orderStatus,
+        });
+      }
     }
 
-    if (writes.length > 0) await Promise.all(writes);
+    if (isPaid && shouldRunPostPayment) {
+      await reduceStockForPaidOrder(internalOrderId);
+      await markCouponRedeemedForPaidOrder(internalOrderId);
+      await sendPaidOrderConfirmationOnce(internalOrderId);
+      revalidateTag(PRODUCT_CATALOG_CACHE_TAG, { expire: 0 });
+      revalidatePath("/products");
+      revalidatePath("/products", "layout");
+      revalidatePath("/api/catalog/products");
+    }
 
-    if (event === "payment.failed" && order?.userId) {
+    if (event === "payment.failed" && order.userId) {
       createUserNotification({
         userId: String(order.userId),
         title: "Payment Failed",
         body: `Your payment for order ${String(order.orderNumber ?? internalOrderId)} could not be processed. Please retry from your Orders page.`,
         type: "payment",
         metadata: { orderId: internalOrderId },
-      }).catch(() => {});
+      }).catch(() => undefined);
     }
 
-    log("info", SCOPE, "processed", { correlationId, event, eventId, internalOrderId, paymentState: nextPaymentStatus, changed: transition.changed });
+    if (duplicateCapture) {
+      await refundDuplicateCapturedPayment({
+        correlationId,
+        internalOrderId,
+        orderNumber: String(order.orderNumber ?? internalOrderId),
+        userId: String(order.userId ?? ""),
+        paymentDocId: internalOrderId,
+        duplicateCapture,
+      });
+    }
+
+    log("info", SCOPE, "processed", {
+      correlationId,
+      event,
+      eventId,
+      internalOrderId,
+      paymentState: nextPaymentStatus,
+      changed: transition.changed,
+      primaryCapture: shouldRunPostPayment,
+      duplicateCapture: Boolean(duplicateCapture),
+    });
     return NextResponse.json({ ok: true });
   } catch (error) {
     log("error", SCOPE, "failed", { correlationId, eventId, message: errorMessage(error) });

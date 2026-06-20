@@ -2,6 +2,7 @@
 
 import Autoplay from "embla-carousel-autoplay";
 import { AnimatePresence, motion } from "framer-motion";
+import Image from "next/image";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import React, { useEffect, useState } from "react";
 
@@ -140,10 +141,13 @@ const Carousel_006 = ({
               className="h-full w-full overflow-hidden rounded-3xl"
             >
               <div className="relative h-full w-full border">
-                <img
+                <Image
                   src={img.src}
                   alt={img.alt}
-                  className="h-full w-full scale-105 object-cover"
+                  fill
+                  sizes="(min-width: 1280px) 21vw, (min-width: 1024px) 25vw, (min-width: 768px) 30vw, (min-width: 640px) 50vw, 73vw"
+                  className="scale-105 object-cover"
+                  unoptimized
                 />
               </div>
             </motion.div>

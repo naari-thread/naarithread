@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createDatabasesWithApiKey, getDatabaseId } from "@/lib/appwrite/admin-server";
+import { hasVerifiedAdminSession } from "@/lib/firebase/admin-session";
 import { ensureSlug } from "@/lib/slug";
 
 export const runtime = "nodejs";
@@ -55,7 +56,11 @@ function normalizeStringArray(value: unknown) {
 export async function PATCH(
   request: Request,
   context: { params: Promise<{ productId: string }> }
-) {
+): Promise<NextResponse> {
+  if (!(await hasVerifiedAdminSession())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { productId } = await context.params;
   const body = (await request.json()) as ProductUpdatePayload;
 

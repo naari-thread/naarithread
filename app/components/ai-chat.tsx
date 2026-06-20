@@ -16,6 +16,7 @@ type Message = {
 const QUICK_PILLS = [
   { label: "Shipping & delivery", text: "How long does delivery take?" },
   { label: "Return policy", text: "What is your return policy?" },
+  { label: "Refund Wallet", text: "How does the Refund Wallet transfer process work?" },
   { label: "Cash on Delivery", text: "Do you have COD? What are the charges?" },
   { label: "Size help", text: "How do I choose the right size?" },
   { label: "Track my order", text: "How do I track my order?" },

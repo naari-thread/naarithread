@@ -13,7 +13,7 @@ export type UserProfileDocument = Models.Document & {
   isAdmin: boolean;
 };
 
-function getErrorMessage(error: unknown) {
+function getErrorMessage(error: unknown): string {
   if (typeof error === "object" && error !== null && "message" in error) {
     return String(error.message ?? "").toLowerCase();
   }
@@ -21,7 +21,7 @@ function getErrorMessage(error: unknown) {
   return String(error ?? "").toLowerCase();
 }
 
-function formatErrorForLogging(error: unknown) {
+function formatErrorForLogging(error: unknown): Record<string, unknown> | unknown {
   if (typeof error === "object" && error !== null) {
     const obj: Record<string, unknown> = {};
     if ("message" in error) obj.message = error.message;
@@ -38,7 +38,7 @@ function formatErrorForLogging(error: unknown) {
   return error;
 }
 
-function isPermissionError(error: unknown) {
+function isPermissionError(error: unknown): boolean {
   const message = getErrorMessage(error);
 
   return (
@@ -49,7 +49,7 @@ function isPermissionError(error: unknown) {
   );
 }
 
-function isAlreadyExistsError(error: unknown) {
+function isAlreadyExistsError(error: unknown): boolean {
   const message = getErrorMessage(error);
 
   return (
@@ -61,12 +61,12 @@ function isAlreadyExistsError(error: unknown) {
   );
 }
 
-function normalizeProfileError(error: unknown) {
+function normalizeProfileError(error: unknown): unknown {
   if (typeof error === "object" && error !== null && "message" in error) {
     const message = String(error.message ?? "");
     if (message.includes("Database with the requested ID")) {
       return new Error(
-        "Invalid NEXT_PUBLIC_APPWRITE_DATABASE_ID. Use your Appwrite database ID (not database name), then restart dev server."
+        "Invalid Firebase configuration. Verify the Firebase project environment variables, then restart dev server."
       );
     }
   }
@@ -78,7 +78,7 @@ export async function getOrCreateUserProfile(args: {
   user: Models.User<Models.Preferences>;
   isAdmin: boolean;
   jwt?: string;
-}) {
+}): Promise<UserProfileDocument | null> {
   if (!hasUsersCollectionConfig()) {
     return null;
   }
@@ -96,8 +96,54 @@ export async function getOrCreateUserProfile(args: {
     usersCollectionId: appwritePublicConfig.usersCollectionId,
   });
 
-  const updateProfileIdentityIfNeeded = async (existing: UserProfileDocument) => {
-    const shouldSyncIdentity = existing.fullName !== user.name || existing.email !== user.email || existing.isAdmin !== isAdmin;
+  const upsertFirebaseUidProfile = async (existing?: UserProfileDocument): Promise<UserProfileDocument> => {
+    const profilePayload = {
+      userId: user.$id,
+      fullName: user.name,
+      email: user.email,
+      phone: existing?.phone ?? "",
+      address: existing?.address ?? "",
+      isAdmin,
+    };
+
+    try {
+      return await databases.updateDocument<UserProfileDocument>(
+        appwritePublicConfig.databaseId,
+        appwritePublicConfig.usersCollectionId,
+        user.$id,
+        profilePayload
+      );
+    } catch (updateError) {
+      const normalizedUpdateError = normalizeProfileError(updateError);
+      if (!getErrorMessage(normalizedUpdateError).includes("not found")) {
+        throw normalizedUpdateError;
+      }
+
+      return databases.createDocument<UserProfileDocument>(
+        appwritePublicConfig.databaseId,
+        appwritePublicConfig.usersCollectionId,
+        user.$id,
+        profilePayload,
+        [
+          Permission.read(Role.user(user.$id)),
+          Permission.update(Role.user(user.$id)),
+          Permission.delete(Role.user(user.$id)),
+        ]
+      );
+    }
+  };
+
+  const updateProfileIdentityIfNeeded = async (existing: UserProfileDocument): Promise<UserProfileDocument> => {
+    if (existing.$id !== user.$id) {
+      console.info("[auth-profile] migrated profile matched by email; creating Firebase UID profile", {
+        existingDocumentId: existing.$id,
+        firebaseUid: user.$id,
+        email: user.email,
+      });
+      return upsertFirebaseUidProfile(existing);
+    }
+
+    const shouldSyncIdentity = existing.fullName !== user.name || existing.email !== user.email || existing.userId !== user.$id || existing.isAdmin !== isAdmin;
 
     if (!shouldSyncIdentity) {
       console.info("[auth-profile] existing profile found, no identity sync needed", {
@@ -116,20 +162,21 @@ export async function getOrCreateUserProfile(args: {
     try {
       return await databases.updateDocument<UserProfileDocument>(
         appwritePublicConfig.databaseId,
-        appwritePublicConfig.usersCollectionId,
-        existing.$id,
-        {
-          fullName: user.name,
-          email: user.email,
-          isAdmin,
-        }
+          appwritePublicConfig.usersCollectionId,
+          existing.$id,
+          {
+            userId: user.$id,
+            fullName: user.name,
+            email: user.email,
+            isAdmin,
+          }
       );
     } catch (error) {
       throw normalizeProfileError(error);
     }
   };
 
-  const createProfile = async () => {
+  const createProfile = async (): Promise<UserProfileDocument> => {
     console.info("[auth-profile] creating new profile row", {
       documentId: user.$id,
       userId: user.$id,
@@ -240,7 +287,7 @@ export async function getOrCreateUserProfile(args: {
   }
 }
 
-export async function readUserProfile(userId: string) {
+export async function readUserProfile(userId: string): Promise<UserProfileDocument | null> {
   if (!hasUsersCollectionConfig() || !userId) {
     return null;
   }
@@ -256,6 +303,20 @@ export async function readUserProfile(userId: string) {
       appwritePublicConfig.usersCollectionId,
       userId
     );
+  } catch (error) {
+    const normalized = normalizeProfileError(error);
+    if (!getErrorMessage(normalized).includes("not found")) {
+      return null;
+    }
+  }
+
+  try {
+    const list = await databases.listDocuments<UserProfileDocument>(
+      appwritePublicConfig.databaseId,
+      appwritePublicConfig.usersCollectionId,
+      [Query.equal("userId", userId), Query.limit(1)]
+    );
+    return list.documents[0] ?? null;
   } catch {
     return null;
   }
@@ -267,7 +328,7 @@ export async function updateUserProfile(args: {
   phone: string;
   address: string;
   jwt?: string;
-}) {
+}): Promise<UserProfileDocument> {
   const databases = getBrowserDatabases(args.jwt);
 
   if (!databases || !hasUsersCollectionConfig()) {

@@ -2,9 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/components/auth-provider";
-import { type UserProfileDocument, updateUserProfile } from "@/lib/appwrite/profiles";
-import { getBrowserDatabases } from "@/lib/appwrite/client";
-import { appwritePublicConfig } from "@/lib/appwrite/constants";
+import { showActionToast } from "@/lib/action-toast";
+import { readUserProfile, type UserProfileDocument, updateUserProfile } from "@/lib/appwrite/profiles";
 
 type AddressFields = {
   houseNo: string;
@@ -45,7 +44,7 @@ function serializeAddress(a: AddressFields): string {
   return JSON.stringify(a);
 }
 
-function formEqual(a: FormData, b: FormData) {
+function formEqual(a: FormData, b: FormData): boolean {
   return (
     a.fullName === b.fullName &&
     a.phone === b.phone &&
@@ -83,15 +82,10 @@ export function AccountDetailsModal({ onClose }: AccountDetailsModalProps) {
   useEffect(() => {
     if (!user) { setIsLoading(false); return; }
 
-    const fetchProfile = async () => {
+    const fetchProfile = async (): Promise<void> => {
       try {
-        const databases = getBrowserDatabases();
-        if (!databases) throw new Error("Database not available");
-        const doc = await databases.getDocument<UserProfileDocument>(
-          appwritePublicConfig.databaseId,
-          appwritePublicConfig.usersCollectionId,
-          user.$id
-        );
+        const doc = await readUserProfile(user.$id);
+        if (!doc) throw new Error("Profile not found");
         setProfile(doc);
         const initial: FormData = {
           fullName: doc.fullName || "",
@@ -116,10 +110,10 @@ export function AccountDetailsModal({ onClose }: AccountDetailsModalProps) {
     return !formEqual(formData, savedData);
   }, [formData, savedData]);
 
-  const setAddr = (patch: Partial<AddressFields>) =>
+  const setAddr = (patch: Partial<AddressFields>): void =>
     setFormData((prev) => ({ ...prev, address: { ...prev.address, ...patch } }));
 
-  const handleSave = async () => {
+  const handleSave = async (): Promise<void> => {
     if (!profile || !user || !hasChanges) return;
     setIsSaving(true);
     setError(null);
@@ -133,9 +127,16 @@ export function AccountDetailsModal({ onClose }: AccountDetailsModalProps) {
       setProfile(updated);
       setSavedData(formData);
       setIsEditingAddress(false);
+      showActionToast({
+        id: "profile-updated",
+        message: "Profile updated",
+        description: "Your contact and delivery details were saved.",
+      });
       setTimeout(() => onClose(), 800);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save profile");
+      const message = err instanceof Error ? err.message : "Failed to save profile";
+      setError(message);
+      showActionToast({ id: "profile-update-error", message, tone: "error" });
     } finally {
       setIsSaving(false);
     }

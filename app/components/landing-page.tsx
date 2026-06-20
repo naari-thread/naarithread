@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { CloudinaryImage } from "@/app/components/cloudinary-image";
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
 import type { SkiperImage } from "@/app/components/skiper54";
+import type { BannerRecord } from "@/lib/appwrite/banners";
 import { CLOUDINARY_SIZES } from "@/lib/cloudinary";
 
 const Skiper54 = dynamic(() => import("@/app/components/skiper54").then((module) => module.Skiper54), {
@@ -332,12 +333,19 @@ function categoryHref(category: string, subcategory?: string) {
   return `/products?${params.toString()}`;
 }
 
-export function LandingPage() {
+type LandingPageProps = {
+  banners?: BannerRecord[];
+};
+
+export function LandingPage({ banners = [] }: LandingPageProps) {
   const prefersReducedMotion = useReducedMotion();
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [activeAnnouncementIndex, setActiveAnnouncementIndex] = useState(0);
   const [activeMobileHeroIndex, setActiveMobileHeroIndex] = useState(0);
   const [activeMobileBestSellerIndex, setActiveMobileBestSellerIndex] = useState(0);
+  const announcements = banners.length > 0
+    ? banners.map((banner) => ({ id: banner.id, text: banner.title }))
+    : topAnnouncements;
 
   useEffect(() => {
     const onScroll = () => {
@@ -355,14 +363,14 @@ export function LandingPage() {
   useEffect(() => {
     const intervalId = window.setInterval(() => {
       setActiveAnnouncementIndex((previousIndex) =>
-        previousIndex === topAnnouncements.length - 1 ? 0 : previousIndex + 1,
+        previousIndex === announcements.length - 1 ? 0 : previousIndex + 1,
       );
     }, 4500);
 
     return () => {
       window.clearInterval(intervalId);
     };
-  }, []);
+  }, [announcements.length]);
 
   useEffect(() => {
     if (prefersReducedMotion) {
@@ -411,14 +419,14 @@ export function LandingPage() {
           >
             <AnimatePresence mode="wait" initial={false}>
               <motion.p
-                key={topAnnouncements[activeAnnouncementIndex]?.id}
+                key={announcements[activeAnnouncementIndex]?.id}
                 initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 8 }}
                 animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
                 exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
                 transition={{ duration: prefersReducedMotion ? 0 : 0.35, ease: [0.22, 1, 0.36, 1] }}
                 className="text-[0.64rem] font-semibold uppercase tracking-[0.16em] text-secondary sm:text-[0.72rem] sm:tracking-[0.22em]"
               >
-                {topAnnouncements[activeAnnouncementIndex]?.text}
+                {announcements[activeAnnouncementIndex]?.text}
               </motion.p>
             </AnimatePresence>
           </div>
@@ -434,14 +442,14 @@ export function LandingPage() {
           <div className="mx-auto flex w-full max-w-7xl items-center justify-center px-4 py-2 md:px-8 lg:px-12">
             <AnimatePresence mode="wait" initial={false}>
               <motion.p
-                key={`desktop-${topAnnouncements[activeAnnouncementIndex]?.id}`}
+                key={`desktop-${announcements[activeAnnouncementIndex]?.id}`}
                 initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 6 }}
                 animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
                 exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -6 }}
                 transition={{ duration: prefersReducedMotion ? 0 : 0.3, ease: [0.22, 1, 0.36, 1] }}
                 className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-secondary"
               >
-                {topAnnouncements[activeAnnouncementIndex]?.text}
+                {announcements[activeAnnouncementIndex]?.text}
               </motion.p>
             </AnimatePresence>
           </div>
@@ -470,41 +478,44 @@ export function LandingPage() {
               fashion that speaks your language.
             </motion.p>
 
-            {/* Trust Badges — Luxury Refined Layout (Single Line) */}
+            {/* Trust Badges — Premium Stat Cards */}
             <motion.div
               variants={revealItem}
-              className="hidden sm:flex flex-nowrap items-center gap-x-0"
+              className="hidden max-w-xl grid-cols-3 gap-3 sm:grid md:gap-4"
             >
               {/* Stat 1: Reviews */}
-              <div className="flex shrink-0 items-center gap-2.5 pr-6 md:pr-8 border-r border-primary/10">
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/[0.03] text-primary/50">
-                  <DynamicHugeIcon name="StarIcon" className="h-3 w-3" iconStrokeWidth={2} />
+              <div className="group flex flex-col gap-2.5 rounded-2xl border border-primary/10 bg-primary/[0.035] p-3.5 transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/20 hover:bg-primary/[0.06] hover:shadow-[0_12px_30px_-18px_rgba(0,0,0,0.45)] md:p-4">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-secondary">
+                  <DynamicHugeIcon name="StarIcon" className="h-4 w-4" iconStrokeWidth={2} />
                 </div>
-                <div className="flex flex-col">
-                  <span className="text-[0.64rem] font-bold uppercase tracking-[0.1em] text-primary/90">2.5k+ Reviews</span>
-                  <span className="text-[0.54rem] font-medium uppercase tracking-[0.06em] text-primary/40 italic">4.8/5 Rating</span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-display text-lg font-semibold leading-none text-primary md:text-xl">2.5k+</span>
+                  <span className="text-[0.6rem] font-semibold uppercase tracking-[0.12em] text-primary/55">Reviews</span>
+                  <span className="text-[0.58rem] font-medium text-primary/40">4.8/5 rating</span>
                 </div>
               </div>
 
               {/* Stat 2: Community */}
-              <div className="flex shrink-0 items-center gap-2.5 px-6 md:px-8 border-r border-primary/10">
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/[0.03] text-primary/50">
-                  <DynamicHugeIcon name="UserIcon" className="h-3 w-3" iconStrokeWidth={2} />
+              <div className="group flex flex-col gap-2.5 rounded-2xl border border-primary/10 bg-primary/[0.035] p-3.5 transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/20 hover:bg-primary/[0.06] hover:shadow-[0_12px_30px_-18px_rgba(0,0,0,0.45)] md:p-4">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-secondary">
+                  <DynamicHugeIcon name="UserIcon" className="h-4 w-4" iconStrokeWidth={2} />
                 </div>
-                <div className="flex flex-col">
-                  <span className="text-[0.64rem] font-bold uppercase tracking-[0.12em] text-primary/90">10k+ Community</span>
-                  <span className="text-[0.54rem] font-medium uppercase tracking-[0.06em] text-primary/40 italic">Customers</span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-display text-lg font-semibold leading-none text-primary md:text-xl">10k+</span>
+                  <span className="text-[0.6rem] font-semibold uppercase tracking-[0.12em] text-primary/55">Community</span>
+                  <span className="text-[0.58rem] font-medium text-primary/40">Happy customers</span>
                 </div>
               </div>
 
               {/* Stat 3: Payments */}
-              <div className="flex shrink-0 items-center gap-2.5 px-6 md:px-8">
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/[0.03] text-primary/50">
-                  <DynamicHugeIcon name="ShoppingCart01Icon" className="h-3 w-3" iconStrokeWidth={2} />
+              <div className="group flex flex-col gap-2.5 rounded-2xl border border-primary/10 bg-primary/[0.035] p-3.5 transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/20 hover:bg-primary/[0.06] hover:shadow-[0_12px_30px_-18px_rgba(0,0,0,0.45)] md:p-4">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-secondary">
+                  <DynamicHugeIcon name="ShoppingCart01Icon" className="h-4 w-4" iconStrokeWidth={2} />
                 </div>
-                <div className="flex flex-col">
-                  <span className="text-[0.64rem] font-bold uppercase tracking-[0.12em] text-primary/90">Secure Pay</span>
-                  <span className="text-[0.54rem] font-medium uppercase tracking-[0.06em] text-primary/40 italic">All Methods</span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-display text-lg font-semibold leading-none text-primary md:text-xl">Secure</span>
+                  <span className="text-[0.6rem] font-semibold uppercase tracking-[0.12em] text-primary/55">Payments</span>
+                  <span className="text-[0.58rem] font-medium text-primary/40">All methods</span>
                 </div>
               </div>
 

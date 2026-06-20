@@ -6,7 +6,6 @@ import { errorMessage, log, newCorrelationId } from "@/lib/logger";
 import { calculateCheckoutPricing, normalizeCheckoutLines } from "@/lib/payments/checkout-pricing";
 import { getRazorpayClient, toPaise } from "@/lib/payments/razorpay-server";
 import { toProductRecord } from "@/lib/appwrite/products";
-import { sendOrderConfirmation } from "@/lib/email/send";
 
 export const runtime = "nodejs";
 
@@ -205,6 +204,9 @@ export async function POST(request: Request) {
         paymentStatus: "created",
         itemsJson,
         totalAmount: finalTotal,
+        subtotalAmount: pricing.subtotal + pricing.discount,
+        productDiscountAmount: pricing.discount,
+        couponDiscountAmount: couponDiscount,
         discountAmount: pricing.discount + couponDiscount,
         shippingAmount: pricing.delivery,
         couponCode: validatedCouponCode,
@@ -240,19 +242,6 @@ export async function POST(request: Request) {
       razorpayOrderId: razorpayOrder.id,
       userId: user.$id,
       amount: amountInPaise,
-    });
-
-    // Fire-and-forget confirmation email — never block the response on this
-    void sendOrderConfirmation(user.email ?? "", {
-      customerName: user.name ?? "",
-      orderNumber,
-      lines: pricing.lines,
-      subtotal: pricing.subtotal,
-      delivery: pricing.delivery,
-      discount: pricing.discount,
-      couponDiscount,
-      total: finalTotal,
-      address: shippingAddress,
     });
 
     return NextResponse.json({

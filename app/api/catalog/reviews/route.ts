@@ -102,13 +102,15 @@ export async function GET(request: Request) {
       ]);
     }
 
-    let records = response.documents;
+    let records = response.documents.filter((document) => document.isApproved !== false);
     if (records.length === 0) {
       const fallback = await databases.listDocuments<ReviewDocument>(databaseId, collectionId, [
         Query.orderDesc("$createdAt"),
         Query.limit(200),
       ]);
-      records = fallback.documents.filter((document) => matchesProductId(document, matchValues));
+      records = fallback.documents.filter(
+        (document) => document.isApproved !== false && matchesProductId(document, matchValues)
+      );
     }
 
     return NextResponse.json({ reviews: records.map(toReviewRecord) });

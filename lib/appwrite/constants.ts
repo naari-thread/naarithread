@@ -1,45 +1,28 @@
-function normalizeEnv(value: string | undefined) {
-  if (!value) {
-    return "";
-  }
+import { firebasePublicConfig, getAdminEmails, hasFirebasePublicConfig } from "@/lib/firebase/config";
 
-  const trimmed = value.trim();
-  if (
-    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-    (trimmed.startsWith("'") && trimmed.endsWith("'"))
-  ) {
-    return trimmed.slice(1, -1).trim();
-  }
-
-  return trimmed;
+function normalizeEnv(value: string | undefined): string {
+  return value?.trim() ?? "";
 }
 
 export const appwritePublicConfig = {
-  endpoint: normalizeEnv(process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT) || "https://cloud.appwrite.io/v1",
-  projectId: normalizeEnv(process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID),
-  databaseId:
-    normalizeEnv(process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID) ||
-    normalizeEnv(process.env.APPWRITE_DATABASE_ID) ||
-    "naarithread",
-  usersCollectionId: normalizeEnv(process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID) || "users",
-  adminEmails:
-    normalizeEnv(process.env.NEXT_PUBLIC_ADMIN_EMAILS)
-      ?.split(",")
-      .map((value) => value.trim().toLowerCase())
-      .filter(Boolean) ?? [],
+  endpoint: `https://${firebasePublicConfig.authDomain}`,
+  projectId: firebasePublicConfig.projectId,
+  databaseId: firebasePublicConfig.projectId,
+  usersCollectionId: "users",
+  adminEmails: getAdminEmails(),
 };
-
-export function hasPublicAuthConfig() {
-  return Boolean(appwritePublicConfig.projectId && appwritePublicConfig.endpoint);
-}
-
-export function hasUsersCollectionConfig() {
-  return Boolean(appwritePublicConfig.projectId && appwritePublicConfig.databaseId && appwritePublicConfig.usersCollectionId);
-}
 
 export const appwriteServerConfig = {
-  endpoint: normalizeEnv(process.env.APPWRITE_ENDPOINT) || "https://cloud.appwrite.io/v1",
-  projectId: normalizeEnv(process.env.APPWRITE_PROJECT_ID),
-  apiKey: normalizeEnv(process.env.APPWRITE_API_KEY),
-  databaseId: normalizeEnv(process.env.APPWRITE_DATABASE_ID) || "naarithread",
+  endpoint: `https://${firebasePublicConfig.authDomain}`,
+  projectId: normalizeEnv(process.env.FIREBASE_PROJECT_ID) || firebasePublicConfig.projectId,
+  apiKey: "",
+  databaseId: normalizeEnv(process.env.FIREBASE_PROJECT_ID) || firebasePublicConfig.projectId,
 };
+
+export function hasPublicAuthConfig(): boolean {
+  return hasFirebasePublicConfig();
+}
+
+export function hasUsersCollectionConfig(): boolean {
+  return hasFirebasePublicConfig();
+}

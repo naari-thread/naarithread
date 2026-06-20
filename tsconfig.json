@@ -19,7 +19,9 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "appwrite": ["./lib/firebase/appwrite-client-compat.ts"],
+      "node-appwrite": ["./lib/firebase/appwrite-server-compat.ts"]
     }
   },
   "include": [

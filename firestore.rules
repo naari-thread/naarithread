@@ -1,0 +1,139 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function adminEmail() {
+      return signedIn()
+        && request.auth.token.email != null
+        && request.auth.token.email in [
+          "naarithread@gmail.com",
+          "vikaas138@gmail.com"
+        ];
+    }
+
+    function ownsUserField() {
+      return signedIn() && request.resource.data.userId == request.auth.uid;
+    }
+
+    function ownsExistingUserField() {
+      return signedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    function ownsProfile(documentId) {
+      return signedIn()
+        && (
+          documentId == request.auth.uid
+          || resource.data.userId == request.auth.uid
+          || resource.data.email == request.auth.token.email
+        );
+    }
+
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if adminEmail();
+    }
+
+    match /banners/{bannerId} {
+      allow read: if true;
+      allow write: if adminEmail();
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if ownsUserField()
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && request.resource.data.isVerifiedPurchase == false
+        && request.resource.data.imageUrls.size() <= 3;
+      allow update: if adminEmail()
+        || (
+          ownsExistingUserField()
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.productId == resource.data.productId
+          && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+            "rating", "title", "comment", "imageUrls", "updatedAt"
+          ])
+          && request.resource.data.rating >= 1
+          && request.resource.data.rating <= 5
+          && request.resource.data.imageUrls.size() <= 3
+        );
+      allow delete: if adminEmail() || ownsExistingUserField();
+    }
+
+    match /users/{userId} {
+      allow read: if adminEmail() || ownsProfile(userId);
+      allow create: if signedIn()
+        && (
+          userId == request.auth.uid
+          || request.resource.data.userId == request.auth.uid
+          || request.resource.data.email == request.auth.token.email
+        );
+      allow update: if adminEmail()
+        || (
+          ownsProfile(userId)
+          && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+            "fullName", "phone", "address", "updatedAt"
+          ])
+        );
+      allow delete: if adminEmail();
+    }
+
+    match /carts/{cartId} {
+      allow read, create: if ownsUserField();
+      allow update: if ownsExistingUserField()
+        && request.resource.data.userId == resource.data.userId;
+      allow delete: if ownsExistingUserField();
+    }
+
+    match /wishlists/{wishlistId} {
+      allow read, create: if ownsUserField();
+      allow update: if ownsExistingUserField()
+        && request.resource.data.userId == resource.data.userId;
+      allow delete: if ownsExistingUserField();
+    }
+
+    match /orders/{orderId} {
+      allow read: if adminEmail() || ownsExistingUserField();
+      allow write: if adminEmail();
+    }
+
+    match /payments/{paymentId} {
+      allow read: if adminEmail() || ownsExistingUserField();
+      allow write: if adminEmail();
+    }
+
+    match /wallets/{walletId} {
+      allow read: if adminEmail() || ownsExistingUserField();
+      allow write: if adminEmail();
+    }
+
+    match /walletTransactions/{transactionId} {
+      allow read: if adminEmail() || ownsExistingUserField();
+      allow write: if adminEmail();
+    }
+
+    match /walletPayoutRequests/{requestId} {
+      allow read: if adminEmail() || ownsExistingUserField();
+      allow write: if adminEmail();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if adminEmail() || ownsExistingUserField();
+      allow update: if ownsExistingUserField()
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(["isRead", "readAt", "updatedAt"]);
+      allow write: if adminEmail();
+    }
+
+    match /coupons/{couponId} {
+      allow read, write: if adminEmail();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

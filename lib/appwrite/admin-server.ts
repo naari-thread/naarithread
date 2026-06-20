@@ -1,56 +1,36 @@
-import { Account, Client, Databases } from "node-appwrite";
+import { Databases } from "node-appwrite";
 
-function mustEnv(name: string) {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${name}`);
-  }
+import { getServerAdminEmails, verifyFirebaseIdToken } from "@/lib/firebase/admin";
 
-  return value;
+export function getAdminEmails(): string[] {
+  return getServerAdminEmails();
 }
 
-export function getAdminEmails() {
-  const source = process.env.ADMIN_EMAILS ?? process.env.NEXT_PUBLIC_ADMIN_EMAILS ?? "";
-
-  return source
-    .split(",")
-    .map((value) => value.trim().toLowerCase())
-    .filter(Boolean);
+export function isAllowedAdminEmail(email: string): boolean {
+  return getAdminEmails().includes(email.trim().toLowerCase());
 }
 
-export function isAllowedAdminEmail(email: string) {
-  const normalized = email.trim().toLowerCase();
-  return getAdminEmails().includes(normalized);
+export function createApiKeyClient(): null {
+  return null;
 }
 
-export function createApiKeyClient() {
-  const endpoint = process.env.APPWRITE_ENDPOINT ?? process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT ?? "https://cloud.appwrite.io/v1";
-  const projectId = process.env.APPWRITE_PROJECT_ID ?? process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID;
-  if (!projectId) {
-    throw new Error("Missing required environment variable: APPWRITE_PROJECT_ID");
-  }
-  const apiKey = mustEnv("APPWRITE_API_KEY");
-
-  return new Client().setEndpoint(endpoint).setProject(projectId).setKey(apiKey);
+export function createDatabasesWithApiKey(): Databases {
+  return new Databases();
 }
 
-export function createDatabasesWithApiKey() {
-  return new Databases(createApiKeyClient());
+export async function getUserFromJwt(jwt: string): Promise<{
+  $id: string;
+  email: string;
+  name: string;
+}> {
+  const decoded = await verifyFirebaseIdToken(jwt);
+  return {
+    $id: decoded.uid,
+    email: decoded.email ?? "",
+    name: decoded.name ?? decoded.email ?? "",
+  };
 }
 
-export async function getUserFromJwt(jwt: string) {
-  const endpoint = process.env.APPWRITE_ENDPOINT ?? process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT ?? "https://cloud.appwrite.io/v1";
-  const projectId = process.env.APPWRITE_PROJECT_ID ?? process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID;
-  if (!projectId) {
-    throw new Error("Missing required environment variable: APPWRITE_PROJECT_ID");
-  }
-
-  const client = new Client().setEndpoint(endpoint).setProject(projectId).setJWT(jwt);
-  const account = new Account(client);
-
-  return account.get();
-}
-
-export function getDatabaseId() {
-  return process.env.APPWRITE_DATABASE_ID ?? process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID ?? "naarithread";
+export function getDatabaseId(): string {
+  return process.env.FIREBASE_PROJECT_ID ?? process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "naarithread";
 }

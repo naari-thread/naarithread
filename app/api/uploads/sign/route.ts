@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-
 import { getUserFromJwt } from "@/lib/appwrite/admin-server";
+import { hasVerifiedAdminSession } from "@/lib/firebase/admin-session";
 import { createUploadSignature } from "@/lib/cloudinary-server";
 import { errorMessage, log, newCorrelationId } from "@/lib/logger";
 import { isUploadKind } from "@/lib/uploads";
@@ -9,7 +8,6 @@ import { isUploadKind } from "@/lib/uploads";
 export const runtime = "nodejs";
 
 const SCOPE = "uploads.sign";
-const ADMIN_GATE_COOKIE = "nt_admin_session";
 
 function getBearerToken(request: Request) {
   const header = request.headers.get("authorization") ?? "";
@@ -33,8 +31,7 @@ export async function POST(request: Request) {
     // Authorize per kind: product images require an admin session; review images
     // require any authenticated user.
     if (kind === "product") {
-      const cookieStore = await cookies();
-      if (!cookieStore.get(ADMIN_GATE_COOKIE)?.value) {
+      if (!(await hasVerifiedAdminSession())) {
         return NextResponse.json({ error: "Admin session required." }, { status: 401 });
       }
     } else {

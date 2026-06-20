@@ -9,6 +9,7 @@ export type CheckoutLineInput = {
 
 export type ValidatedCheckoutLine = {
   productId: string;
+  imageUrl: string;
   quantity: number;
   size: string;
   color: string;
@@ -97,6 +98,7 @@ export function calculateCheckoutPricing(args: {
 
     validLines.push({
       productId: product.id,
+      imageUrl: product.mainImageUrl,
       quantity,
       size: line.size?.trim() ?? "",
       color: line.color?.trim() ?? "",

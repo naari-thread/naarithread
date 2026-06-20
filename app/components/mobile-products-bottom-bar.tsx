@@ -238,14 +238,14 @@ export function MobileProductsBottomBar() {
               </button>
               <button
                 type="button"
-                aria-label="Open wallet"
+                aria-label="Open refund wallet"
                 onClick={() => {
                   setSelectedAccountAction("wallet");
                   setIsAccountMenuOpen(false);
                 }}
                 className="mb-1 inline-flex h-10 w-full items-center justify-between rounded-xl px-3 text-sm text-primary/82 transition hover:bg-primary/[0.04]"
               >
-                <span>Wallet</span>
+                  <span>Refund Wallet</span>
                 <DynamicHugeIcon name="ArrowRight01Icon" className="h-4 w-4" iconStrokeWidth={2} />
               </button>
               <button
@@ -298,7 +298,7 @@ export function MobileProductsBottomBar() {
             >
               <div className="mb-3 flex items-center justify-between">
                 <p className="text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-primary/58">
-                  {selectedAccountAction === "profile" ? "Profile" : selectedAccountAction === "wallet" ? "Wallet" : "Orders"}
+                  {selectedAccountAction === "profile" ? "Profile" : selectedAccountAction === "wallet" ? "Refund Wallet" : "Orders"}
                 </p>
                 <button
                   type="button"
@@ -328,7 +328,7 @@ export function MobileProductsBottomBar() {
         open={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         title="Sign up / Login"
-        description="Use Email OTP to continue with your account and secure sync."
+        description="Use a secure email link to continue with your account and sync."
       />
     </motion.div>
   );

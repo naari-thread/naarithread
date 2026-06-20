@@ -1,11 +1,12 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
 import { ProductCard } from "@/app/components/product-card";
+import { showActionToast } from "@/lib/action-toast";
 import {
   readCartItems,
   subscribeToCartChanges,
@@ -67,7 +68,18 @@ function isNewArrival(product: ProductRecord) {
   return ageMs >= 0 && ageMs <= 1000 * 60 * 60 * 24 * 30;
 }
 
-const PRICE_ABSOLUTE_MIN = 499;
+function compareProductStockPlacement(first: ProductRecord, second: ProductRecord): number {
+  const firstOutOfStock = first.stockQty <= 0;
+  const secondOutOfStock = second.stockQty <= 0;
+
+  if (firstOutOfStock === secondOutOfStock) {
+    return 0;
+  }
+
+  return firstOutOfStock ? 1 : -1;
+}
+
+const PRICE_ABSOLUTE_MIN = 0;
 const PRICE_ABSOLUTE_MAX = 5000;
 
 const COLOR_SWATCH_MAP: Record<string, string> = {
@@ -361,6 +373,7 @@ export function ProductsCatalog({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const prefersReducedMotion = useReducedMotion();
   const [searchText, setSearchText] = useState("");
   const [cartItems, setCartItems] = useState<CartItemsMap>({});
   const [wishlistItems, setWishlistItems] = useState<WishlistItemsMap>({});
@@ -471,6 +484,7 @@ export function ProductsCatalog({
 
   const updateCartQuantity = (productId: string, quantity: number) => {
     const nextQuantity = Math.min(99, Math.max(0, Math.trunc(quantity)));
+    const previousQuantity = readCartItems()[productId] ?? 0;
 
     // Compute next state from localStorage (source of truth) so the side
     // effect (writeCartItems) can run outside the state updater — calling
@@ -485,6 +499,22 @@ export function ProductsCatalog({
 
     setCartItems(nextItems);
     writeCartItems(nextItems);
+
+    const productName = products.find((product) => product.id === productId)?.name ?? "Item";
+    if (previousQuantity <= 0 && nextQuantity > 0) {
+      showActionToast({
+        id: `cart-added-${productId}`,
+        message: "Added to cart",
+        description: productName,
+      });
+    } else if (previousQuantity > 0 && nextQuantity <= 0) {
+      showActionToast({
+        id: `cart-removed-${productId}`,
+        message: "Removed from cart",
+        description: productName,
+        tone: "info",
+      });
+    }
   };
 
   const availableCategories = useMemo(() => {
@@ -559,6 +589,10 @@ export function ProductsCatalog({
 
   const filteredProducts = useMemo(() => {
     const normalizedSearch = searchText.trim().toLowerCase();
+    const hasPriceFilter =
+      Boolean(selectedPriceRange) ||
+      priceMin > PRICE_ABSOLUTE_MIN ||
+      priceMax < PRICE_ABSOLUTE_MAX;
 
     return products.filter((product) => {
       if (selectedCategory && product.category !== selectedCategory) {
@@ -603,7 +637,7 @@ export function ProductsCatalog({
         product.discountPrice > 0
           ? product.discountPrice
           : product.originalPrice;
-      if (sellingPrice < priceMin || sellingPrice > priceMax) {
+      if (hasPriceFilter && (sellingPrice < priceMin || sellingPrice > priceMax)) {
         return false;
       }
 
@@ -617,7 +651,7 @@ export function ProductsCatalog({
         product.categoryValue.toLowerCase().includes(normalizedSearch) ||
         product.subCategoryValue.toLowerCase().includes(normalizedSearch)
       );
-    });
+    }).sort(compareProductStockPlacement);
   }, [
     products,
     searchText,
@@ -628,6 +662,7 @@ export function ProductsCatalog({
     onlyOnSale,
     onlyNew,
     onlyInStock,
+    selectedPriceRange,
     priceMin,
     priceMax,
   ]);
@@ -640,13 +675,20 @@ export function ProductsCatalog({
     onlyOnSale ? "on-sale" : "",
     onlyNew ? "new" : "",
     onlyInStock ? "in-stock" : "",
-    priceMin > PRICE_ABSOLUTE_MIN || priceMax < PRICE_ABSOLUTE_MAX
+    selectedPriceRange || priceMin > PRICE_ABSOLUTE_MIN || priceMax < PRICE_ABSOLUTE_MAX
       ? "price"
       : "",
   ].filter(Boolean).length;
 
   const toggleProductWishlist = (productId: string) => {
-    toggleWishlistItem(productId);
+    const wasAdded = toggleWishlistItem(productId);
+    const productName = products.find((product) => product.id === productId)?.name ?? "Item";
+    showActionToast({
+      id: `wishlist-${wasAdded ? "added" : "removed"}-${productId}`,
+      message: wasAdded ? "Saved to wishlist" : "Removed from wishlist",
+      description: productName,
+      tone: wasAdded ? "success" : "info",
+    });
   };
 
   return (
@@ -1234,24 +1276,45 @@ export function ProductsCatalog({
             ) : null}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {filteredProducts.map((product) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                quantity={cartItems[product.id] ?? 0}
-                onAddToCart={(productId) => updateCartQuantity(productId, 1)}
-                onIncreaseQuantity={(productId) =>
-                  updateCartQuantity(productId, (cartItems[productId] ?? 0) + 1)
-                }
-                onDecreaseQuantity={(productId) =>
-                  updateCartQuantity(productId, (cartItems[productId] ?? 0) - 1)
-                }
-                isWishlisted={Boolean(wishlistItems[product.id])}
-                onToggleWishlist={toggleProductWishlist}
-              />
-            ))}
-          </div>
+          <LayoutGroup id="catalog-products">
+            <motion.div
+              layout={prefersReducedMotion ? false : "position"}
+              className="relative grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+            >
+              <AnimatePresence initial={false} mode="popLayout">
+                {filteredProducts.map((product) => (
+                  <motion.div
+                    key={product.id}
+                    layout={prefersReducedMotion ? false : "position"}
+                    initial={prefersReducedMotion ? false : { opacity: 0, scale: 0.97, y: 8 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: -6 }}
+                    transition={{
+                      layout: { duration: 0.38, ease: "easeInOut" },
+                      opacity: { duration: 0.18 },
+                      scale: { duration: 0.24 },
+                      y: { duration: 0.24 },
+                    }}
+                    className="h-full"
+                  >
+                    <ProductCard
+                      product={product}
+                      quantity={cartItems[product.id] ?? 0}
+                      onAddToCart={(productId) => updateCartQuantity(productId, 1)}
+                      onIncreaseQuantity={(productId) =>
+                        updateCartQuantity(productId, (cartItems[productId] ?? 0) + 1)
+                      }
+                      onDecreaseQuantity={(productId) =>
+                        updateCartQuantity(productId, (cartItems[productId] ?? 0) - 1)
+                      }
+                      isWishlisted={Boolean(wishlistItems[product.id])}
+                      onToggleWishlist={toggleProductWishlist}
+                    />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </motion.div>
+          </LayoutGroup>
         )}
       </section>
     </>

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ID, Query } from "node-appwrite";
 
 import { createDatabasesWithApiKey, getDatabaseId } from "@/lib/appwrite/admin-server";
+import { hasVerifiedAdminSession } from "@/lib/firebase/admin-session";
 import { ensureSlug } from "@/lib/slug";
 
 export const runtime = "nodejs";
@@ -56,7 +57,11 @@ function badRequest(message: string) {
   return NextResponse.json({ error: message }, { status: 400 });
 }
 
-export async function GET(request: Request) {
+export async function GET(request: Request): Promise<NextResponse> {
+  if (!(await hasVerifiedAdminSession())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const limitParam = Number(searchParams.get("limit") ?? 40);
@@ -99,7 +104,11 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: Request): Promise<NextResponse> {
+  if (!(await hasVerifiedAdminSession())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = (await request.json()) as ProductPayload;
 
   if (!body.name || !body.description || !body.sku || !body.category || !body.mainImageUrl) {

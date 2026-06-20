@@ -1,14 +1,16 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactElement } from "react";
 
 import { AuthModal } from "@/app/components/auth-modal";
 import { useAuth } from "@/app/components/auth-provider";
 import { CloudinaryImage } from "@/app/components/cloudinary-image";
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
+import { showActionToast } from "@/lib/action-toast";
 import { upsertUserCartMap } from "@/lib/appwrite/shop-sync";
 import {
   type CartItemsMap,
@@ -49,6 +51,49 @@ type ReviewSpotlightItem = {
   verified: boolean;
   isAggregate: boolean;
 };
+
+function AggregateRatingStars({
+  rating,
+  size = "compact",
+}: {
+  rating: number;
+  size?: "compact" | "large";
+}): ReactElement {
+  const safeRating = Math.max(0, Math.min(5, rating));
+  const starClass = size === "large" ? "h-4 w-4 sm:h-6 sm:w-6" : "h-3.5 w-3.5";
+
+  return (
+    <div className="inline-flex items-center gap-0.5 sm:gap-1" aria-label={`Rated ${safeRating.toFixed(1)} out of 5`}>
+      {Array.from({ length: 5 }, (_, index) => {
+        const fillPercentage = Math.round(Math.max(0, Math.min(1, safeRating - index)) * 100);
+
+        return (
+          <span key={`aggregate-star-${index}`} className={`relative block shrink-0 ${starClass}`} aria-hidden={true}>
+            <DynamicHugeIcon
+              name="StarIcon"
+              className={`absolute inset-0 text-primary/35 ${starClass}`}
+              iconStrokeWidth={1.8}
+            />
+            {fillPercentage > 0 ? (
+              <span
+                className="absolute inset-y-0 left-0 overflow-hidden"
+                // Aggregate ratings are runtime values, so their fractional width must be calculated dynamically.
+                style={{ width: `${fillPercentage}%` }}
+              >
+                <DynamicHugeIcon
+                  name="StarIcon"
+                  className={`max-w-none fill-primary text-primary ${starClass}`}
+                  fill="currentColor"
+                  iconStrokeWidth={1.8}
+                />
+              </span>
+            ) : null}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
 
 function formatPrice(value: number) {
   return new Intl.NumberFormat("en-IN", {
@@ -405,6 +450,11 @@ export function ProductDetailsClient({
     event.preventDefault();
 
     if (!isAuthenticated || !user?.$id) {
+      showActionToast({
+        id: `review-sign-in-${product.id}`,
+        message: "Sign in to write a review",
+        tone: "info",
+      });
       setIsAuthModalOpen(true);
       return;
     }
@@ -412,6 +462,11 @@ export function ProductDetailsClient({
     const safeComment = reviewDraft.trim();
     if (!safeComment) {
       setReviewError("Please write your review before submitting.");
+      showActionToast({
+        id: `review-message-required-${product.id}`,
+        message: "Write your review before submitting",
+        tone: "error",
+      });
       return;
     }
 
@@ -445,8 +500,15 @@ export function ProductDetailsClient({
       setHoveredReviewRating(null);
       setReviewImages([]);
       setReviewImagePreviews([]);
+      showActionToast({
+        id: `review-submitted-${product.id}`,
+        message: "Review submitted",
+        description: "Thank you for sharing your experience.",
+      });
     } catch (error) {
-      setReviewError(normalizeError(error));
+      const message = normalizeError(error);
+      setReviewError(message);
+      showActionToast({ id: `review-error-${product.id}`, message, tone: "error" });
     } finally {
       setIsSubmittingReview(false);
     }
@@ -484,6 +546,7 @@ export function ProductDetailsClient({
           text: `Check out ${product.name} on Naarithread!`,
           url: window.location.href,
         });
+        showActionToast({ id: `product-shared-${product.id}`, message: "Product shared" });
       } catch (err) {
         if (
           (err instanceof DOMException && err.name === "AbortError") ||
@@ -493,16 +556,36 @@ export function ProductDetailsClient({
         }
 
         console.error("Error sharing:", err);
+        showActionToast({
+          id: `product-share-error-${product.id}`,
+          message: "Could not share this product",
+          tone: "error",
+        });
       }
     } else {
       // Fallback: Copy to clipboard
       try {
         await navigator.clipboard.writeText(window.location.href);
-        alert("Link copied to clipboard!");
+        showActionToast({ id: `product-link-${product.id}`, message: "Product link copied" });
       } catch (err) {
         console.error("Copy failed:", err);
+        showActionToast({
+          id: `product-share-error-${product.id}`,
+          message: "Could not copy product link",
+          tone: "error",
+        });
       }
     }
+  };
+
+  const handleToggleWishlist = (): void => {
+    const wasAdded = toggleWishlistItem(product.id);
+    showActionToast({
+      id: `wishlist-${wasAdded ? "added" : "removed"}-${product.id}`,
+      message: wasAdded ? "Saved to wishlist" : "Removed from wishlist",
+      description: product.name,
+      tone: wasAdded ? "success" : "info",
+    });
   };
 
   useEffect(() => {
@@ -525,6 +608,11 @@ export function ProductDetailsClient({
   const handleAddToCart = async () => {
     if (product.sizeOptions.length > 0 && !activeSize) {
       setCartActionError("Select a size to add to cart.");
+      showActionToast({
+        id: `cart-size-required-${product.id}`,
+        message: "Select a size first",
+        tone: "error",
+      });
       return;
     }
 
@@ -541,6 +629,11 @@ export function ProductDetailsClient({
     writeCartItemSelection(product.id, {
       ...(activeSize ? { size: activeSize } : {}),
       ...(activeColor ? { color: activeColor } : {}),
+    });
+    showActionToast({
+      id: `cart-added-${product.id}`,
+      message: "Added to cart",
+      description: product.name,
     });
 
     if (!isAuthenticated || !user?.$id) {
@@ -687,11 +780,11 @@ export function ProductDetailsClient({
                     <button
                       key={src}
                       type="button"
+                      aria-label={`Show image ${index + 1} as the main product image`}
                       title={`View image ${index + 1}`}
                       onClick={() => {
                         setActiveImage(src);
                         setLightboxIndex(index);
-                        setLightboxOpen(true);
                       }}
                       className={`relative aspect-square w-18 shrink-0 overflow-hidden rounded-2xl border transition-all ${
                         activeImage === src
@@ -756,7 +849,7 @@ export function ProductDetailsClient({
                 <div className="pointer-events-none absolute right-3 top-3 z-20 flex flex-col items-end gap-2">
                   <button
                     type="button"
-                    onClick={() => toggleWishlistItem(product.id)}
+                    onClick={handleToggleWishlist}
                     aria-label={`${isWishlisted ? "Remove from" : "Add to"} wishlist`}
                     className="pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-full border border-secondary/35 bg-black/45 text-secondary shadow-[0_10px_20px_rgba(0,0,0,0.18)] backdrop-blur-md transition hover:bg-black/55"
                   >
@@ -861,22 +954,7 @@ export function ProductDetailsClient({
                       href="#reviews"
                       className="group mt-2.5 flex items-center gap-2 transition-opacity"
                     >
-                      <div className="flex text-primary">
-                        {Array.from({ length: 5 }).map((_, i) => {
-                          const isFilled = i < Math.floor(averageRating);
-                          const isHalf =
-                            i === Math.floor(averageRating) &&
-                            averageRating % 1 > 0;
-                          return (
-                            <DynamicHugeIcon
-                              key={i}
-                              name={isHalf ? "StarHalfIcon" : "StarIcon"}
-                              fill={isFilled ? "currentColor" : "none"}
-                              className="h-3.5 w-3.5"
-                            />
-                          );
-                        })}
-                      </div>
+                      <AggregateRatingStars rating={averageRating} />
                       <span className="text-xs font-medium text-primary/70 group-hover:text-primary transition-colors underline decoration-primary/20 underline-offset-4">
                         {averageRating.toFixed(1)} ({reviewCount} reviews)
                       </span>
@@ -1047,7 +1125,7 @@ export function ProductDetailsClient({
                     </button>
                     <button
                       type="button"
-                      onClick={() => toggleWishlistItem(product.id)}
+                      onClick={handleToggleWishlist}
                       aria-label={`${isWishlisted ? "Remove from" : "Add to"} wishlist`}
                       className="flex h-11 flex-1 items-center justify-center gap-2 rounded-full border border-primary/20 bg-transparent px-4 py-2 text-[0.64rem] font-bold uppercase tracking-[0.16em] text-primary transition-colors hover:border-primary/40 hover:bg-primary/5 sm:h-12 sm:px-8 sm:text-[0.7rem] sm:tracking-[0.2em]"
                     >
@@ -1117,43 +1195,32 @@ export function ProductDetailsClient({
             id="reviews"
             className="mt-8 border-t border-primary/10 pt-6 md:mt-14 md:pt-10"
           >
-            <div className="grid grid-cols-1 gap-8 lg:grid-cols-[0.9fr_1.35fr] lg:gap-10">
-              <div>
-                <h2 className="font-display text-[1.6rem] sm:text-[2.1rem] sm:text-4xl">
-                  Customer Reviews
-                </h2>
-                <div className="mt-2 sm:mt-4">
-                  <div className="flex items-end gap-3">
-                    <span className="text-2xl sm:text-[2.7rem] font-display sm:text-5xl">
-                      {averageRating > 0 ? averageRating.toFixed(1) : "0.0"}
-                    </span>
-                    <span className="mb-1 text-xs font-medium uppercase tracking-widest text-primary/60 sm:text-sm">
-                      Out of 5
-                    </span>
+            <div className={`grid grid-cols-1 gap-8 ${reviewCount > 0 ? "lg:grid-cols-[0.9fr_1.35fr] lg:gap-10" : ""}`}>
+              {reviewCount > 0 ? (
+                <div>
+                  <h2 className="font-display text-[1.6rem] sm:text-[2.1rem] sm:text-4xl">
+                    Customer Reviews
+                  </h2>
+                  <div className="mt-2 sm:mt-4">
+                    <div className="flex items-end gap-3">
+                      <span className="text-2xl sm:text-[2.7rem] font-display sm:text-5xl">
+                        {averageRating.toFixed(1)}
+                      </span>
+                      <span className="mb-1 text-xs font-medium uppercase tracking-widest text-primary/60 sm:text-sm">
+                        Out of 5
+                      </span>
+                    </div>
+                    <div className="mt-3 text-primary">
+                      <AggregateRatingStars rating={averageRating} size="large" />
+                    </div>
+                    <p className="mt-3 text-xs font-medium text-primary/70 sm:text-sm">
+                      Based on {reviewCount}{" "}
+                      {reviewCount === 1 ? "review" : "reviews"} recorded in
+                      system.
+                    </p>
                   </div>
-                  <div className="mt-3 flex gap-0.5 text-primary sm:gap-1">
-                    {Array.from({ length: 5 }).map((_, i) => {
-                      const isFilled = i < Math.floor(averageRating);
-                      const isHalf =
-                        i === Math.floor(averageRating) &&
-                        averageRating % 1 > 0;
-                      return (
-                        <DynamicHugeIcon
-                          key={i}
-                          name={isHalf ? "StarHalfIcon" : "StarIcon"}
-                          fill={isFilled ? "currentColor" : "none"}
-                          className="h-4 w-4 sm:h-6 sm:w-6"
-                        />
-                      );
-                    })}
-                  </div>
-                  <p className="mt-3 text-xs font-medium text-primary/70 sm:text-sm">
-                    Based on {reviewCount}{" "}
-                    {reviewCount === 1 ? "review" : "reviews"} recorded in
-                    system.
-                  </p>
                 </div>
-              </div>
+              ) : null}
 
               <div className="flex flex-col gap-6">
                 <form
@@ -1218,10 +1285,13 @@ export function ProductDetailsClient({
                           key={idx}
                           className="relative h-16 w-16 overflow-hidden rounded-xl border border-primary/15"
                         >
-                          <img
+                          <Image
                             src={src}
                             alt={`Review image ${idx + 1}`}
-                            className="h-full w-full object-cover"
+                            fill
+                            sizes="64px"
+                            className="object-cover"
+                            unoptimized
                           />
                           <button
                             type="button"
@@ -1441,7 +1511,7 @@ export function ProductDetailsClient({
               </button>
               <button
                 type="button"
-                onClick={() => toggleWishlistItem(product.id)}
+                onClick={handleToggleWishlist}
                 className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-full border border-primary/30 bg-transparent px-2 text-[0.65rem] font-bold uppercase tracking-widest text-primary active:scale-95 transition-transform"
               >
                 <DynamicHugeIcon
@@ -1571,15 +1641,18 @@ export function ProductDetailsClient({
                   transformOrigin: "center center",
                 }}
               >
-                <img
+                <Image
                   src={
                     galleryImages[lightboxIndex] ??
                     galleryImages[0] ??
                     "/logo4.png"
                   }
                   alt={`${product.name} image ${lightboxIndex + 1}`}
+                  width={1400}
+                  height={1800}
                   className="max-h-[85vh] max-w-[95vw] rounded-xl object-contain shadow-[0_0_80px_rgba(0,0,0,0.6)]"
                   draggable={false}
+                  unoptimized
                 />
               </motion.div>
             </div>

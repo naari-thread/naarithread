@@ -5,8 +5,7 @@ const PRIMARY   = "#2A0F0F";
 const SECONDARY = "#F5EDE3";
 const ACCENT    = "#7C2D2D";
 const MUTED     = "rgba(42,15,15,0.55)";
-const LOGO_ICON_URL = "https://www.naarithread.com/logo4.png";
-const LOGO_TEXT_URL = "https://www.naarithread.com/logoname.png";
+const LOGO_ICON_URL = "https://www.naarithread.com/logo.png";
 const SITE_URL  = "https://www.naarithread.com";
 
 // Sans-serif for everything (numbers stay on baseline — no waving)
@@ -30,12 +29,10 @@ function baseLayout(title: string, body: string) {
 
       <!-- Logo header -->
       <tr>
-        <td style="background:${SECONDARY};padding:24px 36px 18px;text-align:center;border-bottom:1px solid rgba(42,15,15,0.08);">
-          <a href="${SITE_URL}" style="display:inline-flex;align-items:center;gap:12px;text-decoration:none;vertical-align:middle;">
-            <img src="${LOGO_ICON_URL}" alt="" width="52" height="52"
-                 style="display:inline-block;width:52px;height:52px;object-fit:contain;vertical-align:middle;border-radius:8px;" />
-            <img src="${LOGO_TEXT_URL}" alt="NaariThread" width="130" height="auto"
-                 style="display:inline-block;max-height:52px;object-fit:contain;vertical-align:middle;" />
+        <td style="background:${SECONDARY};padding:22px 36px 18px;text-align:center;border-bottom:1px solid rgba(42,15,15,0.08);">
+          <a href="${SITE_URL}" aria-label="Visit NaariThread" style="display:inline-block;text-decoration:none;vertical-align:middle;">
+            <img src="${LOGO_ICON_URL}" alt="NaariThread logo" width="72" height="72"
+                 style="display:block;width:72px;height:72px;object-fit:cover;border:2px solid rgba(124,45,45,0.18);border-radius:50%;box-shadow:0 4px 14px rgba(42,15,15,0.12);" />
           </a>
         </td>
       </tr>
@@ -291,4 +288,45 @@ export function abandonedCartHtml(data: AbandonedCartData): string {
   `;
 
   return baseLayout("Your NaariThread Cart is Waiting | NaariThread", body);
+}
+
+export type RefundWalletPayoutAlertData = {
+  requestNumber: string;
+  amount: number;
+  customerName: string;
+  customerEmail: string;
+  payoutMethod: "upi" | "bank_transfer";
+  accountHolderName: string;
+  upiId: string;
+  bankName: string;
+  bankAccountNumber: string;
+  ifscCode: string;
+  note: string;
+};
+
+export function refundWalletPayoutAlertHtml(data: RefundWalletPayoutAlertData): string {
+  const payoutTarget = data.payoutMethod === "upi"
+    ? `UPI ID: ${data.upiId || "Not provided"}`
+    : `A/c: ${data.bankAccountNumber || "Not provided"}${data.ifscCode ? ` | IFSC: ${data.ifscCode}` : ""}${data.bankName ? ` | Bank: ${data.bankName}` : ""}`;
+
+  const body = `
+    ${h1("Refund Wallet Transfer Request")}
+    ${p(`A customer has requested a Refund Wallet transfer. Please review the payout details before manually processing the transfer.`)}
+    ${divider()}
+    ${sectionLabel("Request Summary")}
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:22px;">
+      ${kv("Request No.", data.requestNumber)}
+      ${kv("Amount", `Rs ${data.amount.toLocaleString("en-IN")}`)}
+      ${kv("Customer", data.customerName)}
+      ${kv("Email", data.customerEmail)}
+      ${kv("Method", data.payoutMethod === "upi" ? "UPI" : "Bank Transfer")}
+      ${kv("Account Holder", data.accountHolderName)}
+      ${kv("Destination", payoutTarget)}
+      ${data.note ? kv("Customer Note", data.note) : ""}
+    </table>
+    ${divider()}
+    ${p("Please complete the payout from your preferred banking or UPI app, then update the request status from the admin dashboard.", true)}
+  `;
+
+  return baseLayout(`Refund Wallet Request - ${data.requestNumber} | NaariThread`, body);
 }

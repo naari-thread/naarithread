@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { createDatabasesWithApiKey, getDatabaseId, getUserFromJwt } from "@/lib/appwrite/admin-server";
+import { getUserFromJwt } from "@/lib/appwrite/admin-server";
 import { listWalletSummary } from "@/lib/appwrite/wallet-server";
 
 export const runtime = "nodejs";
@@ -22,14 +22,7 @@ export async function GET(request: Request) {
 
   try {
     const user = await getUserFromJwt(token);
-    const databases = createDatabasesWithApiKey();
-    const databaseId = getDatabaseId();
-
-    const wallet = await listWalletSummary({
-      databases,
-      databaseId,
-      userId: user.$id,
-    });
+    const wallet = await listWalletSummary({ userId: user.$id });
 
     return NextResponse.json(wallet);
   } catch (error) {

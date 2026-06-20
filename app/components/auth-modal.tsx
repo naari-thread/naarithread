@@ -14,7 +14,7 @@ type AuthModalProps = {
 export function AuthModal({
   open,
   onClose,
-  title = "Continue with Email OTP",
+  title = "Continue with Email Link",
   description = "Sign up or log in to save products, track orders, and manage your profile.",
 }: AuthModalProps) {
   return (

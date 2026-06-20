@@ -114,6 +114,7 @@ function createProductFingerprint(product: ProductRecord) {
     product.originalPrice,
     product.stockQty,
     product.mainImageUrl,
+    product.badge,
   ].join("::");
 }
 

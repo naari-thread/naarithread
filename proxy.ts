@@ -16,7 +16,7 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const hasGateCookie = request.cookies.get(ADMIN_GATE_COOKIE)?.value === "1";
+  const hasGateCookie = Boolean(request.cookies.get(ADMIN_GATE_COOKIE)?.value);
 
   if (hasGateCookie) {
     return NextResponse.next();

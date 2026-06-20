@@ -19,7 +19,8 @@ export async function GET(request: Request) {
     try {
       const products = await getProductsByIds(ids);
       return NextResponse.json({ products, total: products.length, hasMore: false, nextOffset: null }, { status: 200 });
-    } catch {
+    } catch (error) {
+      console.error("[catalog-products-api] Failed to load products by ids", error);
       return NextResponse.json({ products: [], total: 0, hasMore: false, nextOffset: null }, { status: 200 });
     }
   }
@@ -33,7 +34,8 @@ export async function GET(request: Request) {
   try {
     const result = await listProductsPageFromCollection({ limit, offset });
     return NextResponse.json(result, { status: 200 });
-  } catch {
+  } catch (error) {
+    console.error("[catalog-products-api] Failed to load products page", error);
     return NextResponse.json(
       {
         products: [],
