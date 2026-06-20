@@ -987,7 +987,7 @@ export function CartPageClient() {
 
           <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_480px] lg:items-start lg:gap-10">
             {/* ─── Cart items ──────────────────────────────────── */}
-            <div className="flex flex-col lg:max-h-[calc(100vh-18rem)] lg:overflow-y-auto lg:pr-1">
+            <div className="flex flex-col">
               {lines.length === 0 && missingLines.length === 0 ? (
                 <div className="py-12 text-center text-sm text-primary/75">
                   Your cart is empty. Add products from the catalog to continue.
@@ -1132,7 +1132,7 @@ export function CartPageClient() {
             </div>
 
             {/* ─── Order summary sidebar — hidden on mobile, visible on desktop ── */}
-            <aside className="relative hidden rounded-2xl border border-primary/15 bg-secondary p-5 sm:p-6 lg:block lg:sticky lg:top-28 lg:max-h-[calc(100vh-9rem)] lg:overflow-y-auto">
+            <aside className="relative hidden rounded-2xl border border-primary/15 bg-secondary p-5 sm:p-6 lg:block lg:sticky lg:top-28 lg:self-start">
               <h3 className="text-lg font-semibold">Amount Breakup</h3>
 
               {/* Shipping address */}
