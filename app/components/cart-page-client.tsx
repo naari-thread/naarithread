@@ -1424,6 +1424,27 @@ export function CartPageClient() {
         </section>
       </main>
 
+      {/* Mobile sticky checkout bar — above bottom nav, hidden on desktop */}
+      {lines.length > 0 ? (
+        <div className="fixed inset-x-0 bottom-[4.5rem] z-[85] px-3 lg:hidden">
+          <div className="mx-auto flex max-w-lg items-center gap-3 rounded-2xl border border-primary/15 bg-secondary/96 px-4 py-3 shadow-[0_-6px_24px_rgba(42,15,15,0.12)] backdrop-blur-md">
+            <div className="min-w-0 flex-1">
+              <p className="text-[0.58rem] font-semibold uppercase tracking-[0.18em] text-primary/50">Total</p>
+              <p className="text-base font-semibold text-primary">{formatPrice(total)}</p>
+            </div>
+            <button
+              type="button"
+              aria-label="Proceed to buy"
+              onClick={() => void handleProceedToBuy()}
+              disabled={isProcessingCheckout}
+              className="inline-flex h-11 shrink-0 items-center justify-center rounded-xl border border-primary bg-primary px-5 text-xs font-semibold uppercase tracking-[0.2em] text-secondary transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isProcessingCheckout ? "Processing…" : "Proceed to Buy"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <AuthModal
         open={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}

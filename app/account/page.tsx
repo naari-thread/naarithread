@@ -82,9 +82,9 @@ export default function AccountPage() {
   const displayName = user?.name ?? "";
 
   return (
-    <main className="min-h-[100dvh] bg-paper pb-32 md:hidden">
-      {/* Sticky header — label only, no action icons */}
-      <div className="sticky top-0 z-10 border-b border-primary/10 bg-paper/95 px-4 py-3 backdrop-blur-md">
+    <main className="min-h-screen bg-paper pb-32 pt-14 md:hidden">
+      {/* Sticky header — sticks just below the fixed global navbar */}
+      <div className="sticky top-14 z-10 border-b border-primary/10 bg-paper/95 px-4 py-3 backdrop-blur-md">
         <p className="text-[0.62rem] font-semibold uppercase tracking-[0.2em] text-primary/55">Profile</p>
       </div>
 
@@ -152,11 +152,9 @@ export default function AccountPage() {
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-              className="overflow-hidden"
+              className="mb-3 overflow-hidden"
             >
-              <div className="mb-3 rounded-2xl border border-primary/12 bg-secondary p-4">
-                <OrdersDetailsModal onClose={() => setActiveSection(null)} />
-              </div>
+              <OrdersDetailsModal onClose={() => setActiveSection(null)} />
             </motion.div>
           ) : null}
 
@@ -167,11 +165,9 @@ export default function AccountPage() {
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-              className="overflow-hidden"
+              className="mb-3 overflow-hidden"
             >
-              <div className="mb-3 rounded-2xl border border-primary/12 bg-secondary p-4">
-                <WalletDetailsModal onClose={() => setActiveSection(null)} />
-              </div>
+              <WalletDetailsModal onClose={() => setActiveSection(null)} />
             </motion.div>
           ) : null}
 
@@ -182,11 +178,9 @@ export default function AccountPage() {
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-              className="overflow-hidden"
+              className="mb-3 overflow-hidden"
             >
-              <div className="mb-3 rounded-2xl border border-primary/12 bg-secondary p-4">
-                <AccountDetailsModal onClose={() => setActiveSection(null)} showLogout={false} />
-              </div>
+              <AccountDetailsModal onClose={() => setActiveSection(null)} showLogout={false} />
             </motion.div>
           ) : null}
         </AnimatePresence>
