@@ -956,6 +956,24 @@ export function CartPageClient() {
 
   return (
     <>
+      {/* Payment processing overlay — blocks all interactions during server-side verification */}
+      {isProcessingCheckout && (
+        <div className="fixed inset-0 z-[98] flex flex-col items-center justify-center bg-paper/95 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-5 px-8 text-center">
+            <div className="relative size-14">
+              <span className="absolute inset-0 rounded-full border-2 border-primary/12" />
+              <span className="absolute inset-0 rounded-full border-2 border-transparent border-t-primary/70 motion-safe:animate-spin [animation-duration:900ms]" />
+              <span className="absolute inset-[5px] rounded-full border border-transparent border-b-primary/35 motion-safe:animate-spin [animation-duration:1400ms] [animation-direction:reverse]" />
+            </div>
+            <div>
+              <p className="text-base font-semibold text-primary">Processing your payment</p>
+              <p className="mt-1.5 max-w-xs text-sm leading-relaxed text-primary/60">
+                Do not press back or close this tab. We are confirming your order — this takes a few seconds.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
       <main className="min-h-screen bg-paper px-4 pb-32 pt-6 text-primary sm:px-6 md:px-10 md:pb-16 md:pt-30">
         <section className="mx-auto w-full max-w-6xl">
           <header className="pb-6 border-b border-primary/15">

@@ -4,6 +4,24 @@ import { sendOrderConfirmation } from "@/lib/email/send";
 import type { OrderConfirmationData } from "@/lib/email/templates";
 import { getAdminDb } from "@/lib/firebase/admin";
 
+const ZONE_E_STATES = new Set([
+  "arunachal pradesh", "assam", "manipur", "meghalaya", "mizoram",
+  "nagaland", "sikkim", "tripura", "jammu and kashmir", "ladakh",
+  "andaman and nicobar islands", "andaman & nicobar islands", "lakshadweep",
+]);
+
+const NEAR_STATES = new Set([
+  "gujarat", "maharashtra", "rajasthan", "madhya pradesh", "goa",
+  "daman and diu", "dadra and nagar haveli", "dadra & nagar haveli",
+]);
+
+function estimateDeliveryDays(state: string): string {
+  const s = state.toLowerCase().trim();
+  if (ZONE_E_STATES.has(s)) return "4–5";
+  if (NEAR_STATES.has(s)) return "1–2";
+  return "2–4";
+}
+
 const ORDERS_COLLECTION = "orders";
 
 function toNumber(value: unknown): number {
@@ -65,6 +83,8 @@ function buildConfirmationData(order: Record<string, unknown>): OrderConfirmatio
   const totalDiscount = toNumber(order.discountAmount);
   const productDiscount = toNumber(order.productDiscountAmount) || totalDiscount;
 
+  const stateStr = String(address.state ?? "");
+
   return {
     customerName: String(address.fullName ?? "Customer"),
     orderNumber: String(order.orderNumber ?? "Order"),
@@ -81,10 +101,11 @@ function buildConfirmationData(order: Record<string, unknown>): OrderConfirmatio
       locality: String(address.locality ?? ""),
       landmark: String(address.landmark ?? ""),
       city: String(address.city ?? ""),
-      state: String(address.state ?? ""),
+      state: stateStr,
       postalCode: String(address.postalCode ?? ""),
       country: String(address.country ?? "India"),
     },
+    deliveryDays: stateStr ? estimateDeliveryDays(stateStr) : undefined,
   };
 }
 

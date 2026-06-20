@@ -21,17 +21,28 @@ function baseLayout(title: string, body: string) {
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>${title}</title>
+<style>
+  @media only screen and (max-width:600px) {
+    .nt-outer { padding: 16px 8px !important; }
+    .nt-card { border-radius: 12px !important; }
+    .nt-header { padding: 18px 20px 14px !important; }
+    .nt-accent { padding: 8px 20px !important; }
+    .nt-body { padding: 24px 20px 20px !important; }
+    .nt-footer { padding: 16px 20px !important; }
+    .nt-logo { width: 56px !important; height: 56px !important; }
+  }
+</style>
 </head>
 <body style="margin:0;padding:0;background:#EAE0D4;font-family:${SANS};">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#EAE0D4;padding:40px 16px;">
+<table width="100%" cellpadding="0" cellspacing="0" class="nt-outer" style="background:#EAE0D4;padding:40px 16px;">
   <tr><td align="center">
-    <table width="580" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%;border-radius:20px;overflow:hidden;box-shadow:0 4px 24px rgba(42,15,15,0.10);">
+    <table width="580" cellpadding="0" cellspacing="0" class="nt-card" style="max-width:580px;width:100%;border-radius:20px;overflow:hidden;box-shadow:0 4px 24px rgba(42,15,15,0.10);">
 
       <!-- Logo header -->
       <tr>
-        <td style="background:${SECONDARY};padding:22px 36px 18px;text-align:center;border-bottom:1px solid rgba(42,15,15,0.08);">
+        <td class="nt-header" style="background:${SECONDARY};padding:22px 36px 18px;text-align:center;border-bottom:1px solid rgba(42,15,15,0.08);">
           <a href="${SITE_URL}" aria-label="Visit NaariThread" style="display:inline-block;text-decoration:none;vertical-align:middle;">
-            <img src="${LOGO_ICON_URL}" alt="NaariThread logo" width="72" height="72"
+            <img src="${LOGO_ICON_URL}" alt="NaariThread logo" width="72" height="72" class="nt-logo"
                  style="display:block;width:72px;height:72px;object-fit:cover;border:2px solid rgba(124,45,45,0.18);border-radius:50%;box-shadow:0 4px 14px rgba(42,15,15,0.12);" />
           </a>
         </td>
@@ -39,21 +50,21 @@ function baseLayout(title: string, body: string) {
 
       <!-- Dark accent bar -->
       <tr>
-        <td style="background:${PRIMARY};padding:10px 36px;text-align:center;">
+        <td class="nt-accent" style="background:${PRIMARY};padding:10px 36px;text-align:center;">
           <p style="margin:0;font-family:${SANS};font-size:10px;letter-spacing:0.28em;text-transform:uppercase;color:rgba(245,237,227,0.55);">Wear Your Story</p>
         </td>
       </tr>
 
       <!-- Body -->
       <tr>
-        <td style="background:${SECONDARY};padding:36px 36px 32px;">
+        <td class="nt-body" style="background:${SECONDARY};padding:36px 36px 32px;">
           ${body}
         </td>
       </tr>
 
       <!-- Footer -->
       <tr>
-        <td style="background:${PRIMARY};padding:20px 36px;text-align:center;">
+        <td class="nt-footer" style="background:${PRIMARY};padding:20px 36px;text-align:center;">
           <p style="margin:0;font-family:${SANS};font-size:11px;color:rgba(245,237,227,0.55);">
             Please do not reply to this email — we are unable to receive replies.
           </p>
@@ -136,10 +147,11 @@ export type OrderConfirmationData = {
   couponDiscount: number;
   total: number;
   address: { fullName: string; houseNo?: string; locality?: string; landmark?: string; city: string; state: string; postalCode: string; country: string; phone?: string };
+  deliveryDays?: string;
 };
 
 export function orderConfirmationHtml(data: OrderConfirmationData): string {
-  const { customerName, orderNumber, lines, subtotal, delivery, discount, couponDiscount, total, address } = data;
+  const { customerName, orderNumber, lines, subtotal, delivery, discount, couponDiscount, total, address, deliveryDays } = data;
   const name = customerName || address.fullName || "Valued Customer";
   const addressLine = [address.houseNo, address.locality, address.landmark, address.city, address.state, address.postalCode, address.country].filter(Boolean).join(", ");
 
@@ -182,7 +194,9 @@ export function orderConfirmationHtml(data: OrderConfirmationData): string {
     <table width="100%" cellpadding="0" cellspacing="0" style="background:rgba(124,45,45,0.06);border-left:3px solid ${ACCENT};border-radius:0 8px 8px 0;margin-top:4px;">
       <tr>
         <td style="padding:14px 16px;font-family:${SANS};font-size:13px;color:${PRIMARY};">
-          🚚 &nbsp;<strong>Metro Cities:</strong> 1–3 working days &nbsp;·&nbsp; <strong>Non-Metro:</strong> 2–5 working days
+          ${deliveryDays
+            ? `🚚 &nbsp;<strong>Expected Delivery:</strong> ${deliveryDays} working day${deliveryDays === "1" ? "" : "s"} from dispatch`
+            : `🚚 &nbsp;<strong>Metro Cities:</strong> 1–3 working days &nbsp;·&nbsp; <strong>Non-Metro:</strong> 2–5 working days`}
         </td>
       </tr>
     </table>

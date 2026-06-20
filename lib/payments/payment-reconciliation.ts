@@ -218,6 +218,8 @@ export async function reconcileCapturedPayment(args: ReconcileCapturedPaymentArg
       };
 
       transaction.set(paymentRef, {
+        ...(!paymentSnapshot.exists ? { createdAt: nowIso } : {}),
+        updatedAt: nowIso,
         userId: args.userId,
         orderId: args.internalOrderId,
         provider: "razorpay",
@@ -248,6 +250,8 @@ export async function reconcileCapturedPayment(args: ReconcileCapturedPaymentArg
     const shouldRunPostPayment = toText(order.paymentStatus, 40).toLowerCase() !== "paid";
 
     transaction.set(paymentRef, {
+      ...(!paymentSnapshot.exists ? { createdAt: nowIso } : {}),
+      updatedAt: nowIso,
       userId: args.userId,
       orderId: args.internalOrderId,
       provider: "razorpay",
