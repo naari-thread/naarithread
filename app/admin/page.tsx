@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { revalidatePath, updateTag } from "next/cache";
 import { ID, Query } from "node-appwrite";
+import { FieldValue } from "firebase-admin/firestore";
 
 import { AdminImageUploadField } from "@/app/components/admin-image-upload-field";
 import { AdminActionToast } from "@/app/components/admin-action-toast";
@@ -11,10 +12,12 @@ import { AdminMultiSelectField } from "@/app/components/admin-multi-select-field
 import { AdminMobileBottomBar } from "@/app/components/admin-mobile-bottom-bar";
 import { AdminProductTaxonomyFields } from "@/app/components/admin-product-taxonomy-fields";
 import { AdminSessionBootstrap } from "@/app/components/admin-session-bootstrap";
+import { AdminSubmitButton } from "@/app/components/admin-submit-button";
 import { CloudinaryImage } from "@/app/components/cloudinary-image";
 import { createDatabasesWithApiKey, getDatabaseId } from "@/lib/appwrite/admin-server";
 import { listRefundWalletPayoutRequests, type WalletPayoutRequest } from "@/lib/appwrite/wallet-server";
 import { PRODUCT_CATALOG_CACHE_TAG } from "@/lib/cache-tags";
+import { getAdminDb } from "@/lib/firebase/admin";
 import { timestampToIso } from "@/lib/firebase/document";
 import { hasVerifiedAdminSession } from "@/lib/firebase/admin-session";
 import { PRODUCT_BADGES, getProductBadgeLabel, isProductBadgeValue } from "@/lib/product-badges";
@@ -799,10 +802,7 @@ async function saveAddonAction(formData: FormData) {
   const addonType = String(formData.get("addonType") ?? "").trim().toLowerCase() === "coupons" ? "coupons" : "banners";
   const addonId = String(formData.get("addonId") ?? "").trim();
   const returnTo = String(formData.get("returnTo") ?? "/admin").trim() || "/admin";
-
-  const collectionIds = addonType === "banners" ? ["banners", "banner"] : ["coupons", "coupon"];
-  const candidate = await listDocumentsFromCandidates(collectionIds, [Query.limit(1)]);
-  const collectionId = candidate.collectionId ?? collectionIds[0];
+  const collectionId = addonType;
 
   const isActive = String(formData.get("isActive") ?? "true").trim().toLowerCase() !== "false";
 
@@ -817,6 +817,7 @@ async function saveAddonAction(formData: FormData) {
       }
     : {
         code: String(formData.get("code") ?? "").trim().toUpperCase(),
+        description: String(formData.get("description") ?? "").trim().slice(0, 240),
         discountType: String(formData.get("discountType") ?? "percentage").trim().toLowerCase(),
         discountValue: toNumber(formData.get("discountValue")),
         minOrderValue: toNumber(formData.get("minOrderValue")),
@@ -825,18 +826,16 @@ async function saveAddonAction(formData: FormData) {
         isActive,
       };
 
-  const databases = createDatabasesWithApiKey();
+  const now = FieldValue.serverTimestamp();
+  const documentRef = getAdminDb().collection(collectionId).doc(addonId || ID.unique());
   if (addonId) {
-    await databases.updateDocument(getDatabaseId(), collectionId, addonId, payload);
+    await documentRef.set({ ...payload, updatedAt: now }, { merge: true });
   } else {
-    await databases.createDocument(getDatabaseId(), collectionId, ID.unique(), payload);
+    await documentRef.set({ ...payload, createdAt: now, updatedAt: now });
   }
 
   if (addonType === "banners") {
     revalidatePath("/");
-  } else {
-    revalidatePath("/cart");
-    revalidatePath("/api/cart/validate-coupon");
   }
 
   redirect(withAdminNotice(returnTo, addonType === "banners" ? "Banner saved successfully." : "Coupon saved successfully."));
@@ -855,28 +854,10 @@ async function deleteAddonAction(formData: FormData) {
     redirect(returnTo);
   }
 
-  const databases = createDatabasesWithApiKey();
-  const databaseId = getDatabaseId();
-  const collectionIds = addonType === "banners" ? ["banners", "banner"] : ["coupons", "coupon"];
+  await getAdminDb().collection(addonType).doc(addonId).delete();
 
-  let deleted = false;
-  for (const collectionId of collectionIds) {
-    try {
-      await databases.deleteDocument(databaseId, collectionId, addonId);
-      deleted = true;
-      break;
-    } catch (error) {
-      if (!isDocumentMissingError(error)) {
-        throw error;
-      }
-    }
-  }
-
-  if (deleted && addonType === "banners") {
+  if (addonType === "banners") {
     revalidatePath("/");
-  } else if (deleted) {
-    revalidatePath("/cart");
-    revalidatePath("/api/cart/validate-coupon");
   }
 
   redirect(withAdminNotice(returnTo, addonType === "banners" ? "Banner deleted successfully." : "Coupon deleted successfully."));
@@ -1179,7 +1160,7 @@ export default async function AdminPage({
   const baseWithoutModal = buildAdminHref(resolvedSearchParams, { modal: null, id: null });
 
   return (
-    <main className="min-h-screen bg-paper px-5 pb-24 pt-2 text-primary sm:px-5 sm:pt-16 md:px-8 md:pb-10 md:pt-24">
+    <main className="min-h-screen bg-paper px-5 pb-24 pt-16 text-primary sm:px-5 md:px-8 md:pb-10 md:pt-24">
       {adminFeedback ? (
           <AdminActionToast
             message={adminFeedback.message}
@@ -1389,9 +1370,9 @@ export default async function AdminPage({
           {addons.length === 0 ? (
             <p className="text-sm text-primary/72">No {activeAddon} found in database.</p>
           ) : (
-            <div className="max-h-[70vh] divide-y divide-primary/10 overflow-y-auto rounded-2xl border border-primary/12 bg-paper">
+            <div className="flex max-h-[70vh] flex-col gap-2 overflow-y-auto">
               {addons.map((addon) => (
-                <article key={addon.id} className="relative p-3.5 pr-[6.25rem]">
+                <article key={addon.id} className="relative rounded-xl border border-primary/12 bg-secondary p-3.5 pr-[6.25rem]">
                   <div className="absolute right-3 top-3 flex flex-col gap-1.5">
                     <Link
                       href={buildAdminHref(resolvedSearchParams, {
@@ -1451,12 +1432,12 @@ export default async function AdminPage({
           <AdminTransactionFilters tab="orders" q={txnQuery} period={txnPeriod} />
 
           <div className="mt-4">
-            <div className="mt-2 max-h-[68vh] divide-y divide-primary/10 overflow-y-auto rounded-2xl border border-primary/12 bg-paper">
+            <div className="mt-2 flex max-h-[68vh] flex-col gap-2 overflow-y-auto">
               {orderItems.length === 0 ? (
-                <p className="p-3 text-sm text-primary/70">No orders found.</p>
+                <p className="py-3 text-sm text-primary/70">No orders found.</p>
               ) : (
                 orderItems.map((order) => (
-                  <article key={order.id} className="p-3.5">
+                  <article key={order.id} className="rounded-xl border border-primary/12 bg-secondary p-3.5">
                     <p className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-primary/60">{formatDate(order.createdAt)}</p>
                     <div className="mt-1 flex items-center justify-between gap-2">
                       <div>
@@ -1552,32 +1533,32 @@ export default async function AdminPage({
 
           <AdminTransactionFilters tab="payments" q={txnQuery} period={txnPeriod} />
 
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <article className="rounded-xl border border-primary/12 bg-secondary p-3">
-              <p className="text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-primary/62">Paid</p>
-              <p className="mt-1 text-2xl font-semibold text-primary">{paymentStatusSummary.paid}</p>
+          <div className="mt-3 grid grid-cols-4 gap-2">
+            <article className="rounded-xl border border-primary/12 bg-secondary px-3 py-2.5 sm:p-3">
+              <p className="text-[0.58rem] font-semibold uppercase tracking-[0.14em] text-primary/60 sm:text-[0.62rem]">Paid</p>
+              <p className="mt-0.5 text-lg font-semibold text-primary sm:mt-1 sm:text-2xl">{paymentStatusSummary.paid}</p>
             </article>
-            <article className="rounded-xl border border-primary/12 bg-secondary p-3">
-              <p className="text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-primary/62">Failed</p>
-              <p className="mt-1 text-2xl font-semibold text-primary">{paymentStatusSummary.failed}</p>
+            <article className="rounded-xl border border-primary/12 bg-secondary px-3 py-2.5 sm:p-3">
+              <p className="text-[0.58rem] font-semibold uppercase tracking-[0.14em] text-primary/60 sm:text-[0.62rem]">Failed</p>
+              <p className="mt-0.5 text-lg font-semibold text-primary sm:mt-1 sm:text-2xl">{paymentStatusSummary.failed}</p>
             </article>
-            <article className="rounded-xl border border-primary/12 bg-secondary p-3">
-              <p className="text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-primary/62">Pending</p>
-              <p className="mt-1 text-2xl font-semibold text-primary">{paymentStatusSummary.created}</p>
+            <article className="rounded-xl border border-primary/12 bg-secondary px-3 py-2.5 sm:p-3">
+              <p className="text-[0.58rem] font-semibold uppercase tracking-[0.14em] text-primary/60 sm:text-[0.62rem]">Pending</p>
+              <p className="mt-0.5 text-lg font-semibold text-primary sm:mt-1 sm:text-2xl">{paymentStatusSummary.created}</p>
             </article>
-            <article className="rounded-xl border border-primary/12 bg-secondary p-3">
-              <p className="text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-primary/62">Refunded To Wallet</p>
-              <p className="mt-1 text-2xl font-semibold text-primary">{paymentStatusSummary.refundedToWallet}</p>
+            <article className="rounded-xl border border-primary/12 bg-secondary px-3 py-2.5 sm:p-3">
+              <p className="text-[0.58rem] font-semibold uppercase tracking-[0.14em] text-primary/60 sm:text-[0.62rem]">Wallet</p>
+              <p className="mt-0.5 text-lg font-semibold text-primary sm:mt-1 sm:text-2xl">{paymentStatusSummary.refundedToWallet}</p>
             </article>
           </div>
 
           <div className="mt-4">
-            <div className="mt-2 max-h-[60vh] divide-y divide-primary/10 overflow-y-auto rounded-2xl border border-primary/12 bg-paper">
+            <div className="mt-2 flex max-h-[60vh] flex-col gap-2 overflow-y-auto">
               {paymentItems.length === 0 ? (
-                <p className="p-3 text-sm text-primary/70">No payments found.</p>
+                <p className="py-3 text-sm text-primary/70">No payments found.</p>
               ) : (
                 paymentItems.map((payment) => (
-                  <article key={payment.id} className="p-3.5">
+                  <article key={payment.id} className="rounded-xl border border-primary/12 bg-secondary p-3.5">
                     <p className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-primary/60">{formatDate(payment.createdAt)}</p>
                     <div className="mt-1 flex items-center justify-between gap-2">
                       <div>
@@ -1620,12 +1601,12 @@ export default async function AdminPage({
           <p className="mt-1 text-sm text-primary/74">Customer transfer requests for matured Refund Wallet credits.</p>
 
           <div className="mt-4">
-            <div className="mt-2 max-h-[68vh] divide-y divide-primary/10 overflow-y-auto rounded-2xl border border-primary/12 bg-paper">
+            <div className="mt-2 flex max-h-[68vh] flex-col gap-2 overflow-y-auto">
               {walletPayoutItems.length === 0 ? (
-                <p className="p-3 text-sm text-primary/70">No Refund Wallet transfer requests found.</p>
+                <p className="py-3 text-sm text-primary/70">No Refund Wallet transfer requests found.</p>
               ) : (
                 walletPayoutItems.map((request) => (
-                  <article key={request.id} className="p-3.5">
+                  <article key={request.id} className="rounded-xl border border-primary/12 bg-secondary p-3.5">
                     <p className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-primary/60">{formatDate(request.createdAt)}</p>
                     <div className="mt-1 flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -1831,7 +1812,7 @@ export default async function AdminPage({
               <AdminImageUploadField name="otherImageUrls" label="Other images" multiple defaultValue={toStringArray(modalDocument?.otherImageUrls).join(", ")} />
             </div>
             <div className="sm:col-span-2">
-              <button type="submit" aria-label="Save product" className="cta-thread">Save</button>
+              <AdminSubmitButton label="Save" pendingLabel="Saving product..." ariaLabel="Save product" />
             </div>
           </form>
         </AdminModal>
@@ -1875,7 +1856,12 @@ export default async function AdminPage({
                   <option value="false">Inactive — hidden</option>
                 </select>
               </label>
-              <button type="submit" aria-label="Save banner" className="cta-thread mt-1">Save Banner</button>
+              <AdminSubmitButton
+                label="Save Banner"
+                pendingLabel="Saving banner..."
+                ariaLabel="Save banner"
+                className="cta-thread mt-1"
+              />
             </form>
           ) : (
             /* ── COUPON FORM ── code / discount / limits / active ── */
@@ -1892,6 +1878,18 @@ export default async function AdminPage({
                   placeholder="e.g. NAARI20"
                   className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm uppercase tracking-wider outline-none focus:border-primary"
                   required
+                />
+              </label>
+              <label className="sm:col-span-2 flex flex-col gap-1.5">
+                <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Description</span>
+                <textarea
+                  aria-label="Coupon description"
+                  name="description"
+                  rows={3}
+                  maxLength={240}
+                  defaultValue={String(modalDocument?.description ?? "")}
+                  placeholder="e.g. Festive savings on your next NaariThread order"
+                  className="min-h-24 resize-y rounded-xl border border-primary/18 bg-paper px-3 py-2.5 text-sm leading-relaxed outline-none transition focus:border-primary"
                 />
               </label>
               <label className="flex flex-col gap-1.5">
@@ -1969,7 +1967,11 @@ export default async function AdminPage({
                 </select>
               </label>
               <div className="sm:col-span-2">
-                <button type="submit" aria-label="Save coupon" className="cta-thread">Save Coupon</button>
+                <AdminSubmitButton
+                  label="Save Coupon"
+                  pendingLabel="Saving coupon..."
+                  ariaLabel="Save coupon"
+                />
               </div>
             </form>
           )}

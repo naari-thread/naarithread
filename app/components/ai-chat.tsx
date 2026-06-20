@@ -57,23 +57,6 @@ function BotMessageText({ text }: { text: string }) {
   );
 }
 
-// Expand icon SVG (four outward-pointing arrows)
-function ExpandIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
-      <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-    </svg>
-  );
-}
-
-// Collapse icon SVG (four inward-pointing arrows)
-function CollapseIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
-      <path d="M4 14h6v6M14 4h6v6M20 14l-6-6M4 10l6 6" />
-    </svg>
-  );
-}
 
 // ─── Shared chat panel ────────────────────────────────────────────────────────
 type ChatPanelProps = {
@@ -131,7 +114,10 @@ function ChatPanel({
           onClick={expanded ? onCollapse : onExpand}
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary/15 text-secondary transition hover:bg-secondary/30"
         >
-          {expanded ? <CollapseIcon className="h-3.5 w-3.5" /> : <ExpandIcon className="h-3.5 w-3.5" />}
+          {expanded
+            ? <DynamicHugeIcon name="Minimize01Icon" className="h-3.5 w-3.5" iconStrokeWidth={2} />
+            : <DynamicHugeIcon name="Maximize01Icon" className="h-3.5 w-3.5" iconStrokeWidth={2} />
+          }
         </button>
 
         {/* Close */}

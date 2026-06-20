@@ -173,10 +173,9 @@ export function WishlistPageClient() {
     <>
       <main className="min-h-screen bg-paper px-4 pb-32 pt-7 text-primary sm:px-6 md:px-8 md:pb-20 md:pt-30">
         <section className="mx-auto w-full max-w-6xl">
-          <header className={`pb-5 sm:pb-6 ${isLoading || isAuthenticated ? 'border-b border-primary/15' : ''}`}>
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary/70">Saved</p>
-            <h1 className="mt-3 text-3xl font-semibold sm:text-4xl">Wishlist</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-primary/82 sm:text-base">
+          <header className="pb-6 border-b border-primary/15">
+            <h1 className="text-3xl font-semibold sm:text-4xl">Wishlist</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-primary/65">
               Build your personal style board and return to favorites across devices.
             </p>
           </header>
@@ -186,7 +185,7 @@ export function WishlistPageClient() {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-              className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-y border-primary/15 py-5 text-sm text-primary/80"
+              className="hidden sm:flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-y border-primary/15 py-5 text-sm text-primary/80"
             >
               <span>Your wishlist is stored locally on this device. Sign in to sync it safely to your account. If you log out before sync, local items may be lost.</span>
               <button

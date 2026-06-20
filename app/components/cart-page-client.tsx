@@ -1112,8 +1112,8 @@ export function CartPageClient() {
               )}
             </div>
 
-            {/* ─── Order summary sidebar ────────────────────────── */}
-            <aside className="relative rounded-2xl border border-primary/15 bg-secondary p-5 sm:p-6 lg:sticky lg:top-28 lg:max-h-[calc(100vh-9rem)] lg:overflow-y-auto">
+            {/* ─── Order summary sidebar — hidden on mobile, visible on desktop ── */}
+            <aside className="relative hidden rounded-2xl border border-primary/15 bg-secondary p-5 sm:p-6 lg:block lg:sticky lg:top-28 lg:max-h-[calc(100vh-9rem)] lg:overflow-y-auto">
               <h3 className="text-lg font-semibold">Amount Breakup</h3>
 
               {/* Shipping address */}

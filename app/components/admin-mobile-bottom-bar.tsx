@@ -23,7 +23,7 @@ const navItems: NavItem[] = [
   { id: "addons", label: "AddOns", icon: "Notification01Icon" },
   { id: "orders", label: "Orders", icon: "ShoppingCart02Icon" },
   { id: "payments", label: "Payments", icon: "MailSend01Icon" },
-  { id: "refund-wallet", label: "Refund Wallet", icon: "MailSend01Icon" },
+  { id: "refund-wallet", label: "Wallet", icon: "MailSend01Icon" },
 ];
 
 export function AdminMobileBottomBar({ activeTab }: MobileBarProps) {
@@ -65,7 +65,7 @@ export function AdminMobileBottomBar({ activeTab }: MobileBarProps) {
     >
       <nav
         aria-label="Admin bottom navigation"
-        className="relative -mx-1 flex touch-manipulation justify-between gap-1 overflow-x-auto px-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        className="grid grid-cols-5 touch-manipulation gap-1"
       >
         {navItems.map((item) => {
           const isActive = item.id === activeTab;
@@ -76,7 +76,7 @@ export function AdminMobileBottomBar({ activeTab }: MobileBarProps) {
               aria-label={`Open ${item.label}`}
               aria-current={isActive ? "page" : undefined}
               onClick={() => navigateToTab(item.id)}
-              className={`relative flex min-w-[4.8rem] shrink-0 flex-col items-center justify-center gap-1 rounded-[1rem] px-2 py-2 text-[0.68rem] font-semibold tracking-[0.01em] transition ${
+              className={`relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-[1rem] px-1 py-2 text-[0.62rem] font-semibold tracking-[0.01em] transition ${
                 isActive ? "text-secondary" : "text-primary/75 hover:bg-primary/5 hover:text-primary"
               }`}
             >

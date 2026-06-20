@@ -1,5 +1,5 @@
 import { getApps, initializeApp, cert, applicationDefault, type App } from "firebase-admin/app";
-import { getFirestore, type Firestore } from "firebase-admin/firestore";
+import { initializeFirestore, type Firestore } from "firebase-admin/firestore";
 
 import { parseAdminEmails } from "@/lib/firebase/config";
 
@@ -67,7 +67,8 @@ export function getFirebaseAdminApp(): App {
 }
 
 export function getAdminDb(): Firestore {
-  return getFirestore(getFirebaseAdminApp());
+  // REST avoids long-lived gRPC channel retries in short-lived Vercel functions.
+  return initializeFirestore(getFirebaseAdminApp(), { preferRest: true });
 }
 
 export function getBearerToken(request: Request): string {

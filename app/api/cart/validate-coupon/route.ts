@@ -74,10 +74,13 @@ export async function POST(request: Request) {
     }
     discountAmount = Math.min(Math.floor(discountAmount), subtotal);
 
-    const description =
+    const configuredDescription = String(coupon.description ?? "").trim();
+    const generatedDescription =
       discountType === "percentage"
         ? `${discountValue}% off${maxDiscount ? ` (max ₹${maxDiscount.toLocaleString("en-IN")})` : ""}`
         : `₹${discountValue.toLocaleString("en-IN")} off`;
+
+    const description = configuredDescription || generatedDescription;
 
     return NextResponse.json({
       valid: true,

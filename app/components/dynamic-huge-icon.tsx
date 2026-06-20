@@ -10,6 +10,7 @@ type HugeIconName =
   | "Cancel01Icon"
   | "CallIcon"
   | "Add01Icon"
+  | "ArrowDown01Icon"
   | "Remove01Icon"
   | "FavouriteIcon"
   | "Facebook01Icon"
@@ -23,6 +24,8 @@ type HugeIconName =
   | "PreviousIcon"
   | "FilterHorizontalIcon"
   | "Search01Icon"
+  | "Maximize01Icon"
+  | "Minimize01Icon"
   | "ShoppingBag01Icon"
   | "ShoppingCart01Icon"
   | "ShoppingCart02Icon"
@@ -39,6 +42,7 @@ type HugeIconData = HugeIconNode[];
 const iconLoaders: Record<HugeIconName, () => Promise<{ default: HugeIconData }>> = {
   AiChat01Icon: () => import("@hugeicons/core-free-icons/ChatBotIcon"),
   Add01Icon: () => import("@hugeicons/core-free-icons/Add01Icon"),
+  ArrowDown01Icon: () => import("@hugeicons/core-free-icons/ArrowDown01Icon"),
   ArrowLeft01Icon: () => import("@hugeicons/core-free-icons/ArrowLeft01Icon"),
   ArrowRight01Icon: () => import("@hugeicons/core-free-icons/ArrowRight01Icon"),
   ArrowUpRight01Icon: () => import("@hugeicons/core-free-icons/ArrowUpRight01Icon"),
@@ -57,6 +61,8 @@ const iconLoaders: Record<HugeIconName, () => Promise<{ default: HugeIconData }>
   PreviousIcon: () => import("@hugeicons/core-free-icons/ArrowLeft01Icon"),
   Remove01Icon: () => import("@hugeicons/core-free-icons/Remove01Icon"),
   Search01Icon: () => import("@hugeicons/core-free-icons/Search01Icon"),
+  Maximize01Icon: () => import("@hugeicons/core-free-icons/Maximize01Icon"),
+  Minimize01Icon: () => import("@hugeicons/core-free-icons/Minimize01Icon"),
   ShoppingBag01Icon: () => import("@hugeicons/core-free-icons/ShoppingBag01Icon"),
   ShoppingCart01Icon: () => import("@hugeicons/core-free-icons/ShoppingCart01Icon"),
   ShoppingCart02Icon: () => import("@hugeicons/core-free-icons/ShoppingCart02Icon"),

@@ -211,6 +211,7 @@ export function Navbar() {
   const [cartCount, setCartCount] = useState(0);
   const [wishlistCount, setWishlistCount] = useState(0);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isMobileNotificationsOpen, setIsMobileNotificationsOpen] = useState(false);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isContactPanelOpen, setIsContactPanelOpen] = useState(false);
@@ -591,7 +592,7 @@ export function Navbar() {
                   />
                   {typeof item.badgeCount === "number" && item.badgeCount > 0 ? (
                     <span
-                      className={`absolute right-0 top-0 z-20 grid h-4 min-w-4 translate-x-[20%] -translate-y-[20%] place-items-center rounded-full px-1 text-center text-[0.54rem] font-bold leading-[1] tabular-nums ring-2 ring-secondary ${
+                      className={`absolute right-0 top-0 z-20 grid h-4 min-w-4 translate-x-[20%] -translate-y-[20%] place-items-center rounded-full px-1 text-center text-[0.54rem] font-bold tabular-nums ring-2 ring-secondary ${
                         item.isActive ? "bg-secondary text-primary" : "bg-primary text-secondary"
                       }`}
                       aria-hidden={true}
@@ -604,6 +605,36 @@ export function Navbar() {
             </nav>
 
             <nav aria-label="Mobile quick actions" className="md:hidden flex items-center gap-2">
+              {/* Notification bell — mobile only, hidden on landing page */}
+              {pathname !== "/" && (() => {
+                const unreadCount = isAuthenticated ? notifications.filter((n) => !n.isRead).length : 0;
+                return (
+                  <button
+                    type="button"
+                    aria-label="Open notifications"
+                    aria-expanded={isMobileNotificationsOpen}
+                    onClick={() => {
+                      if (!isAuthenticated && !isLoading) {
+                        setIsAuthModalOpen(true);
+                        return;
+                      }
+                      setIsMobileNotificationsOpen((prev) => !prev);
+                    }}
+                    className="group relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-secondary text-primary transition hover:border-primary/40"
+                  >
+                    <DynamicHugeIcon name="Notification01Icon" className="relative z-10 h-5 w-5" iconStrokeWidth={2.1} />
+                    {unreadCount > 0 && (
+                      <span
+                        className="absolute right-0 top-0 z-20 grid h-4 min-w-4 translate-x-[20%] -translate-y-[20%] place-items-center rounded-full bg-primary px-1 text-center text-[0.54rem] font-bold tabular-nums text-secondary ring-2 ring-secondary"
+                        aria-hidden={true}
+                      >
+                        {unreadCount > 9 ? "9+" : unreadCount}
+                      </span>
+                    )}
+                  </button>
+                );
+              })()}
+
               <button
                 type="button"
                 role="button"
@@ -651,7 +682,7 @@ export function Navbar() {
                   />
                   {typeof item.badgeCount === "number" && item.badgeCount > 0 ? (
                     <span
-                      className={`absolute right-0 top-0 z-20 grid h-4 min-w-4 translate-x-[20%] -translate-y-[20%] place-items-center rounded-full px-1 text-center text-[0.54rem] font-bold leading-[1] tabular-nums ring-2 ring-secondary ${
+                      className={`absolute right-0 top-0 z-20 grid h-4 min-w-4 translate-x-[20%] -translate-y-[20%] place-items-center rounded-full px-1 text-center text-[0.54rem] font-bold tabular-nums ring-2 ring-secondary ${
                         item.isActive ? "bg-secondary text-primary" : "bg-primary text-secondary"
                       }`}
                       aria-hidden={true}
@@ -769,7 +800,7 @@ export function Navbar() {
                   <span className="relative z-10">{item.label}</span>
                   {typeof item.badgeCount === "number" && item.badgeCount > 0 ? (
                     <span
-                      className={`absolute right-0 top-0 z-20 grid h-4 min-w-4 translate-x-[20%] -translate-y-[20%] place-items-center rounded-full px-1 text-center text-[0.54rem] font-bold leading-[1] tabular-nums ring-2 ring-secondary ${
+                      className={`absolute right-0 top-0 z-20 grid h-4 min-w-4 translate-x-[20%] -translate-y-[20%] place-items-center rounded-full px-1 text-center text-[0.54rem] font-bold tabular-nums ring-2 ring-secondary ${
                         item.isActive ? "bg-secondary text-primary" : "bg-primary text-secondary"
                       }`}
                       aria-hidden={true}
@@ -966,6 +997,35 @@ export function Navbar() {
                 </Link>
               ) : (
                 <>
+                  {/* Bell → Phone → Chatbot */}
+                  {(() => {
+                    const unreadCount = isAuthenticated ? notifications.filter((n) => !n.isRead).length : 0;
+                    return (
+                      <button
+                        type="button"
+                        aria-label="Open notifications"
+                        aria-expanded={isMobileNotificationsOpen}
+                        onClick={() => {
+                          if (!isAuthenticated && !isLoading) {
+                            setIsAuthModalOpen(true);
+                            return;
+                          }
+                          setIsMobileNotificationsOpen((prev) => !prev);
+                        }}
+                        className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-secondary text-primary transition hover:border-primary/40"
+                      >
+                        <DynamicHugeIcon name="Notification01Icon" className="relative z-10 h-5.5 w-5.5" iconStrokeWidth={2.1} />
+                        {unreadCount > 0 && (
+                          <span
+                            className="absolute right-0 top-0 z-20 grid h-4 min-w-4 translate-x-[20%] -translate-y-[20%] place-items-center rounded-full bg-primary px-1 text-center text-[0.54rem] font-bold tabular-nums text-secondary ring-2 ring-secondary"
+                            aria-hidden={true}
+                          >
+                            {unreadCount > 9 ? "9+" : unreadCount}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })()}
                   <button
                     type="button"
                     aria-label="Open contact options"
@@ -1381,6 +1441,80 @@ export function Navbar() {
           </motion.div>
         ) : null}
 
+      </AnimatePresence>
+
+      {/* ─── MOBILE NOTIFICATION PANEL ─── */}
+      <AnimatePresence initial={false}>
+        {isMobileNotificationsOpen ? (
+          <motion.div
+            className="fixed inset-0 z-[160] flex flex-col justify-end md:hidden"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsMobileNotificationsOpen(false)}
+          >
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" aria-hidden="true" />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              className="relative z-10 max-h-[72dvh] overflow-hidden rounded-t-3xl border-t border-primary/14 bg-secondary shadow-[0_-12px_40px_rgba(54,19,19,0.18)]"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal={true}
+              aria-label="Notifications"
+            >
+              {/* Handle */}
+              <div className="flex justify-center pt-3 pb-1">
+                <div className="h-1 w-10 rounded-full bg-primary/20" />
+              </div>
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-primary/10 px-5 py-3">
+                <p className="text-[0.62rem] font-semibold uppercase tracking-[0.22em] text-primary/62">Notifications</p>
+                <button
+                  type="button"
+                  aria-label="Close notifications"
+                  onClick={() => setIsMobileNotificationsOpen(false)}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-primary/18 text-primary transition hover:border-primary/35"
+                >
+                  <DynamicHugeIcon name="Cancel01Icon" className="h-4 w-4" iconStrokeWidth={2.2} />
+                </button>
+              </div>
+              {/* List */}
+              <div className="overflow-y-auto overscroll-contain p-3 pb-8">
+                {notifications.length === 0 ? (
+                  <p className="px-3 py-8 text-center text-sm text-primary/45">No notifications yet</p>
+                ) : (
+                  notifications.map((notification) => (
+                    <button
+                      key={notification.id}
+                      type="button"
+                      aria-label={`Open notification: ${notification.title}`}
+                      onClick={() => {
+                        void markNotifRead(notification.id);
+                        setSelectedNotification({ ...notification, isRead: true });
+                        setIsMobileNotificationsOpen(false);
+                      }}
+                      className={`mb-1.5 w-full rounded-xl border px-4 py-3 text-left transition hover:border-primary/12 hover:bg-primary/[0.04] ${notification.isRead ? "border-transparent" : "border-primary/10 bg-primary/[0.025]"}`}
+                    >
+                      <div className="flex items-start gap-2.5">
+                        {!notification.isRead && (
+                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-primary">{notification.title}</p>
+                          <p className="mt-0.5 line-clamp-2 text-xs text-primary/72">{notification.body}</p>
+                          <p className="mt-1 text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-primary/55">{notification.createdAt}</p>
+                        </div>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        ) : null}
       </AnimatePresence>
 
       <AuthModal
