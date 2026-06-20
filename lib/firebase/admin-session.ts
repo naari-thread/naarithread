@@ -3,7 +3,8 @@ import "server-only";
 import { cookies } from "next/headers";
 import type { DecodedIdToken } from "firebase-admin/auth";
 
-import { getAdminAuth, getServerAdminEmails } from "@/lib/firebase/admin";
+import { getServerAdminEmails } from "@/lib/firebase/admin";
+import { getAdminAuth } from "@/lib/firebase/admin-auth";
 
 export const ADMIN_SESSION_COOKIE = "nt_admin_session";
 export const ADMIN_SESSION_MAX_AGE_SECONDS = 60 * 60 * 8;

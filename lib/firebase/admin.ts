@@ -1,5 +1,4 @@
 import { getApps, initializeApp, cert, applicationDefault, type App } from "firebase-admin/app";
-import { getAuth, type DecodedIdToken, type Auth } from "firebase-admin/auth";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 
 import { parseAdminEmails } from "@/lib/firebase/config";
@@ -69,14 +68,6 @@ export function getFirebaseAdminApp(): App {
 
 export function getAdminDb(): Firestore {
   return getFirestore(getFirebaseAdminApp());
-}
-
-export function getAdminAuth(): Auth {
-  return getAuth(getFirebaseAdminApp());
-}
-
-export async function verifyFirebaseIdToken(idToken: string): Promise<DecodedIdToken> {
-  return getAdminAuth().verifyIdToken(idToken);
 }
 
 export function getBearerToken(request: Request): string {

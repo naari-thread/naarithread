@@ -1,6 +1,7 @@
 import { Databases } from "node-appwrite";
 
-import { getServerAdminEmails, verifyFirebaseIdToken } from "@/lib/firebase/admin";
+import { getServerAdminEmails } from "@/lib/firebase/admin";
+import { verifyFirebaseIdToken } from "@/lib/firebase/admin-auth";
 
 export function getAdminEmails(): string[] {
   return getServerAdminEmails();
