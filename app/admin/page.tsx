@@ -341,6 +341,8 @@ function mapTransaction(document: Record<string, unknown>, fallbackLabel: string
     status: String(document.status ?? document.paymentStatus ?? "Pending"),
     createdAt:
       timestampToIso(document.transactionDate) ||
+      timestampToIso(document.placedAt) ||
+      timestampToIso(document.paidAt) ||
       timestampToIso(document.$createdAt) ||
       timestampToIso(document.createdAt),
     raw: document,
@@ -1090,9 +1092,10 @@ export default async function AdminPage({
         (document) =>
           String(document.status ?? "").toLowerCase() !== "payment_cancelled" &&
           matchesTransactionQuery(document, txnQuery) &&
-          withinDateRange(String(document.$createdAt ?? document.placedAt ?? ""), dateFrom, dateTo)
+          withinDateRange(String(document.placedAt ?? document.$createdAt ?? ""), dateFrom, dateTo)
       )
-      .map((document) => mapTransaction(document, "Order"));
+      .map((document) => mapTransaction(document, "Order"))
+      .sort((a, b) => toDateMs(b.createdAt) - toDateMs(a.createdAt));
   }
 
   if (activeTab === "payments") {
@@ -1169,8 +1172,8 @@ export default async function AdminPage({
           />
       ) : null}
 
-      <section className="mx-auto hidden w-full max-w-7xl md:block">
-        <nav aria-label="Admin sections" className="grid grid-cols-5 gap-2">
+      <div className="sticky top-16 z-50 -mx-5 hidden bg-paper/95 px-5 py-3 backdrop-blur-sm md:block md:-mx-8 md:px-8">
+        <nav aria-label="Admin sections" className="mx-auto grid max-w-7xl grid-cols-5 gap-2">
           {[
             { id: "products", label: "Products" },
             { id: "addons", label: "AddOns" },
@@ -1201,7 +1204,7 @@ export default async function AdminPage({
             );
           })}
         </nav>
-      </section>
+      </div>
 
       {activeTab === "products" ? (
         <section className="mx-auto mt-4 w-full max-w-7xl sm:mt-5">
@@ -1370,7 +1373,7 @@ export default async function AdminPage({
           {addons.length === 0 ? (
             <p className="text-sm text-primary/72">No {activeAddon} found in database.</p>
           ) : (
-            <div className="flex max-h-[70vh] flex-col gap-2 overflow-y-auto">
+            <div className="flex flex-col gap-2">
               {addons.map((addon) => (
                 <article key={addon.id} className="relative rounded-xl border border-primary/12 bg-secondary p-3.5 pr-[6.25rem]">
                   <div className="absolute right-3 top-3 flex flex-col gap-1.5">
@@ -1432,7 +1435,7 @@ export default async function AdminPage({
           <AdminTransactionFilters tab="orders" q={txnQuery} period={txnPeriod} />
 
           <div className="mt-4">
-            <div className="mt-2 flex max-h-[68vh] flex-col gap-2 overflow-y-auto">
+            <div className="mt-2 flex flex-col gap-2">
               {orderItems.length === 0 ? (
                 <p className="py-3 text-sm text-primary/70">No orders found.</p>
               ) : (
@@ -1553,7 +1556,7 @@ export default async function AdminPage({
           </div>
 
           <div className="mt-4">
-            <div className="mt-2 flex max-h-[60vh] flex-col gap-2 overflow-y-auto">
+            <div className="mt-2 flex flex-col gap-2">
               {paymentItems.length === 0 ? (
                 <p className="py-3 text-sm text-primary/70">No payments found.</p>
               ) : (
@@ -1601,7 +1604,7 @@ export default async function AdminPage({
           <p className="mt-1 text-sm text-primary/74">Customer transfer requests for matured Refund Wallet credits.</p>
 
           <div className="mt-4">
-            <div className="mt-2 flex max-h-[68vh] flex-col gap-2 overflow-y-auto">
+            <div className="mt-2 flex flex-col gap-2">
               {walletPayoutItems.length === 0 ? (
                 <p className="py-3 text-sm text-primary/70">No Refund Wallet transfer requests found.</p>
               ) : (
