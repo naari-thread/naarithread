@@ -263,7 +263,7 @@ function getOrderStatusPresentation(status: string): { label: string; className:
     refunded_to_wallet: "border-teal-200 bg-teal-50 text-teal-800",
   };
   return {
-    label: ORDER_STATUS_LABELS[normalized] ?? fallbackLabel,
+    label: STATUS_DISPLAY_LABELS[normalized] ?? fallbackLabel,
     className: styles[normalized] ?? "border-zinc-200 bg-zinc-50 text-zinc-700",
   };
 }
@@ -876,6 +876,20 @@ const ORDER_STATUS_LABELS: Record<string, string> = {
   cancelled: "Cancel order",
 };
 
+const STATUS_DISPLAY_LABELS: Record<string, string> = {
+  initiated: "Initiated",
+  payment_pending: "Payment Pending",
+  payment_failed: "Payment Failed",
+  placed: "Placed",
+  confirmed: "Confirmed",
+  shipped: "Shipped",
+  out_for_delivery: "Out for Delivery",
+  delivered: "Delivered",
+  completed: "Completed",
+  cancelled: "Cancelled",
+  refunded_to_wallet: "Refunded to Wallet",
+};
+
 function nextOrderStatusOptions(current: string) {
   const normalized = current.trim().toLowerCase();
   const index = ORDER_FLOW.indexOf(normalized as (typeof ORDER_FLOW)[number]);
@@ -1011,6 +1025,10 @@ export default async function AdminPage({
   const productQuery = getFirstParam(resolvedSearchParams, "q").trim().toLowerCase();
   const txnQuery = getFirstParam(resolvedSearchParams, "q").trim().toLowerCase();
   const txnPeriod = getFirstParam(resolvedSearchParams, "period").trim();
+  const txnStatuses = getFirstParam(resolvedSearchParams, "status")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
   const periodRange = getDateRangeFromPeriod(txnPeriod);
   const dateFrom = periodRange?.from ?? "";
   const dateTo = periodRange?.to ?? "";
@@ -1089,10 +1107,15 @@ export default async function AdminPage({
 
     orderItems = ordersResult.documents
       .filter(
-        (document) =>
-          String(document.status ?? "").toLowerCase() !== "payment_cancelled" &&
-          matchesTransactionQuery(document, txnQuery) &&
-          withinDateRange(String(document.placedAt ?? document.$createdAt ?? ""), dateFrom, dateTo)
+        (document) => {
+          const docStatus = String(document.status ?? "").toLowerCase();
+          return (
+            docStatus !== "payment_cancelled" &&
+            matchesTransactionQuery(document, txnQuery) &&
+            withinDateRange(String(document.placedAt ?? document.$createdAt ?? ""), dateFrom, dateTo) &&
+            (txnStatuses.length === 0 || txnStatuses.includes(docStatus))
+          );
+        }
       )
       .map((document) => mapTransaction(document, "Order"))
       .sort((a, b) => toDateMs(b.createdAt) - toDateMs(a.createdAt));
@@ -1111,9 +1134,10 @@ export default async function AdminPage({
       .filter(
         (document) =>
           matchesTransactionQuery(document, txnQuery) &&
-          withinDateRange(String(document.$createdAt ?? document.paidAt ?? ""), dateFrom, dateTo)
+          withinDateRange(String(document.paidAt ?? document.$createdAt ?? ""), dateFrom, dateTo)
       )
-      .map((document) => mapTransaction(document, "Payment"));
+      .map((document) => mapTransaction(document, "Payment"))
+      .sort((a, b) => toDateMs(b.createdAt) - toDateMs(a.createdAt));
     paymentStatusSummary = {
       paid: paidCount,
       failed: failedCount,
@@ -1432,7 +1456,7 @@ export default async function AdminPage({
           <h2 className="text-xl font-semibold sm:text-2xl">Orders</h2>
           <p className="mt-1 text-sm text-primary/74">Operational orders stream with wallet-first refund actions.</p>
 
-          <AdminTransactionFilters tab="orders" q={txnQuery} period={txnPeriod} />
+          <AdminTransactionFilters tab="orders" q={txnQuery} period={txnPeriod} statuses={txnStatuses} />
 
           <div className="mt-4">
             <div className="mt-2 flex flex-col gap-2">
