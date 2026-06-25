@@ -37,15 +37,24 @@ export async function GET(request: Request) {
       return NextResponse.json({ sent: 0 });
     }
 
-    // Collect unique userIds that have carts
-    const userIdToCartCount = new Map<string, number>();
+    // Group carts by user, tracking each doc id and when (if ever) a reminder was sent.
+    type CartRef = { docId: string; sentAt: string };
+    const userIdToCarts = new Map<string, CartRef[]>();
     for (const doc of carts.documents) {
-      const uid = String((doc as Record<string, unknown>).userId ?? "");
-      if (uid) userIdToCartCount.set(uid, (userIdToCartCount.get(uid) ?? 0) + 1);
+      const d = doc as Record<string, unknown>;
+      const uid = String(d.userId ?? "");
+      if (!uid) continue;
+      const list = userIdToCarts.get(uid) ?? [];
+      list.push({ docId: String(doc.$id), sentAt: String(d.abandonedCartSentAt ?? "") });
+      userIdToCarts.set(uid, list);
+    }
+
+    const userIds = Array.from(userIdToCarts.keys());
+    if (userIds.length === 0) {
+      return NextResponse.json({ sent: 0 });
     }
 
     // Filter out users who already placed an order in the last 72h
-    const userIds = Array.from(userIdToCartCount.keys());
     const recentOrders = await databases.listDocuments(databaseId, ORDERS_COL, [
       Query.equal("userId", userIds),
       Query.greaterThanEqual("$createdAt", cutoffStart),
@@ -53,9 +62,15 @@ export async function GET(request: Request) {
     ]);
     const usersWithOrders = new Set(recentOrders.documents.map((d) => String((d as Record<string, unknown>).userId ?? "")));
 
+    const nowIso = now.toISOString();
     let sent = 0;
-    for (const [userId, itemCount] of userIdToCartCount) {
+    for (const [userId, cartRefs] of userIdToCarts) {
       if (usersWithOrders.has(userId)) continue;
+
+      // Dedup: skip if a reminder was already sent for this abandonment cycle
+      // (within the 72h window). Prevents re-emailing the same cart on each daily run.
+      const alreadyReminded = cartRefs.some((c) => c.sentAt && c.sentAt >= cutoffStart);
+      if (alreadyReminded) continue;
 
       // Get user email from users collection
       try {
@@ -64,7 +79,17 @@ export async function GET(request: Request) {
         const name = String((userDoc as Record<string, unknown>).fullName ?? (userDoc as Record<string, unknown>).name ?? "");
         if (!email) continue;
 
-        await sendAbandonedCartEmail(email, { customerName: name, itemCount });
+        await sendAbandonedCartEmail(email, { customerName: name, itemCount: cartRefs.length });
+
+        // Stamp every cart doc for this user so the next daily run skips them.
+        await Promise.all(
+          cartRefs.map((c) =>
+            databases
+              .updateDocument(databaseId, CARTS_COL, c.docId, { abandonedCartSentAt: nowIso })
+              .catch(() => undefined),
+          ),
+        );
+
         sent++;
       } catch {
         // User doc not found or email missing — skip

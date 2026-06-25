@@ -10,10 +10,12 @@ import { CloudinaryImage } from "@/app/components/cloudinary-image";
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
 import { useAuth } from "@/app/components/auth-provider";
 import type { ProductRecord } from "@/lib/appwrite/products";
+import { SizeColorPickerModal } from "@/app/components/size-color-picker-modal";
 import {
   readCartItemSelections,
   readCartItems,
   removeCartItemSelection,
+  writeCartItemSelection,
   writeCartItemSelections,
   writeCartItems,
   type CartItemSelectionsMap,
@@ -328,6 +330,7 @@ export function CartPageClient() {
   const { user, isLoading, isAuthenticated, createAuthJwt } = useAuth();
   const [cartItems, setCartItems] = useState<CartItemsMap>({});
   const [cartSelections, setCartSelections] = useState<CartItemSelectionsMap>({});
+  const [pickerProduct, setPickerProduct] = useState<ProductRecord | null>(null);
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [hasCompletedCatalogSync, setHasCompletedCatalogSync] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -562,7 +565,7 @@ export function CartPageClient() {
 
       try {
         const jwt = await createAuthJwt();
-        const cloudCart = await readUserCartMap(jwt, user.$id);
+        const { items: cloudCart, selections: cloudSelections } = await readUserCartMap(jwt, user.$id);
         if (!alive || Object.keys(cloudCart).length === 0) {
           return;
         }
@@ -570,6 +573,13 @@ export function CartPageClient() {
         const merged = { ...cloudCart, ...readCartItems() };
         writeCartItems(merged);
         setCartItems(merged);
+
+        // Restore size/color from the cloud for items whose local selection was lost
+        // (e.g. localStorage cleared or a different device). Local picks take priority.
+        const localSelections = readCartItemSelections();
+        const mergedSelections = { ...cloudSelections, ...localSelections };
+        writeCartItemSelections(mergedSelections);
+        setCartSelections(mergedSelections);
       } catch {
         // Local cart remains source of truth on temporary sync failure.
       }
@@ -685,11 +695,31 @@ export function CartPageClient() {
 
     try {
       const jwt = await createAuthJwt();
-      await upsertUserCartMap(jwt, user.$id, nextItems);
+      await upsertUserCartMap(jwt, user.$id, nextItems, readCartItemSelections());
     } catch {
       // Keep local updates responsive if cloud write fails.
     }
   };
+
+  const applyCartSelection = (product: ProductRecord, size: string, color: string) => {
+    writeCartItemSelection(product.id, { size, color });
+    const next = { ...cartSelections, [product.id]: { ...(size ? { size } : {}), ...(color ? { color } : {}) } };
+    setCartSelections(next);
+    if (isAuthenticated && user?.$id) {
+      void (async () => {
+        try {
+          const jwt = await createAuthJwt();
+          await upsertUserCartMap(jwt, user.$id, cartItems, next);
+        } catch {
+          // Selection is persisted locally; cloud will sync on next change.
+        }
+      })();
+    }
+  };
+
+  // A cart line needs a picker when the product offers sizes but none is chosen yet.
+  const findLineNeedingSelection = () =>
+    lines.find((line) => line.product.sizeOptions.length > 0 && !cartSelections[line.product.id]?.size)?.product ?? null;
 
   const updateQuantity = async (productId: string, quantity: number) => {
     const next = { ...cartItems };
@@ -773,6 +803,15 @@ export function CartPageClient() {
     if (!isAuthenticated) {
       setIsAuthModalOpen(true);
       toast.info("Sign in to continue with secure checkout.");
+      return;
+    }
+
+    // Safety net: never place an order missing a required size (e.g. selection lost
+    // after localStorage was cleared, or item added before this feature existed).
+    const productNeedingSelection = findLineNeedingSelection();
+    if (productNeedingSelection) {
+      toast.error(`Please choose a size for "${productNeedingSelection.name}".`);
+      setPickerProduct(productNeedingSelection);
       return;
     }
 
@@ -1028,6 +1067,18 @@ export function CartPageClient() {
 
   return (
     <>
+      {pickerProduct !== null && (
+        <SizeColorPickerModal
+          product={pickerProduct}
+          actionLabel="Save Selection"
+          onConfirm={({ size, color }) => {
+            const p = pickerProduct;
+            setPickerProduct(null);
+            applyCartSelection(p, size, color);
+          }}
+          onClose={() => setPickerProduct(null)}
+        />
+      )}
       {/* Payment processing overlay — blocks all interactions during server-side verification */}
       {isProcessingCheckout && (
         <div className="fixed inset-0 z-[98] flex flex-col items-center justify-center bg-paper/95 backdrop-blur-sm">
@@ -1101,19 +1152,47 @@ export function CartPageClient() {
                         <p className="mt-1 text-xs uppercase tracking-[0.18em] text-primary/65">
                           {line.product.categoryValue} • {line.product.subCategoryValue}
                         </p>
-                        {cartSelections[line.product.id]?.size || cartSelections[line.product.id]?.color ? (
-                          <p className="mt-2 text-[0.62rem] font-semibold uppercase tracking-[0.13em] text-primary/60">
-                            {cartSelections[line.product.id]?.size
-                              ? `Size: ${cartSelections[line.product.id]?.size}`
-                              : ""}
-                            {cartSelections[line.product.id]?.size && cartSelections[line.product.id]?.color
-                              ? "  •  "
-                              : ""}
-                            {cartSelections[line.product.id]?.color
-                              ? `Color: ${cartSelections[line.product.id]?.color}`
-                              : ""}
-                          </p>
-                        ) : null}
+                        {(() => {
+                          const sel = cartSelections[line.product.id];
+                          const hasOptions = line.product.sizeOptions.length > 0 || line.product.colorOptions.length > 0;
+                          const needsSize = line.product.sizeOptions.length > 0 && !sel?.size;
+
+                          if (needsSize) {
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => setPickerProduct(line.product)}
+                                className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-amber-400 bg-amber-50 px-2.5 py-1 text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-amber-700 transition hover:bg-amber-100"
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                Select size
+                              </button>
+                            );
+                          }
+
+                          if (sel?.size || sel?.color) {
+                            return (
+                              <div className="mt-2 flex items-center gap-2">
+                                <p className="text-[0.62rem] font-semibold uppercase tracking-[0.13em] text-primary/60">
+                                  {sel?.size ? `Size: ${sel.size}` : ""}
+                                  {sel?.size && sel?.color ? "  •  " : ""}
+                                  {sel?.color ? `Color: ${sel.color}` : ""}
+                                </p>
+                                {hasOptions ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setPickerProduct(line.product)}
+                                    className="text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-primary/45 underline underline-offset-2 transition hover:text-primary/70"
+                                  >
+                                    Change
+                                  </button>
+                                ) : null}
+                              </div>
+                            );
+                          }
+
+                          return null;
+                        })()}
 
                         <div className="mt-3 flex items-baseline gap-2">
                           <span className="text-base font-semibold">₹{sellingPrice.toLocaleString("en-IN")}</span>

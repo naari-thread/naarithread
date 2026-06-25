@@ -22,7 +22,7 @@ export function SizeColorPickerModal({ product, actionLabel = "Confirm", onConfi
   const canConfirm = !hasSizes || selectedSize !== "";
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center px-4 pb-4 sm:pb-0">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
       <div
         className="absolute inset-0 bg-primary/25 backdrop-blur-sm"
         onClick={onClose}

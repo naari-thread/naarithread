@@ -15,6 +15,7 @@ import { upsertUserCartMap } from "@/lib/appwrite/shop-sync";
 import {
   type CartItemsMap,
   readCartItems,
+  readCartItemSelections,
   writeCartItemSelection,
   writeCartItems,
   subscribeToCartChanges,
@@ -642,7 +643,7 @@ export function ProductDetailsClient({
 
     try {
       const jwt = await createAuthJwt();
-      await upsertUserCartMap(jwt, user.$id, next);
+      await upsertUserCartMap(jwt, user.$id, next, readCartItemSelections());
     } catch {
       // Keep local add-to-cart experience instant even if cloud sync fails.
     }

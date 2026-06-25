@@ -27,8 +27,8 @@ import { toast } from "sonner";
 import { appwritePublicConfig, hasPublicAuthConfig } from "@/lib/appwrite/constants";
 import { getFirebaseAuth } from "@/lib/firebase/config";
 import { getOrCreateUserProfile } from "@/lib/appwrite/profiles";
-import { readCartItems, writeCartItems } from "@/lib/cart-state";
-import { readWishlistItems, writeWishlistItems } from "@/lib/wishlist-state";
+import { readCartItems, readCartItemSelections, writeCartItems, writeCartItemSelection } from "@/lib/cart-state";
+import { readWishlistItems, readWishlistItemSelections, writeWishlistItems, writeWishlistItemSelection } from "@/lib/wishlist-state";
 import { mergeLocalAndRemoteShopState } from "@/lib/appwrite/shop-sync";
 
 export type AuthUser = {
@@ -189,12 +189,20 @@ export function AuthProvider({ children }: PropsWithChildren) {
           userId: user.$id,
           localCart: readCartItems(),
           localWishlist: readWishlistItems(),
+          localCartSelections: readCartItemSelections(),
+          localWishlistSelections: readWishlistItemSelections(),
         });
 
         if (!alive) return;
 
         writeCartItems(merged.cart);
         writeWishlistItems(merged.wishlist);
+        for (const [productId, selection] of Object.entries(merged.cartSelections)) {
+          writeCartItemSelection(productId, selection);
+        }
+        for (const [productId, selection] of Object.entries(merged.wishlistSelections)) {
+          writeWishlistItemSelection(productId, selection);
+        }
         setLastSyncedUserId(user.$id);
       } catch {
         if (alive) setLastSyncedUserId(user.$id);

@@ -10,7 +10,7 @@ import { CloudinaryImage } from "@/app/components/cloudinary-image";
 import { SizeColorPickerModal } from "@/app/components/size-color-picker-modal";
 import type { ProductRecord } from "@/lib/appwrite/products";
 import { readWishlistItems, readWishlistItemSelections, toggleWishlistItem, writeWishlistItemSelection, writeWishlistItems, type WishlistItemsMap, type WishlistItemSelectionsMap } from "@/lib/wishlist-state";
-import { readCartItems, writeCartItemSelection, writeCartItems } from "@/lib/cart-state";
+import { readCartItems, readCartItemSelections, writeCartItemSelection, writeCartItems } from "@/lib/cart-state";
 import { showActionToast } from "@/lib/action-toast";
 import { readUserWishlistMap, upsertUserWishlistMap, upsertUserCartMap } from "@/lib/appwrite/shop-sync";
 import {
@@ -86,7 +86,7 @@ export function WishlistPageClient() {
 
       try {
         const jwt = await createAuthJwt();
-        const cloudWishlist = await readUserWishlistMap(jwt, user.$id);
+        const { items: cloudWishlist, selections: cloudSelections } = await readUserWishlistMap(jwt, user.$id);
         if (!alive || Object.keys(cloudWishlist).length === 0) {
           return;
         }
@@ -94,6 +94,14 @@ export function WishlistPageClient() {
         const merged = { ...cloudWishlist, ...readWishlistItems() };
         writeWishlistItems(merged);
         setWishlistItems(merged);
+
+        // Restore size/color saved in the cloud when the local copy was lost.
+        const localSelections = readWishlistItemSelections();
+        const mergedSelections = { ...cloudSelections, ...localSelections };
+        for (const [productId, sel] of Object.entries(mergedSelections)) {
+          writeWishlistItemSelection(productId, sel);
+        }
+        setWishlistSelections(readWishlistItemSelections());
       } catch {
         // Keep local wishlist available if cloud read fails.
       }
@@ -147,7 +155,7 @@ export function WishlistPageClient() {
 
     try {
       const jwt = await createAuthJwt();
-      await upsertUserWishlistMap(jwt, user.$id, next);
+      await upsertUserWishlistMap(jwt, user.$id, next, readWishlistItemSelections());
     } catch {
       // Local wishlist remains source of truth on temporary failures.
     }
@@ -183,7 +191,7 @@ export function WishlistPageClient() {
     if (isAuthenticated && user?.$id) {
       try {
         const jwt = await createAuthJwt();
-        await upsertUserCartMap(jwt, user.$id, nextCart);
+        await upsertUserCartMap(jwt, user.$id, nextCart, readCartItemSelections());
       } catch {
         // sync next time
       }
