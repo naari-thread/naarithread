@@ -38,6 +38,18 @@ const ZONE_E_STATES = new Set([
   "lakshadweep",
 ]);
 
+const METRO_CITIES = new Set([
+  "mumbai", "thane", "navi mumbai", "delhi", "new delhi", "gurugram", "gurgaon",
+  "noida", "faridabad", "ghaziabad", "kolkata", "howrah", "chennai",
+  "bangalore", "bengaluru", "hyderabad", "secunderabad", "ahmedabad", "pune",
+  "surat", "jaipur", "lucknow", "kanpur", "nagpur", "indore", "patna",
+  "vadodara", "coimbatore", "visakhapatnam", "vizag", "bhubaneswar",
+]);
+
+function detectCityType(city: string): "metro" | "non-metro" {
+  return METRO_CITIES.has(city.toLowerCase().trim()) ? "metro" : "non-metro";
+}
+
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -362,6 +374,9 @@ export function CartPageClient() {
   const [isMobileCheckoutOpen, setIsMobileCheckoutOpen] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
   const [useWalletBalance, setUseWalletBalance] = useState(false);
+  const [wantExpressDelivery, setWantExpressDelivery] = useState(false);
+  const [cityType, setCityType] = useState<"metro" | "non-metro" | null>(null);
+  const [useCod, setUseCod] = useState(false);
 
   const handleProceedToBuyRef = useRef<(() => Promise<void>) | null>(null);
 
@@ -456,6 +471,8 @@ export function CartPageClient() {
     if (!/^\d{6}$/.test(code)) {
       setPostalLookupFailed(false);
       setDeliveryEstimate(null);
+      setCityType(null);
+      setWantExpressDelivery(false);
       return;
     }
 
@@ -463,6 +480,7 @@ export function CartPageClient() {
     setPostalLookupPending(true);
     setPostalLookupFailed(false);
     setDeliveryEstimate(null);
+    setCityType(null);
 
     const timer = setTimeout(async () => {
       try {
@@ -479,6 +497,7 @@ export function CartPageClient() {
         if (postalData[0]?.Status === "Success" && postalData[0]?.PostOffice?.length) {
           const po = postalData[0].PostOffice[0];
           detectedState = po.State;
+          setCityType(detectCityType(po.District));
           setShippingAddress((prev) => ({
             ...prev,
             city: prev.city || po.District,
@@ -680,10 +699,50 @@ export function CartPageClient() {
   const originalTotal = lines.reduce((total, line) => total + line.product.originalPrice * line.quantity, 0);
   const productDiscount = Math.max(0, originalTotal - subtotal);
   const delivery = lines.length === 0 || subtotal > 2999 ? 0 : 99;
+  const expressDeliveryCharge = wantExpressDelivery && cityType !== null ? (cityType === "metro" ? 99 : 149) : 0;
   const couponDiscount = Math.min(appliedCoupon?.discountAmount ?? 0, subtotal);
-  const preTotalBeforeWallet = Math.max(0, subtotal - couponDiscount) + delivery;
+  const preTotalBeforeWallet = Math.max(0, subtotal - couponDiscount) + delivery + expressDeliveryCharge;
   const walletDiscount = useWalletBalance ? Math.min(walletBalance, preTotalBeforeWallet) : 0;
-  const total = Math.max(0, preTotalBeforeWallet - walletDiscount);
+  const preCodTotal = Math.max(0, preTotalBeforeWallet - walletDiscount);
+  const isCodEligible = lines.length > 0 && preCodTotal <= 5000;
+  const codCharge = useCod && isCodEligible ? 49 : 0;
+  const total = preCodTotal + codCharge;
+
+  const waMessage = useMemo(() => {
+    if (!useCod || !isCodEligible || lines.length === 0) return "";
+    const WHATSAPP_RAW = "918487849852";
+    const itemsList = lines
+      .map((l) => {
+        const price = l.product.discountPrice > 0 ? l.product.discountPrice : l.product.originalPrice;
+        const sel = cartSelections[l.product.id];
+        const opts = [sel?.size ? `Size: ${sel.size}` : "", sel?.color ? `Color: ${sel.color}` : ""].filter(Boolean).join(", ");
+        return `• ${l.product.name}${opts ? ` (${opts})` : ""} x${l.quantity} — ₹${(price * l.quantity).toLocaleString("en-IN")}`;
+      })
+      .join("\n");
+    const addrParts = [
+      shippingAddress.fullName,
+      shippingAddress.houseNo,
+      shippingAddress.locality,
+      shippingAddress.landmark,
+      shippingAddress.city,
+      shippingAddress.state,
+      shippingAddress.postalCode,
+    ]
+      .filter(Boolean)
+      .join(", ");
+    const msg = [
+      "Hi NaariThread! 🛍️ I'd like to place a COD order.",
+      "",
+      `*Items:*\n${itemsList}`,
+      "",
+      `*Order Total:* ₹${total.toLocaleString("en-IN")} (incl. ₹49 COD charge)`,
+      "",
+      `*Deliver to:*\n${addrParts}\nPhone: ${shippingAddress.phone}`,
+      "",
+      "Please confirm my order. Thank you!",
+    ].join("\n");
+    return `https://wa.me/${WHATSAPP_RAW}?text=${encodeURIComponent(msg)}`;
+  }, [useCod, isCodEligible, lines, cartSelections, shippingAddress, total]);
 
   const persistCart = async (nextItems: CartItemsMap) => {
     setCartItems(nextItems);
@@ -796,7 +855,7 @@ export function CartPageClient() {
   };
 
   const handleProceedToBuy = async () => {
-    if (lines.length === 0 || isProcessingCheckout) {
+    if (lines.length === 0 || isProcessingCheckout || (useCod && isCodEligible)) {
       return;
     }
 
@@ -1380,6 +1439,27 @@ export function CartPageClient() {
                       </div>
                     </div>
                   )}
+                  {/* Express delivery option — auto-detected from pincode */}
+                  {cityType && !postalLookupPending && (
+                    <label className="col-span-2 flex cursor-pointer items-center gap-3 rounded-xl border border-primary/14 bg-paper px-3.5 py-2.5">
+                      <input
+                        type="checkbox"
+                        checked={wantExpressDelivery}
+                        onChange={(e) => setWantExpressDelivery(e.target.checked)}
+                        className="h-4 w-4 shrink-0 rounded border-primary/30 accent-primary"
+                        aria-label="Express delivery"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-primary">Express Delivery</p>
+                        <p className="text-[0.68rem] text-primary/55">
+                          {cityType === "metro" ? "Metro city detected" : "Non-metro city detected"}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-xs font-semibold text-primary">
+                        +{formatPrice(cityType === "metro" ? 99 : 149)}
+                      </span>
+                    </label>
+                  )}
                   {/* City | State */}
                   <input
                     aria-label="Shipping city"
@@ -1533,18 +1613,68 @@ export function CartPageClient() {
                   <span className="text-primary/75">Delivery</span>
                   <span>{delivery === 0 ? "Free" : formatPrice(delivery)}</span>
                 </div>
+                {expressDeliveryCharge > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-primary/75">Express Delivery</span>
+                    <span>+{formatPrice(expressDeliveryCharge)}</span>
+                  </div>
+                )}
                 {walletDiscount > 0 ? (
                   <div className="flex items-center justify-between">
                     <span className="text-primary/75">Refund Wallet</span>
                     <span className="text-blue-700">- {formatPrice(walletDiscount)}</span>
                   </div>
                 ) : null}
+                {codCharge > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-primary/75">COD Handling</span>
+                    <span>+{formatPrice(codCharge)}</span>
+                  </div>
+                )}
               </div>
 
               <div className="mt-4 flex items-center justify-between border-t border-primary/12 pt-4">
                 <span className="text-base font-semibold">Total</span>
                 <span className="text-xl font-semibold">{formatPrice(total)}</span>
               </div>
+
+              {/* COD section */}
+              {lines.length > 0 && (
+                <div className="mt-4">
+                  {!isCodEligible ? (
+                    <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-3">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 h-4 w-4 shrink-0 text-red-600" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                      <div>
+                        <p className="text-xs font-semibold text-red-800">COD not available</p>
+                        <p className="text-[0.68rem] text-red-700/80">Cash on Delivery is available only for orders up to ₹5,000.</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-start gap-2.5 rounded-xl border border-green-200 bg-green-50 px-3.5 py-3">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 h-4 w-4 shrink-0 text-green-600" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 15 10"/></svg>
+                        <div>
+                          <p className="text-xs font-semibold text-green-800">COD available for this order</p>
+                          <p className="text-[0.68rem] text-green-700/80">A ₹49 handling charge applies. Manual WhatsApp confirmation required within 24 hours.</p>
+                        </div>
+                      </div>
+                      <label className="mt-2 flex cursor-pointer items-start gap-3 rounded-xl border border-primary/14 bg-paper px-3.5 py-3">
+                        <input
+                          type="checkbox"
+                          checked={useCod}
+                          onChange={(e) => setUseCod(e.target.checked)}
+                          className="mt-0.5 h-4 w-4 shrink-0 rounded border-primary/30 accent-primary"
+                          aria-label="Pay on delivery (COD)"
+                        />
+                        <div>
+                          <p className="text-xs font-semibold text-primary">Pay on Delivery (COD)</p>
+                          <p className="text-[0.68rem] text-primary/55">+₹49 handling charge · Confirm via WhatsApp</p>
+                        </div>
+                      </label>
+                    </>
+                  )}
+                </div>
+              )}
 
               {/* Checkout state banners */}
               <div className="mt-4">
@@ -1565,15 +1695,28 @@ export function CartPageClient() {
                 ) : null}
               </div>
 
-              <button
-                type="button"
-                aria-label="Proceed to buy"
-                onClick={() => void handleProceedToBuy()}
-                disabled={lines.length === 0 || isProcessingCheckout}
-                className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-xl border border-primary bg-primary px-4 text-xs font-semibold uppercase tracking-[0.2em] text-secondary transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isProcessingCheckout ? "Processing..." : total === 0 ? "Place Order (Free)" : "Proceed to Buy"}
-              </button>
+              {useCod && isCodEligible ? (
+                <a
+                  href={waMessage}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Contact on WhatsApp to confirm COD order"
+                  className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[#1ebe5d]"
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4 shrink-0" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                  Contact on WhatsApp for COD
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  aria-label="Proceed to buy"
+                  onClick={() => void handleProceedToBuy()}
+                  disabled={lines.length === 0 || isProcessingCheckout}
+                  className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-xl border border-primary bg-primary px-4 text-xs font-semibold uppercase tracking-[0.2em] text-secondary transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isProcessingCheckout ? "Processing..." : total === 0 ? "Place Order (Free)" : "Proceed to Buy"}
+                </button>
+              )}
 
               {delivery > 0 ? (
                 <p className="mt-3 text-center text-[0.67rem] text-primary/50">
@@ -1732,6 +1875,26 @@ export function CartPageClient() {
                         </div>
                       </div>
                     ) : null}
+                    {cityType && !postalLookupPending ? (
+                      <label className="col-span-2 flex cursor-pointer items-center gap-3 rounded-xl border border-primary/14 bg-secondary px-3.5 py-2.5">
+                        <input
+                          type="checkbox"
+                          checked={wantExpressDelivery}
+                          onChange={(e) => setWantExpressDelivery(e.target.checked)}
+                          className="h-4 w-4 shrink-0 rounded border-primary/30 accent-primary"
+                          aria-label="Express delivery"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold text-primary">Express Delivery</p>
+                          <p className="text-[0.68rem] text-primary/55">
+                            {cityType === "metro" ? "Metro city detected" : "Non-metro city detected"}
+                          </p>
+                        </div>
+                        <span className="shrink-0 text-xs font-semibold text-primary">
+                          +{formatPrice(cityType === "metro" ? 99 : 149)}
+                        </span>
+                      </label>
+                    ) : null}
                     <input aria-label="Shipping city" placeholder="City" value={shippingAddress.city}
                       onChange={(e) => setShippingAddress((p) => ({ ...p, city: e.target.value }))}
                       className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45" />
@@ -1825,18 +1988,68 @@ export function CartPageClient() {
                     <span className="text-primary/75">Delivery</span>
                     <span>{delivery === 0 ? "Free" : formatPrice(delivery)}</span>
                   </div>
+                  {expressDeliveryCharge > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-primary/75">Express Delivery</span>
+                      <span>+{formatPrice(expressDeliveryCharge)}</span>
+                    </div>
+                  )}
                   {walletDiscount > 0 ? (
                     <div className="flex items-center justify-between">
                       <span className="text-primary/75">Refund Wallet</span>
                       <span className="text-blue-700">- {formatPrice(walletDiscount)}</span>
                     </div>
                   ) : null}
+                  {codCharge > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-primary/75">COD Handling</span>
+                      <span>+{formatPrice(codCharge)}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-4 flex items-center justify-between border-t border-primary/12 pt-4">
                   <span className="text-base font-semibold">Total</span>
                   <span className="text-xl font-semibold">{formatPrice(total)}</span>
                 </div>
+
+                {/* COD section */}
+                {lines.length > 0 && (
+                  <div className="mt-4">
+                    {!isCodEligible ? (
+                      <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-3">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 h-4 w-4 shrink-0 text-red-600" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                        <div>
+                          <p className="text-xs font-semibold text-red-800">COD not available</p>
+                          <p className="text-[0.68rem] text-red-700/80">Cash on Delivery is available only for orders up to ₹5,000.</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-start gap-2.5 rounded-xl border border-green-200 bg-green-50 px-3.5 py-3">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 h-4 w-4 shrink-0 text-green-600" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 15 10"/></svg>
+                          <div>
+                            <p className="text-xs font-semibold text-green-800">COD available for this order</p>
+                            <p className="text-[0.68rem] text-green-700/80">A ₹49 handling charge applies. WhatsApp confirmation required within 24 hours.</p>
+                          </div>
+                        </div>
+                        <label className="mt-2 flex cursor-pointer items-start gap-3 rounded-xl border border-primary/14 bg-paper px-3.5 py-3">
+                          <input
+                            type="checkbox"
+                            checked={useCod}
+                            onChange={(e) => setUseCod(e.target.checked)}
+                            className="mt-0.5 h-4 w-4 shrink-0 rounded border-primary/30 accent-primary"
+                            aria-label="Pay on delivery (COD)"
+                          />
+                          <div>
+                            <p className="text-xs font-semibold text-primary">Pay on Delivery (COD)</p>
+                            <p className="text-[0.68rem] text-primary/55">+₹49 handling charge · Confirm via WhatsApp</p>
+                          </div>
+                        </label>
+                      </>
+                    )}
+                  </div>
+                )}
 
                 {/* Checkout state banners */}
                 <div className="mt-4">
@@ -1854,15 +2067,28 @@ export function CartPageClient() {
                   ) : null}
                 </div>
 
-                <button
-                  type="button"
-                  aria-label="Proceed to buy"
-                  onClick={() => void handleProceedToBuy()}
-                  disabled={lines.length === 0 || isProcessingCheckout}
-                  className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-xl border border-primary bg-primary px-4 text-xs font-semibold uppercase tracking-[0.2em] text-secondary transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {isProcessingCheckout ? "Processing..." : total === 0 ? "Place Order (Free)" : "Proceed to Buy"}
-                </button>
+                {useCod && isCodEligible ? (
+                  <a
+                    href={waMessage}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Contact on WhatsApp to confirm COD order"
+                    className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[#1ebe5d]"
+                  >
+                    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4 shrink-0" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                    Contact on WhatsApp for COD
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    aria-label="Proceed to buy"
+                    onClick={() => void handleProceedToBuy()}
+                    disabled={lines.length === 0 || isProcessingCheckout}
+                    className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-xl border border-primary bg-primary px-4 text-xs font-semibold uppercase tracking-[0.2em] text-secondary transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isProcessingCheckout ? "Processing..." : total === 0 ? "Place Order (Free)" : "Proceed to Buy"}
+                  </button>
+                )}
 
                 {delivery > 0 ? (
                   <p className="mt-3 text-center text-[0.67rem] text-primary/50">Free delivery on orders above ₹2,999</p>
