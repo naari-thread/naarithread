@@ -28,9 +28,11 @@ import {
 } from "@/lib/product-catalog-cache";
 
 // ─── Delivery estimate helpers ────────────────────────────────────────────────
-const SHOP_LAT = 21.1702; // Surat, Gujarat (395002)
-const SHOP_LNG = 72.8311;
+// Origin: Surat, Gujarat. Delivery days are derived from the destination STATE
+// (returned by the India Post pincode API), so no slow second geocoding call is
+// needed — the estimate is instant and offline.
 
+// Far/remote states — checked before the table so any spelling variant maps here.
 const ZONE_E_STATES = new Set([
   "arunachal pradesh", "assam", "manipur", "meghalaya", "mizoram",
   "nagaland", "sikkim", "tripura", "jammu and kashmir", "ladakh",
@@ -50,28 +52,45 @@ function detectCityType(city: string): "metro" | "non-metro" {
   return METRO_CITIES.has(city.toLowerCase().trim()) ? "metro" : "non-metro";
 }
 
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
-    Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
+const DELIVERY_DAYS_BY_STATE: Record<string, string> = {
+  // Home zone
+  "gujarat": "1–2",
+  "dadra and nagar haveli": "1–2",
+  "daman and diu": "1–2",
+  "the dadra and nagar haveli and daman and diu": "1–2",
+  // West / central — adjacent
+  "maharashtra": "2–3",
+  "rajasthan": "2–3",
+  "madhya pradesh": "2–3",
+  "goa": "2–3",
+  // North / south-central
+  "delhi": "3–4",
+  "haryana": "3–4",
+  "punjab": "3–4",
+  "chandigarh": "3–4",
+  "uttar pradesh": "3–4",
+  "uttarakhand": "3–4",
+  "himachal pradesh": "3–4",
+  "chhattisgarh": "3–4",
+  "telangana": "3–4",
+  "karnataka": "3–4",
+  "jharkhand": "3–4",
+  "bihar": "3–4",
+  // South / east — far
+  "andhra pradesh": "4–5",
+  "tamil nadu": "4–5",
+  "kerala": "4–5",
+  "puducherry": "4–5",
+  "odisha": "4–5",
+  "west bengal": "4–5",
+};
 
-type DeliveryEstimate = { zone: string; days: string; km: number };
+type DeliveryEstimate = { days: string };
 
-function calcDeliveryEstimate(km: number, state: string): DeliveryEstimate {
-  if (ZONE_E_STATES.has(state.toLowerCase().trim())) {
-    return { zone: "E", days: "4–5", km };
-  }
-  if (km < 80) return { zone: "A", days: "1", km };
-  if (km <= 500) return { zone: "B", days: "1–2", km };
-  if (km <= 1400) return { zone: "C", days: "2–3", km };
-  if (km <= 2500) return { zone: "D", days: "3–4", km };
-  return { zone: "E", days: "4–5", km };
+function estimateDeliveryDays(state: string): string {
+  const normalized = state.toLowerCase().trim();
+  if (ZONE_E_STATES.has(normalized)) return "5–7";
+  return DELIVERY_DAYS_BY_STATE[normalized] ?? "4–6";
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -483,9 +502,15 @@ export function CartPageClient() {
     setCityType(null);
 
     const timer = setTimeout(async () => {
+      // Guard against a hung request — abort after 8s so the spinner never sticks.
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
       try {
-        // 1. India Post API — city/state autofill
-        const postalRes = await fetch(`https://api.postalpincode.in/pincode/${code}`);
+        // Single India Post lookup gives city, state and (via state) delivery days.
+        const postalRes = await fetch(`https://api.postalpincode.in/pincode/${code}`, {
+          signal: controller.signal,
+        });
         const postalData = (await postalRes.json()) as Array<{
           Status: string;
           PostOffice?: Array<{ District: string; State: string }>;
@@ -493,38 +518,22 @@ export function CartPageClient() {
 
         if (!alive) return;
 
-        let detectedState = "";
         if (postalData[0]?.Status === "Success" && postalData[0]?.PostOffice?.length) {
           const po = postalData[0].PostOffice[0];
-          detectedState = po.State;
           setCityType(detectCityType(po.District));
           setShippingAddress((prev) => ({
             ...prev,
             city: prev.city || po.District,
             state: prev.state || po.State,
           }));
+          setDeliveryEstimate({ days: estimateDeliveryDays(po.State) });
         } else {
-          if (alive) setPostalLookupFailed(true);
-        }
-
-        // 2. Nominatim geocoding — lat/lng for distance → zone estimate
-        try {
-          const geoRes = await fetch(
-            `https://nominatim.openstreetmap.org/search?postalcode=${code}&country=India&format=json&limit=1`,
-            { headers: { "User-Agent": "NaariThread/1.0 (naarithread@gmail.com)" } }
-          );
-          const geoData = (await geoRes.json()) as Array<{ lat: string; lon: string }>;
-          if (!alive) return;
-          if (geoData[0]) {
-            const km = haversineKm(SHOP_LAT, SHOP_LNG, parseFloat(geoData[0].lat), parseFloat(geoData[0].lon));
-            setDeliveryEstimate(calcDeliveryEstimate(Math.round(km), detectedState));
-          }
-        } catch {
-          // Geocoding failure is non-fatal — city/state already autofilled above
+          setPostalLookupFailed(true);
         }
       } catch {
         if (alive) setPostalLookupFailed(true);
       } finally {
+        clearTimeout(timeoutId);
         if (alive) setPostalLookupPending(false);
       }
     }, 600);

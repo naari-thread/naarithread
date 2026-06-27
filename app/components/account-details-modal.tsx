@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/components/auth-provider";
 import { showActionToast } from "@/lib/action-toast";
-import { readUserProfile, type UserProfileDocument, updateUserProfile } from "@/lib/appwrite/profiles";
+import { getOrCreateUserProfile, readUserProfile, type UserProfileDocument, updateUserProfile } from "@/lib/appwrite/profiles";
 
 type AddressFields = {
   houseNo: string;
@@ -66,7 +66,7 @@ type AccountDetailsModalProps = {
 };
 
 export function AccountDetailsModal({ onClose }: AccountDetailsModalProps) {
-  const { user } = useAuth();
+  const { user, isAdmin, createAuthJwt } = useAuth();
   const [profile, setProfile] = useState<UserProfileDocument | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -84,7 +84,15 @@ export function AccountDetailsModal({ onClose }: AccountDetailsModalProps) {
 
     const fetchProfile = async (): Promise<void> => {
       try {
-        const doc = await readUserProfile(user.$id);
+        let doc = await readUserProfile(user.$id);
+
+        // On a fresh sign-in the profile row is created in the background and may
+        // not exist yet (first-login race). Ensure it exists rather than failing.
+        if (!doc) {
+          const jwt = await createAuthJwt().catch(() => undefined);
+          doc = await getOrCreateUserProfile({ user, isAdmin, jwt });
+        }
+
         if (!doc) throw new Error("Profile not found");
         setProfile(doc);
         const initial: FormData = {
@@ -95,7 +103,8 @@ export function AccountDetailsModal({ onClose }: AccountDetailsModalProps) {
         setFormData(initial);
         setSavedData(initial);
         setError(null);
-      } catch {
+      } catch (err) {
+        console.error("[account] profile load failed", err);
         setError("Failed to load profile");
       } finally {
         setIsLoading(false);
@@ -103,7 +112,7 @@ export function AccountDetailsModal({ onClose }: AccountDetailsModalProps) {
     };
 
     void fetchProfile();
-  }, [user]);
+  }, [user, isAdmin, createAuthJwt]);
 
   const hasChanges = useMemo(() => {
     if (!savedData) return false;
