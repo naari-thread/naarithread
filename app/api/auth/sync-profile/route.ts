@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { ID, Permission, Query, Role } from "node-appwrite";
 
-import { createDatabasesWithApiKey, getDatabaseId, getUserFromJwt, isAllowedAdminEmail } from "@/lib/appwrite/admin-server";
+import { getUserFromJwt } from "@/lib/appwrite/admin-server";
+import { resolveUserProfile } from "@/lib/appwrite/user-profile-server";
 
 export const runtime = "nodejs";
 
@@ -14,6 +14,10 @@ function getBearerToken(request: Request): string {
   return header.slice(7).trim();
 }
 
+/**
+ * Called on every sign-in. Ensures the canonical users/{uid} profile exists and
+ * folds away any legacy/duplicate rows for this user (see resolveUserProfile).
+ */
 export async function POST(request: Request) {
   const jwt = getBearerToken(request);
   if (!jwt) {
@@ -23,95 +27,10 @@ export async function POST(request: Request) {
 
   try {
     const user = await getUserFromJwt(jwt);
-    const databases = createDatabasesWithApiKey();
-    const databaseId = getDatabaseId();
-    const usersCollectionId = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID ?? "users";
-    const isAdmin = isAllowedAdminEmail(user.email);
-
-    console.info("[auth-profile-api] sync start", {
-      userId: user.$id,
-      email: user.email,
-      databaseId,
-      usersCollectionId,
-    });
-
-    const [byUserId, byEmail] = await Promise.all([
-      databases.listDocuments(databaseId, usersCollectionId, [Query.equal("userId", user.$id), Query.limit(1)]),
-      databases.listDocuments(databaseId, usersCollectionId, [Query.equal("email", user.email), Query.limit(1)]),
-    ]);
-
-    const existing = byUserId.documents[0] ?? byEmail.documents[0] ?? null;
-
-    if (existing) {
-      console.info("[auth-profile-api] existing profile found, updating", {
-        documentId: existing.$id,
-        userId: user.$id,
-      });
-
-      const targetProfileId = existing.$id === user.$id ? existing.$id : user.$id;
-      const updated = existing.$id === user.$id
-        ? await databases.updateDocument(databaseId, usersCollectionId, targetProfileId, {
-            userId: user.$id,
-            fullName: user.name ?? "",
-            email: user.email,
-            isAdmin,
-          })
-        : await databases.createDocument(databaseId, usersCollectionId, targetProfileId, {
-            userId: user.$id,
-            fullName: user.name ?? String(existing.fullName ?? ""),
-            email: user.email,
-            phone: String(existing.phone ?? ""),
-            address: String(existing.address ?? ""),
-            isAdmin,
-          });
-
-      await databases.updateDocument(databaseId, usersCollectionId, existing.$id, {
-        userId: user.$id,
-        fullName: user.name ?? "",
-        email: user.email,
-        isAdmin,
-      }).catch(() => null);
-
-      console.info("[auth-profile-api] update success", {
-        profileId: updated.$id,
-      });
-
-      return NextResponse.json({ ok: true, profileId: updated.$id });
-    }
-
-    console.info("[auth-profile-api] no profile found, creating", {
-      documentId: user.$id,
-      userId: user.$id,
-    });
-
-    const created = await databases.createDocument(
-      databaseId,
-      usersCollectionId,
-      user.$id || ID.unique(),
-      {
-        userId: user.$id,
-        fullName: user.name ?? "",
-        email: user.email,
-        phone: "",
-        address: "",
-        isAdmin,
-      },
-      [
-        Permission.read(Role.user(user.$id)),
-        Permission.update(Role.user(user.$id)),
-        Permission.delete(Role.user(user.$id)),
-      ]
-    );
-
-    console.info("[auth-profile-api] create success", {
-      profileId: created.$id,
-    });
-
-    return NextResponse.json({ ok: true, profileId: created.$id }, { status: 201 });
+    const profile = await resolveUserProfile(user);
+    return NextResponse.json({ ok: true, profileId: profile.$id });
   } catch (error) {
-    console.error("[auth-profile-api] sync failed", {
-      error,
-    });
+    console.error("[auth-profile-api] sync failed", { error });
     return NextResponse.json(
       {
         error: "Failed to sync user profile.",
