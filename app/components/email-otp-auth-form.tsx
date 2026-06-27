@@ -1,7 +1,7 @@
 "use client";
 
 import { toast } from "sonner";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/app/components/auth-provider";
 
@@ -16,13 +16,22 @@ type AuthAction = "send" | "resend" | null;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function EmailOtpAuthForm({ title, description, onSuccess }: EmailOtpAuthFormProps) {
-  const { isConfigured, sendEmailOtp, signInWithGoogle, normalizeError } = useAuth();
+  const { isConfigured, isAuthenticated, sendEmailOtp, signInWithGoogle, normalizeError } = useAuth();
 
   const [email, setEmail] = useState("");
   const [sentEmail, setSentEmail] = useState("");
   const [errorText, setErrorText] = useState("");
   const [activeAction, setActiveAction] = useState<AuthAction>(null);
   const [isSigningInWithGoogle, setIsSigningInWithGoogle] = useState(false);
+
+  // Cross-device: once the user confirms the link on any device, the polling in
+  // the auth provider signs this device in — close the modal when that happens.
+  useEffect(() => {
+    if (sentEmail && isAuthenticated) {
+      toast.success("Signed in", { description: "Welcome to NaariThread." });
+      onSuccess?.();
+    }
+  }, [isAuthenticated, sentEmail, onSuccess]);
 
   const canSendLink = useMemo(() => emailPattern.test(email.trim().toLowerCase()), [email]);
   const isSendingLink = activeAction === "send";
@@ -60,13 +69,6 @@ export function EmailOtpAuthForm({ title, description, onSuccess }: EmailOtpAuth
     } finally {
       setActiveAction(null);
     }
-  };
-
-  const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const submittedEmail = String(formData.get("email") ?? "");
-    await requestEmailLink("send", submittedEmail);
   };
 
   const handleGoogleSignIn = async (): Promise<void> => {
@@ -179,11 +181,15 @@ export function EmailOtpAuthForm({ title, description, onSuccess }: EmailOtpAuth
 
         {sentEmail ? (
           <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-            <p className="text-xs font-semibold text-emerald-900">
-              Link sent to <span className="font-bold">{sentEmail}</span>
-            </p>
-            <p className="mt-1 text-xs leading-relaxed text-emerald-800/80">
-              Open the secure sign-in link from your inbox. Check the <span className="font-semibold">Spam folder</span> in your mailbox if you don't see it.
+            <div className="flex items-center gap-2">
+              <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-emerald-300 border-t-emerald-600" aria-hidden="true" />
+              <p className="text-xs font-semibold text-emerald-900">
+                Waiting for confirmation — link sent to <span className="font-bold">{sentEmail}</span>
+              </p>
+            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-emerald-800/80">
+              Open the link on <span className="font-semibold">any device — even your phone</span>. Keep this tab open;
+              it will sign you in automatically once you confirm. Check your <span className="font-semibold">Spam folder</span> if it&apos;s not in your inbox.
             </p>
           </div>
         ) : null}

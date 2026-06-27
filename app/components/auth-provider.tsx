@@ -13,11 +13,10 @@ import {
 import {
   GoogleAuthProvider,
   browserLocalPersistence,
-  isSignInWithEmailLink,
   onAuthStateChanged,
   sendSignInLinkToEmail,
   setPersistence,
-  signInWithEmailLink,
+  signInWithCustomToken,
   signInWithPopup,
   signOut,
   type User,
@@ -53,7 +52,7 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-const EMAIL_LINK_STORAGE_KEY = "naarithread.emailForSignIn";
+export const EMAIL_LINK_STORAGE_KEY = "naarithread.emailForSignIn";
 
 function normalizeError(error: unknown): string {
   if (typeof error === "object" && error !== null && "message" in error) {
@@ -92,6 +91,60 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [lastSyncedUserId, setLastSyncedUserId] = useState("");
   const firebaseUserRef = useRef<User | null>(null);
   const syncingUserIdRef = useRef<string | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopSessionPolling = useCallback((): void => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  }, []);
+
+  // Poll the server for cross-device approval. When the user confirms the email
+  // link on any device, this (originating) device receives a one-time custom
+  // token and signs itself in.
+  const startSessionPolling = useCallback(
+    (sessionId: string, pollSecret: string): void => {
+      stopSessionPolling();
+      const startedAt = Date.now();
+      const MAX_MS = 10 * 60 * 1000;
+
+      pollTimerRef.current = setInterval(() => {
+        if (Date.now() - startedAt > MAX_MS) {
+          stopSessionPolling();
+          return;
+        }
+
+        void (async () => {
+          try {
+            const res = await fetch("/api/auth/poll-session", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ sessionId, pollSecret }),
+            });
+            if (!res.ok) return;
+
+            const data = (await res.json()) as { status: string; customToken?: string };
+            if (data.status === "approved" && data.customToken) {
+              stopSessionPolling();
+              // Same-device links already sign in via /auth/complete; only adopt
+              // the token when this device isn't authenticated yet.
+              if (!getFirebaseAuth().currentUser) {
+                await signInWithCustomToken(getFirebaseAuth(), data.customToken);
+              }
+            } else if (data.status === "denied" || data.status === "expired") {
+              stopSessionPolling();
+            }
+          } catch {
+            // Transient network error — keep polling until the timeout.
+          }
+        })();
+      }, 3000);
+    },
+    [stopSessionPolling],
+  );
+
+  useEffect(() => stopSessionPolling, [stopSessionPolling]);
 
   const createAuthJwt = useCallback(async (): Promise<string> => {
     const auth = getFirebaseAuth();
@@ -140,27 +193,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
       console.warn("[firebase-auth] persistence setup failed", formatErrorForLogging(error));
     });
 
-    const completeEmailLink = async (): Promise<void> => {
-      if (!isSignInWithEmailLink(auth, window.location.href)) {
-        return;
-      }
-
-      const storedEmail = window.localStorage.getItem(EMAIL_LINK_STORAGE_KEY);
-      if (!storedEmail) {
-        throw new Error("Open this sign-in link from the same browser, or request a fresh email link.");
-      }
-
-      await signInWithEmailLink(auth, storedEmail, window.location.href);
-      window.localStorage.removeItem(EMAIL_LINK_STORAGE_KEY);
-      const cleanUrl = new URL(window.location.href);
-      cleanUrl.search = "";
-      window.history.replaceState({}, "", cleanUrl.toString());
-    };
-
-    void completeEmailLink().catch((error: unknown) => {
-      console.error("[firebase-auth] email link completion failed", formatErrorForLogging(error));
-      setIsLoading(false);
-    });
+    // Email-link completion (and the cross-device handoff) is owned by the
+    // dedicated /auth/complete route, so nothing to complete here.
 
     return onAuthStateChanged(auth, (currentUser) => {
       firebaseUserRef.current = currentUser;
@@ -229,17 +263,34 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    const url = typeof window !== "undefined" ? window.location.href : "/";
+
+    // 1. Open a cross-device session so the link can be confirmed on any device.
+    const sessionRes = await fetch("/api/auth/create-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: normalizedEmail }),
+    });
+    if (!sessionRes.ok) {
+      throw new Error("Could not start sign-in. Please try again.");
+    }
+    const { sessionId, pollSecret } = (await sessionRes.json()) as { sessionId: string; pollSecret: string };
+
+    // 2. Send the Firebase email link, pointing at the dedicated completion route.
+    const url = `${window.location.origin}/auth/complete?session=${sessionId}`;
     await sendSignInLinkToEmail(getFirebaseAuth(), normalizedEmail, {
       url,
       handleCodeInApp: true,
     });
     window.localStorage.setItem(EMAIL_LINK_STORAGE_KEY, normalizedEmail);
+
+    // 3. Poll for approval — confirming on any device signs in this one.
+    startSessionPolling(sessionId, pollSecret);
+
     return {
       userId: normalizedEmail,
       email: normalizedEmail,
     };
-  }, []);
+  }, [startSessionPolling]);
 
   const verifyEmailOtp = useCallback(async (): Promise<void> => {
     throw new Error("Firebase email sign-in uses secure email links instead of manual OTP codes.");
@@ -257,6 +308,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const logout = useCallback(async (): Promise<void> => {
     try {
+      stopSessionPolling();
       await signOut(getFirebaseAuth());
       firebaseUserRef.current = null;
       setUser(null);
@@ -270,7 +322,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       });
       throw error;
     }
-  }, []);
+  }, [stopSessionPolling]);
 
   const isAdmin = useMemo(() => {
     const email = user?.email.toLowerCase();
