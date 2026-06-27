@@ -22,7 +22,7 @@ import {
   type CartItemsMap,
 } from "@/lib/cart-state";
 import { readUserCartMap, upsertUserCartMap } from "@/lib/appwrite/shop-sync";
-import { readUserProfile, updateUserProfile } from "@/lib/appwrite/profiles";
+import { fetchUserProfileViaApi, saveUserProfileViaApi } from "@/lib/appwrite/profiles";
 import {
   fetchProductsByIds,
 } from "@/lib/product-catalog-cache";
@@ -381,7 +381,6 @@ export function CartPageClient() {
     postalCode: "",
     country: "India",
   });
-  const [profileDocId, setProfileDocId] = useState<string>("");
   const [postalLookupPending, setPostalLookupPending] = useState(false);
   const [postalLookupFailed, setPostalLookupFailed] = useState(false);
   const [deliveryEstimate, setDeliveryEstimate] = useState<DeliveryEstimate | null>(null);
@@ -440,19 +439,20 @@ export function CartPageClient() {
   // Prefill shipping form from saved profile.
   useEffect(() => {
     if (!isAuthenticated || !user) {
-      setProfileDocId("");
       return;
     }
 
     let alive = true;
 
     (async () => {
-      const profile = await readUserProfile(user.$id);
+      // Read via the server route (Admin SDK) — client Firestore reads of the
+      // users collection are blocked by security rules on production.
+      const jwt = await createAuthJwt().catch(() => "");
+      if (!jwt) return;
+      const profile = await fetchUserProfileViaApi(jwt);
       if (!alive || !profile) {
         return;
       }
-
-      setProfileDocId(profile.$id);
 
       let savedAddress: Partial<ShippingAddressForm> = {};
       if (profile.address) {
@@ -482,7 +482,7 @@ export function CartPageClient() {
     return () => {
       alive = false;
     };
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user, createAuthJwt]);
 
   // Postal code → city + state autofill + delivery estimate.
   useEffect(() => {
@@ -903,13 +903,20 @@ export function CartPageClient() {
     setIsProcessingCheckout(true);
 
     // Save address immediately on "Proceed to Buy" — don't wait for payment outcome.
-    if (saveAddress && profileDocId) {
-      void updateUserProfile({
-        documentId: profileDocId,
-        fullName: shippingAddress.fullName.trim() || user?.name || "",
-        phone: shippingAddress.phone.trim(),
-        address: JSON.stringify(shippingAddress),
-      });
+    // Persisted via the server route (Admin SDK); the server resolves the doc.
+    if (saveAddress && isAuthenticated) {
+      void (async () => {
+        try {
+          const saveJwt = await createAuthJwt();
+          await saveUserProfileViaApi(saveJwt, {
+            fullName: shippingAddress.fullName.trim() || user?.name || "",
+            phone: shippingAddress.phone.trim(),
+            address: JSON.stringify(shippingAddress),
+          });
+        } catch {
+          // Non-fatal — address save can be retried; checkout continues.
+        }
+      })();
     }
 
     try {

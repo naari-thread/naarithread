@@ -25,7 +25,6 @@ import { toast } from "sonner";
 
 import { appwritePublicConfig, hasPublicAuthConfig } from "@/lib/appwrite/constants";
 import { getFirebaseAuth } from "@/lib/firebase/config";
-import { getOrCreateUserProfile } from "@/lib/appwrite/profiles";
 import { readCartItems, readCartItemSelections, writeCartItems, writeCartItemSelection } from "@/lib/cart-state";
 import { readWishlistItems, readWishlistItemSelections, writeWishlistItems, writeWishlistItemSelection } from "@/lib/wishlist-state";
 import { mergeLocalAndRemoteShopState } from "@/lib/appwrite/shop-sync";
@@ -157,12 +156,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, []);
 
   const syncUserProfile = useCallback(async (currentUser: AuthUser) => {
-    const email = currentUser.email.toLowerCase();
-    const isAdmin = appwritePublicConfig.adminEmails.includes(email);
-
     try {
+      // Server route (Admin SDK) creates/updates the profile row. Doing this
+      // server-side avoids client Firestore writes, which security rules block
+      // on production.
       const jwt = await createAuthJwt();
-      await getOrCreateUserProfile({ user: currentUser, isAdmin, jwt });
+      await fetch("/api/auth/sync-profile", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${jwt}` },
+      });
     } catch (error) {
       console.warn("[firebase-auth] profile sync failed", {
         userId: currentUser.$id,

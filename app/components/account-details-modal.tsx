@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/components/auth-provider";
 import { showActionToast } from "@/lib/action-toast";
-import { getOrCreateUserProfile, readUserProfile, type UserProfileDocument, updateUserProfile } from "@/lib/appwrite/profiles";
+import { fetchUserProfileViaApi, saveUserProfileViaApi, type UserProfileDocument } from "@/lib/appwrite/profiles";
 
 type AddressFields = {
   houseNo: string;
@@ -66,7 +66,7 @@ type AccountDetailsModalProps = {
 };
 
 export function AccountDetailsModal({ onClose }: AccountDetailsModalProps) {
-  const { user, isAdmin, createAuthJwt } = useAuth();
+  const { user, createAuthJwt } = useAuth();
   const [profile, setProfile] = useState<UserProfileDocument | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -84,14 +84,10 @@ export function AccountDetailsModal({ onClose }: AccountDetailsModalProps) {
 
     const fetchProfile = async (): Promise<void> => {
       try {
-        let doc = await readUserProfile(user.$id);
-
-        // On a fresh sign-in the profile row is created in the background and may
-        // not exist yet (first-login race). Ensure it exists rather than failing.
-        if (!doc) {
-          const jwt = await createAuthJwt().catch(() => undefined);
-          doc = await getOrCreateUserProfile({ user, isAdmin, jwt });
-        }
+        // Read via the server route (Admin SDK). Direct client Firestore reads of
+        // the users collection are blocked by security rules on production.
+        const jwt = await createAuthJwt();
+        const doc = await fetchUserProfileViaApi(jwt);
 
         if (!doc) throw new Error("Profile not found");
         setProfile(doc);
@@ -112,7 +108,7 @@ export function AccountDetailsModal({ onClose }: AccountDetailsModalProps) {
     };
 
     void fetchProfile();
-  }, [user, isAdmin, createAuthJwt]);
+  }, [user, createAuthJwt]);
 
   const hasChanges = useMemo(() => {
     if (!savedData) return false;
@@ -127,8 +123,8 @@ export function AccountDetailsModal({ onClose }: AccountDetailsModalProps) {
     setIsSaving(true);
     setError(null);
     try {
-      const updated = await updateUserProfile({
-        documentId: profile.$id,
+      const jwt = await createAuthJwt();
+      const updated = await saveUserProfileViaApi(jwt, {
         fullName: formData.fullName,
         phone: formData.phone,
         address: serializeAddress(formData.address),
