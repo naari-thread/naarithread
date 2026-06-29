@@ -1532,38 +1532,6 @@ export function CartPageClient() {
                       Pincode not found — please fill in City and State manually.
                     </p>
                   )}
-                  {deliveryEstimate && !postalLookupPending && (
-                    <div className="col-span-2 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
-                      <span className="text-base leading-none">🚚</span>
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-emerald-800">
-                          Est. delivery in {deliveryEstimate.days} working day{deliveryEstimate.days === "1" ? "" : "s"}
-                        </p>
-                        <p className="text-[0.68rem] text-emerald-700/70">Indicative estimate based on your location</p>
-                      </div>
-                    </div>
-                  )}
-                  {/* Express delivery option — auto-detected from pincode */}
-                  {cityType && !postalLookupPending && (
-                    <label className="col-span-2 flex cursor-pointer items-center gap-3 rounded-xl border border-primary/14 bg-paper px-3.5 py-2.5">
-                      <input
-                        type="checkbox"
-                        checked={wantExpressDelivery}
-                        onChange={(e) => setWantExpressDelivery(e.target.checked)}
-                        className="h-4 w-4 shrink-0 rounded border-primary/30 accent-primary"
-                        aria-label="Express delivery"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-semibold text-primary">Express Delivery</p>
-                        <p className="text-[0.68rem] text-primary/55">
-                          {cityType === "metro" ? "Metro city detected" : "Non-metro city detected"}
-                        </p>
-                      </div>
-                      <span className="shrink-0 text-xs font-semibold text-primary">
-                        +{formatPrice(cityType === "metro" ? 99 : 149)}
-                      </span>
-                    </label>
-                  )}
                   {/* City | State */}
                   <input
                     aria-label="Shipping city"
@@ -1608,6 +1576,43 @@ export function CartPageClient() {
                   ) : null}
                 </div>
               </div>
+
+              {/* Delivery estimate + express — shown once a pincode resolves, below the address form */}
+              {(deliveryEstimate || cityType) && !postalLookupPending ? (
+                <div className="mt-3 space-y-2.5">
+                  {deliveryEstimate ? (
+                    <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                      <span className="text-base leading-none">🚚</span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-emerald-800">
+                          Est. delivery in {deliveryEstimate.days} working day{deliveryEstimate.days === "1" ? "" : "s"}
+                        </p>
+                        <p className="text-[0.68rem] text-emerald-700/70">Indicative estimate based on your location</p>
+                      </div>
+                    </div>
+                  ) : null}
+                  {cityType ? (
+                    <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-primary/14 bg-paper px-3.5 py-2.5">
+                      <input
+                        type="checkbox"
+                        checked={wantExpressDelivery}
+                        onChange={(e) => setWantExpressDelivery(e.target.checked)}
+                        className="h-4 w-4 shrink-0 rounded border-primary/30 accent-primary"
+                        aria-label="Express delivery"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-primary">Express Delivery</p>
+                        <p className="text-[0.68rem] text-primary/55">
+                          {cityType === "metro" ? "Metro city detected" : "Non-metro city detected"}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-xs font-semibold text-primary">
+                        +{formatPrice(cityType === "metro" ? 99 : 149)}
+                      </span>
+                    </label>
+                  ) : null}
+                </div>
+              ) : null}
 
               {/* Coupon code */}
               <div className="mt-4">
@@ -1980,35 +1985,6 @@ export function CartPageClient() {
                     {postalLookupFailed ? (
                       <p className="col-span-2 text-xs text-amber-700">Pincode not found — please fill in City and State manually.</p>
                     ) : null}
-                    {deliveryEstimate && !postalLookupPending ? (
-                      <div className="col-span-2 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
-                        <span className="text-base leading-none">🚚</span>
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold text-emerald-800">Est. delivery in {deliveryEstimate.days} working day{deliveryEstimate.days === "1" ? "" : "s"}</p>
-                          <p className="text-[0.68rem] text-emerald-700/70">Indicative estimate based on your location</p>
-                        </div>
-                      </div>
-                    ) : null}
-                    {cityType && !postalLookupPending ? (
-                      <label className="col-span-2 flex cursor-pointer items-center gap-3 rounded-xl border border-primary/14 bg-secondary px-3.5 py-2.5">
-                        <input
-                          type="checkbox"
-                          checked={wantExpressDelivery}
-                          onChange={(e) => setWantExpressDelivery(e.target.checked)}
-                          className="h-4 w-4 shrink-0 rounded border-primary/30 accent-primary"
-                          aria-label="Express delivery"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-semibold text-primary">Express Delivery</p>
-                          <p className="text-[0.68rem] text-primary/55">
-                            {cityType === "metro" ? "Metro city detected" : "Non-metro city detected"}
-                          </p>
-                        </div>
-                        <span className="shrink-0 text-xs font-semibold text-primary">
-                          +{formatPrice(cityType === "metro" ? 99 : 149)}
-                        </span>
-                      </label>
-                    ) : null}
                     <input aria-label="Shipping city" placeholder="City" value={shippingAddress.city}
                       onChange={(e) => setShippingAddress((p) => ({ ...p, city: e.target.value }))}
                       className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45" />
@@ -2027,6 +2003,41 @@ export function CartPageClient() {
                     ) : null}
                   </div>
                 </div>
+
+                {/* Delivery estimate + express — shown once a pincode resolves, below the address form */}
+                {(deliveryEstimate || cityType) && !postalLookupPending ? (
+                  <div className="mt-3 space-y-2.5">
+                    {deliveryEstimate ? (
+                      <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                        <span className="text-base leading-none">🚚</span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-emerald-800">Est. delivery in {deliveryEstimate.days} working day{deliveryEstimate.days === "1" ? "" : "s"}</p>
+                          <p className="text-[0.68rem] text-emerald-700/70">Indicative estimate based on your location</p>
+                        </div>
+                      </div>
+                    ) : null}
+                    {cityType ? (
+                      <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-primary/14 bg-secondary px-3.5 py-2.5">
+                        <input
+                          type="checkbox"
+                          checked={wantExpressDelivery}
+                          onChange={(e) => setWantExpressDelivery(e.target.checked)}
+                          className="h-4 w-4 shrink-0 rounded border-primary/30 accent-primary"
+                          aria-label="Express delivery"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold text-primary">Express Delivery</p>
+                          <p className="text-[0.68rem] text-primary/55">
+                            {cityType === "metro" ? "Metro city detected" : "Non-metro city detected"}
+                          </p>
+                        </div>
+                        <span className="shrink-0 text-xs font-semibold text-primary">
+                          +{formatPrice(cityType === "metro" ? 99 : 149)}
+                        </span>
+                      </label>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 {/* Coupon code */}
                 <div className="mt-4">
