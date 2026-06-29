@@ -66,13 +66,13 @@ export default function AccountPage() {
           <span>Sign In / Create Account</span>
         </button>
         <p className="mt-3 text-center text-[0.7rem] text-primary/40">
-          Free · No spam · Secure email link
+          Free · Secure · 1-click with Google
         </p>
         <AuthModal
           open={isAuthModalOpen}
           onClose={() => setIsAuthModalOpen(false)}
           title="Sign up / Login"
-          description="Use a secure email link to continue with your account and sync."
+          description="Sign in or create an account to continue and sync your data."
         />
       </main>
     );

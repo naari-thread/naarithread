@@ -1212,7 +1212,7 @@ export function CartPageClient() {
           open={isAuthModalOpen}
           onClose={() => setIsAuthModalOpen(false)}
           title="Sign up / Login"
-          description="Use a secure email link to sync and protect your cart across devices."
+          description="Sign in or create an account to sync and protect your cart across devices."
         />
       </>
     );
@@ -2232,7 +2232,7 @@ export function CartPageClient() {
                         className="mt-1 inline-flex h-11 w-full items-center justify-center rounded-xl border border-primary bg-primary px-4 text-xs font-semibold uppercase tracking-[0.2em] text-secondary transition hover:bg-primary/90">
                         Sign in / Create Account
                       </button>
-                      <p className="text-[0.65rem] text-primary/45">Free · No spam · Secure email link</p>
+                      <p className="text-[0.65rem] text-primary/45">Free · Secure · 1-click with Google</p>
                     </div>
                   </motion.div>
                 ) : null}
@@ -2246,7 +2246,7 @@ export function CartPageClient() {
         open={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         title="Sign up / Login"
-        description="Use a secure email link to sync and protect your cart across devices."
+        description="Sign in or create an account to sync and protect your cart across devices."
       />
     </>
   );

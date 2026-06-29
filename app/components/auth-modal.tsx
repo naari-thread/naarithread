@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 
-import { EmailOtpAuthForm } from "@/app/components/email-otp-auth-form";
+import { EmailPasswordAuthForm } from "@/app/components/email-password-auth-form";
 
 type AuthModalProps = {
   open: boolean;
@@ -14,8 +14,8 @@ type AuthModalProps = {
 export function AuthModal({
   open,
   onClose,
-  title = "Continue with Email Link",
-  description = "Sign up or log in to save products, track orders, and manage your profile.",
+  title = "Welcome back",
+  description = "Sign in or create an account to save products, track orders, and manage your profile.",
 }: AuthModalProps) {
   return (
     <AnimatePresence>
@@ -54,7 +54,7 @@ export function AuthModal({
               </button>
             </div>
 
-            <EmailOtpAuthForm title={title} description={description} onSuccess={onClose} />
+            <EmailPasswordAuthForm title={title} description={description} onSuccess={onClose} />
           </motion.div>
         </motion.div>
       ) : null}

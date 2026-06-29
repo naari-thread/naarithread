@@ -381,7 +381,7 @@ export function WishlistPageClient() {
         open={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         title="Sign up / Login"
-        description="Use a secure email link to sync your wishlist across devices."
+        description="Sign in or create an account to sync your wishlist across devices."
       />
     </>
   );

@@ -8,6 +8,7 @@ import { Navbar } from "@/app/components/navbar";
 import { AiChat } from "@/app/components/ai-chat";
 import { MobileProductsBottomBar } from "@/app/components/mobile-products-bottom-bar";
 import { AuthProvider } from "@/app/components/auth-provider";
+import { EmailVerificationBanner } from "@/app/components/email-verification-banner";
 import "./globals.css";
 
 const loraDisplay = Lora({
@@ -104,6 +105,7 @@ export default function RootLayout({
       </head>
       <body className={`${loraDisplay.variable} ${plusJakartaSans.variable} bg-paper text-primary antialiased`}>
         <AuthProvider>
+          <EmailVerificationBanner />
           <Navbar />
           {children}
           <MobileProductsBottomBar />

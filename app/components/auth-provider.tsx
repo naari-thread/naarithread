@@ -13,18 +13,22 @@ import {
 import {
   GoogleAuthProvider,
   browserLocalPersistence,
+  createUserWithEmailAndPassword,
   onAuthStateChanged,
-  sendSignInLinkToEmail,
+  sendEmailVerification,
+  sendPasswordResetEmail,
   setPersistence,
-  signInWithCustomToken,
+  signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
+  updateProfile,
   type User,
 } from "firebase/auth";
 import { toast } from "sonner";
 
 import { appwritePublicConfig, hasPublicAuthConfig } from "@/lib/appwrite/constants";
 import { getFirebaseAuth } from "@/lib/firebase/config";
+import { clearCheckoutProfileCache } from "@/lib/checkout-cache";
 import { readCartItems, readCartItemSelections, writeCartItems, writeCartItemSelection } from "@/lib/cart-state";
 import { readWishlistItems, readWishlistItemSelections, writeWishlistItems, writeWishlistItemSelection } from "@/lib/wishlist-state";
 import { mergeLocalAndRemoteShopState } from "@/lib/appwrite/shop-sync";
@@ -34,6 +38,7 @@ export type AuthUser = {
   email: string;
   name: string;
   photoURL: string;
+  emailVerified: boolean;
 };
 
 type AuthContextValue = {
@@ -43,15 +48,16 @@ type AuthContextValue = {
   isConfigured: boolean;
   isAdmin: boolean;
   refreshUser: () => Promise<void>;
-  sendEmailOtp: (email: string) => Promise<{ userId: string; email: string }>;
-  verifyEmailOtp: (userId: string, secret: string) => Promise<void>;
+  signUpWithEmailPassword: (email: string, password: string, fullName: string) => Promise<void>;
+  signInWithEmailPassword: (email: string, password: string) => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<void>;
+  resendVerificationEmail: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   createAuthJwt: () => Promise<string>;
   logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-export const EMAIL_LINK_STORAGE_KEY = "naarithread.emailForSignIn";
 
 function normalizeError(error: unknown): string {
   if (typeof error === "object" && error !== null && "message" in error) {
@@ -81,7 +87,36 @@ function toAuthUser(firebaseUser: User): AuthUser {
     email: firebaseUser.email ?? "",
     name: firebaseUser.displayName ?? firebaseUser.email ?? "Customer",
     photoURL: firebaseUser.photoURL ?? "",
+    emailVerified: firebaseUser.emailVerified,
   };
+}
+
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Map raw Firebase auth error codes to friendly, user-facing copy. */
+function friendlyAuthError(error: unknown): string {
+  const code = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
+  switch (code) {
+    case "auth/invalid-email":
+      return "That email address looks invalid.";
+    case "auth/email-already-in-use":
+      return "An account already exists with this email. Try signing in instead.";
+    case "auth/weak-password":
+      return "Password is too weak — use at least 6 characters.";
+    case "auth/invalid-credential":
+    case "auth/wrong-password":
+    case "auth/user-not-found":
+      return "Incorrect email or password.";
+    case "auth/user-disabled":
+      return "This account has been disabled. Please contact support.";
+    case "auth/too-many-requests":
+      return "Too many attempts. Please wait a moment and try again.";
+    case "auth/popup-closed-by-user":
+    case "auth/cancelled-popup-request":
+      return "Sign-in was cancelled.";
+    default:
+      return normalizeError(error);
+  }
 }
 
 export function AuthProvider({ children }: PropsWithChildren) {
@@ -90,60 +125,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [lastSyncedUserId, setLastSyncedUserId] = useState("");
   const firebaseUserRef = useRef<User | null>(null);
   const syncingUserIdRef = useRef<string | null>(null);
-  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const stopSessionPolling = useCallback((): void => {
-    if (pollTimerRef.current) {
-      clearInterval(pollTimerRef.current);
-      pollTimerRef.current = null;
-    }
-  }, []);
-
-  // Poll the server for cross-device approval. When the user confirms the email
-  // link on any device, this (originating) device receives a one-time custom
-  // token and signs itself in.
-  const startSessionPolling = useCallback(
-    (sessionId: string, pollSecret: string): void => {
-      stopSessionPolling();
-      const startedAt = Date.now();
-      const MAX_MS = 10 * 60 * 1000;
-
-      pollTimerRef.current = setInterval(() => {
-        if (Date.now() - startedAt > MAX_MS) {
-          stopSessionPolling();
-          return;
-        }
-
-        void (async () => {
-          try {
-            const res = await fetch("/api/auth/poll-session", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ sessionId, pollSecret }),
-            });
-            if (!res.ok) return;
-
-            const data = (await res.json()) as { status: string; customToken?: string };
-            if (data.status === "approved" && data.customToken) {
-              stopSessionPolling();
-              // Same-device links already sign in via /auth/complete; only adopt
-              // the token when this device isn't authenticated yet.
-              if (!getFirebaseAuth().currentUser) {
-                await signInWithCustomToken(getFirebaseAuth(), data.customToken);
-              }
-            } else if (data.status === "denied" || data.status === "expired") {
-              stopSessionPolling();
-            }
-          } catch {
-            // Transient network error — keep polling until the timeout.
-          }
-        })();
-      }, 3000);
-    },
-    [stopSessionPolling],
-  );
-
-  useEffect(() => stopSessionPolling, [stopSessionPolling]);
 
   const createAuthJwt = useCallback(async (): Promise<string> => {
     const auth = getFirebaseAuth();
@@ -194,9 +175,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
     void setPersistence(auth, browserLocalPersistence).catch((error: unknown) => {
       console.warn("[firebase-auth] persistence setup failed", formatErrorForLogging(error));
     });
-
-    // Email-link completion (and the cross-device handoff) is owned by the
-    // dedicated /auth/complete route, so nothing to complete here.
 
     return onAuthStateChanged(auth, (currentUser) => {
       firebaseUserRef.current = currentUser;
@@ -259,43 +237,75 @@ export function AuthProvider({ children }: PropsWithChildren) {
     };
   }, [createAuthJwt, lastSyncedUserId, user?.$id]);
 
-  const sendEmailOtp = useCallback(async (email: string): Promise<{ userId: string; email: string }> => {
+  const signUpWithEmailPassword = useCallback(
+    async (email: string, password: string, fullName: string): Promise<void> => {
+      if (!hasPublicAuthConfig()) {
+        throw new Error("Firebase auth is not configured.");
+      }
+
+      const normalizedEmail = email.trim().toLowerCase();
+      if (!emailPattern.test(normalizedEmail)) {
+        throw new Error("Enter a valid email address.");
+      }
+      if (password.length < 6) {
+        throw new Error("Password must be at least 6 characters.");
+      }
+
+      try {
+        const credential = await createUserWithEmailAndPassword(getFirebaseAuth(), normalizedEmail, password);
+        const trimmedName = fullName.trim();
+        if (trimmedName) {
+          await updateProfile(credential.user, { displayName: trimmedName }).catch(() => undefined);
+        }
+        // Send a verification email (non-blocking for sign-in). The continue URL
+        // returns the user to the site after they verify.
+        await sendEmailVerification(credential.user, { url: window.location.origin }).catch(() => undefined);
+      } catch (error) {
+        throw new Error(friendlyAuthError(error));
+      }
+    },
+    [],
+  );
+
+  const signInWithEmailPassword = useCallback(async (email: string, password: string): Promise<void> => {
     if (!hasPublicAuthConfig()) {
       throw new Error("Firebase auth is not configured.");
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-
-    // 1. Open a cross-device session so the link can be confirmed on any device.
-    const sessionRes = await fetch("/api/auth/create-session", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: normalizedEmail }),
-    });
-    if (!sessionRes.ok) {
-      throw new Error("Could not start sign-in. Please try again.");
+    try {
+      await signInWithEmailAndPassword(getFirebaseAuth(), normalizedEmail, password);
+    } catch (error) {
+      throw new Error(friendlyAuthError(error));
     }
-    const { sessionId, pollSecret } = (await sessionRes.json()) as { sessionId: string; pollSecret: string };
+  }, []);
 
-    // 2. Send the Firebase email link, pointing at the dedicated completion route.
-    const url = `${window.location.origin}/auth/complete?session=${sessionId}`;
-    await sendSignInLinkToEmail(getFirebaseAuth(), normalizedEmail, {
-      url,
-      handleCodeInApp: true,
-    });
-    window.localStorage.setItem(EMAIL_LINK_STORAGE_KEY, normalizedEmail);
+  const sendPasswordReset = useCallback(async (email: string): Promise<void> => {
+    if (!hasPublicAuthConfig()) {
+      throw new Error("Firebase auth is not configured.");
+    }
 
-    // 3. Poll for approval — confirming on any device signs in this one.
-    startSessionPolling(sessionId, pollSecret);
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!emailPattern.test(normalizedEmail)) {
+      throw new Error("Enter a valid email address.");
+    }
+    try {
+      await sendPasswordResetEmail(getFirebaseAuth(), normalizedEmail, { url: window.location.origin });
+    } catch (error) {
+      throw new Error(friendlyAuthError(error));
+    }
+  }, []);
 
-    return {
-      userId: normalizedEmail,
-      email: normalizedEmail,
-    };
-  }, [startSessionPolling]);
-
-  const verifyEmailOtp = useCallback(async (): Promise<void> => {
-    throw new Error("Firebase email sign-in uses secure email links instead of manual OTP codes.");
+  const resendVerificationEmail = useCallback(async (): Promise<void> => {
+    const currentUser = getFirebaseAuth().currentUser;
+    if (!currentUser) {
+      throw new Error("You need to be signed in to resend a verification email.");
+    }
+    try {
+      await sendEmailVerification(currentUser, { url: window.location.origin });
+    } catch (error) {
+      throw new Error(friendlyAuthError(error));
+    }
   }, []);
 
   const signInWithGoogle = useCallback(async (): Promise<void> => {
@@ -310,11 +320,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const logout = useCallback(async (): Promise<void> => {
     try {
-      stopSessionPolling();
       await signOut(getFirebaseAuth());
       firebaseUserRef.current = null;
       setUser(null);
       setLastSyncedUserId("");
+      // Drop the cached checkout profile so the next user never sees stale details.
+      clearCheckoutProfileCache();
       toast.success("Signed out", {
         description: "You have been logged out of NaariThread.",
       });
@@ -324,7 +335,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       });
       throw error;
     }
-  }, [stopSessionPolling]);
+  }, []);
 
   const isAdmin = useMemo(() => {
     const email = user?.email.toLowerCase();
@@ -339,13 +350,27 @@ export function AuthProvider({ children }: PropsWithChildren) {
       isConfigured: hasPublicAuthConfig(),
       isAdmin,
       refreshUser,
-      sendEmailOtp,
-      verifyEmailOtp,
+      signUpWithEmailPassword,
+      signInWithEmailPassword,
+      sendPasswordReset,
+      resendVerificationEmail,
       signInWithGoogle,
       createAuthJwt,
       logout,
     }),
-    [createAuthJwt, isAdmin, isLoading, logout, refreshUser, sendEmailOtp, signInWithGoogle, user, verifyEmailOtp]
+    [
+      createAuthJwt,
+      isAdmin,
+      isLoading,
+      logout,
+      refreshUser,
+      resendVerificationEmail,
+      sendPasswordReset,
+      signInWithEmailPassword,
+      signInWithGoogle,
+      signUpWithEmailPassword,
+      user,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

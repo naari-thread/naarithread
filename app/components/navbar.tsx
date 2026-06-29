@@ -1521,7 +1521,7 @@ export function Navbar() {
         open={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         title="Sign up / Login"
-        description="Use a secure email link to continue to your account, wishlist, and cart sync."
+        description="Sign in or create an account to continue to your account, wishlist, and cart sync."
       />
     </>
   );
