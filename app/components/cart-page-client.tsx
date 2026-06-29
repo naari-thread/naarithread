@@ -382,6 +382,7 @@ export function CartPageClient() {
   const [postalLookupPending, setPostalLookupPending] = useState(false);
   const [postalLookupFailed, setPostalLookupFailed] = useState(false);
   const [deliveryEstimate, setDeliveryEstimate] = useState<DeliveryEstimate | null>(null);
+  const [deliveryEstimatePending, setDeliveryEstimatePending] = useState(false);
   const [saveAddress, setSaveAddress] = useState(true);
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
@@ -532,19 +533,21 @@ export function CartPageClient() {
     };
   }, [isAuthenticated, user, createAuthJwt]);
 
-  // Postal code → city + state autofill + delivery estimate.
+  // Postal code → city + state autofill (+ express city-type). This is the ONLY
+  // thing gated on the pincode lookup; the delivery estimate is derived
+  // separately from the resolved state (effect below) so it never blocks
+  // city/state from appearing.
   useEffect(() => {
     const code = shippingAddress.postalCode.trim();
     if (!/^\d{6}$/.test(code)) {
       setPostalLookupFailed(false);
-      setDeliveryEstimate(null);
       setCityType(null);
       setWantExpressDelivery(false);
       return;
     }
 
-    // Pincode → city/state/delivery never changes, so reuse a prior lookup and
-    // skip the India Post API entirely — instant, no network, no spinner.
+    // Pincode → city/state never changes, so reuse a prior lookup and skip the
+    // India Post API entirely — instant, no network, no spinner.
     const cachedPincode = readPincodeCache(code);
     if (cachedPincode) {
       setPostalLookupFailed(false);
@@ -555,14 +558,12 @@ export function CartPageClient() {
         city: prev.city || cachedPincode.city,
         state: prev.state || cachedPincode.state,
       }));
-      setDeliveryEstimate({ days: cachedPincode.days });
       return;
     }
 
     let alive = true;
     setPostalLookupPending(true);
     setPostalLookupFailed(false);
-    setDeliveryEstimate(null);
     setCityType(null);
 
     const timer = setTimeout(async () => {
@@ -585,19 +586,17 @@ export function CartPageClient() {
         if (postalData[0]?.Status === "Success" && postalData[0]?.PostOffice?.length) {
           const po = postalData[0].PostOffice[0];
           const resolvedCityType = detectCityType(po.District);
-          const resolvedDays = estimateDeliveryDays(po.State);
           setCityType(resolvedCityType);
           setShippingAddress((prev) => ({
             ...prev,
             city: prev.city || po.District,
             state: prev.state || po.State,
           }));
-          setDeliveryEstimate({ days: resolvedDays });
           // Persist so re-entering this pincode never hits the API again.
           writePincodeCache(code, {
             city: po.District,
             state: po.State,
-            days: resolvedDays,
+            days: estimateDeliveryDays(po.State),
             cityType: resolvedCityType,
           });
         } else {
@@ -617,6 +616,27 @@ export function CartPageClient() {
       setPostalLookupPending(false);
     };
   }, [shippingAddress.postalCode]);
+
+  // Delivery estimate — derived from the resolved STATE, independently of the
+  // city/state lookup so it never blocks it. It's allowed to lag a beat behind
+  // (with its own loader); the estimate is far less important than city/state.
+  useEffect(() => {
+    const state = shippingAddress.state.trim();
+    if (!state) {
+      setDeliveryEstimate(null);
+      setDeliveryEstimatePending(false);
+      return;
+    }
+
+    setDeliveryEstimatePending(true);
+    // Defer so city/state paint immediately; the estimate follows shortly after.
+    const timer = setTimeout(() => {
+      setDeliveryEstimate({ days: estimateDeliveryDays(state) });
+      setDeliveryEstimatePending(false);
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [shippingAddress.state]);
 
   useEffect(() => {
     let alive = true;
@@ -1578,9 +1598,14 @@ export function CartPageClient() {
               </div>
 
               {/* Delivery estimate + express — shown once a pincode resolves, below the address form */}
-              {(deliveryEstimate || cityType) && !postalLookupPending ? (
+              {(deliveryEstimate || deliveryEstimatePending || cityType) && !postalLookupPending ? (
                 <div className="mt-3 space-y-2.5">
-                  {deliveryEstimate ? (
+                  {deliveryEstimatePending ? (
+                    <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                      <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-emerald-300 border-t-emerald-600" aria-hidden="true" />
+                      <p className="text-xs font-medium text-emerald-800">Calculating delivery estimate…</p>
+                    </div>
+                  ) : deliveryEstimate ? (
                     <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
                       <span className="text-base leading-none">🚚</span>
                       <div className="min-w-0">
@@ -2005,9 +2030,14 @@ export function CartPageClient() {
                 </div>
 
                 {/* Delivery estimate + express — shown once a pincode resolves, below the address form */}
-                {(deliveryEstimate || cityType) && !postalLookupPending ? (
+                {(deliveryEstimate || deliveryEstimatePending || cityType) && !postalLookupPending ? (
                   <div className="mt-3 space-y-2.5">
-                    {deliveryEstimate ? (
+                    {deliveryEstimatePending ? (
+                      <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                        <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-emerald-300 border-t-emerald-600" aria-hidden="true" />
+                        <p className="text-xs font-medium text-emerald-800">Calculating delivery estimate…</p>
+                      </div>
+                    ) : deliveryEstimate ? (
                       <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
                         <span className="text-base leading-none">🚚</span>
                         <div className="min-w-0">
