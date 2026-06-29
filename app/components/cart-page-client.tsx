@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { AuthModal } from "@/app/components/auth-modal";
@@ -23,6 +23,14 @@ import {
 } from "@/lib/cart-state";
 import { readUserCartMap, upsertUserCartMap } from "@/lib/appwrite/shop-sync";
 import { fetchUserProfileViaApi, saveUserProfileViaApi } from "@/lib/appwrite/profiles";
+import {
+  clearCheckoutProfileCache,
+  readCheckoutProfileCache,
+  readPincodeCache,
+  writeCheckoutProfileCache,
+  writePincodeCache,
+  type CheckoutAddress,
+} from "@/lib/checkout-cache";
 import {
   fetchProductsByIds,
 } from "@/lib/product-catalog-cache";
@@ -139,17 +147,7 @@ type ZeroPayResponse = {
   };
 };
 
-type ShippingAddressForm = {
-  fullName: string;
-  phone: string;
-  houseNo: string;
-  locality: string;
-  landmark: string;
-  city: string;
-  state: string;
-  postalCode: string;
-  country: string;
-};
+type ShippingAddressForm = CheckoutAddress;
 
 type AppliedCoupon = {
   code: string;
@@ -395,6 +393,9 @@ export function CartPageClient() {
   const [wantExpressDelivery, setWantExpressDelivery] = useState(false);
   const [cityType, setCityType] = useState<"metro" | "non-metro" | null>(null);
   const [useCod, setUseCod] = useState(false);
+  // True while the saved profile/address is being fetched after sign-in, so the
+  // shipping fields can show a spinner instead of looking deceptively empty.
+  const [isProfileLoading, setIsProfileLoading] = useState(false);
 
   const handleProceedToBuyRef = useRef<(() => Promise<void>) | null>(null);
 
@@ -413,28 +414,60 @@ export function CartPageClient() {
   // Ignore null transitions (brief session re-validation on focus) to prevent
   // the form from clearing when the user takes a screenshot or tab switches.
   const prevUserIdRef = useRef<string | null>(null);
+  // uid whose data is currently shown in the form (from cache or a fresh fetch),
+  // so the background revalidation can stay silent instead of flashing a spinner.
+  const cachedUidRef = useRef<string | null>(null);
+  const resetShippingForm = useCallback(() => {
+    setShippingAddress({
+      fullName: "",
+      phone: "",
+      houseNo: "",
+      locality: "",
+      landmark: "",
+      city: "",
+      state: "",
+      postalCode: "",
+      country: "India",
+    });
+    setDeliveryEstimate(null);
+    setPostalLookupFailed(false);
+    setCityType(null);
+    setWantExpressDelivery(false);
+    setUseCod(false);
+    cachedUidRef.current = null;
+  }, []);
+
+  // Instant prefill from the local cache on mount — fills the Amount Breakup form
+  // immediately on reload, before auth + the profile API have resolved. The
+  // background revalidation below corrects it if the saved data changed.
+  useEffect(() => {
+    const cached = readCheckoutProfileCache();
+    if (cached) {
+      cachedUidRef.current = cached.uid;
+      setShippingAddress(cached.address);
+    }
+  }, []);
+
   useEffect(() => {
     const nextId = user?.$id ?? null;
     const prevId = prevUserIdRef.current;
     if (nextId !== null) {
+      // Switching between two different signed-in users — clear the previous one's data.
       if (prevId !== null && prevId !== nextId) {
-        setShippingAddress({
-          fullName: "",
-          phone: "",
-          houseNo: "",
-          locality: "",
-          landmark: "",
-          city: "",
-          state: "",
-          postalCode: "",
-          country: "India",
-        });
-        setDeliveryEstimate(null);
-        setPostalLookupFailed(false);
+        resetShippingForm();
+        clearCheckoutProfileCache();
       }
       prevUserIdRef.current = nextId;
+    } else if (!isLoading && prevId !== null) {
+      // Auth has settled to "signed out" (a real logout, not a transient
+      // re-validation blip) — wipe the previous user's shipping details so they
+      // don't linger in the Amount Breakup form.
+      resetShippingForm();
+      clearCheckoutProfileCache();
+      setIsProfileLoading(false);
+      prevUserIdRef.current = null;
     }
-  }, [user?.$id]);
+  }, [user?.$id, isLoading, resetShippingForm]);
 
   // Prefill shipping form from saved profile.
   useEffect(() => {
@@ -443,40 +476,55 @@ export function CartPageClient() {
     }
 
     let alive = true;
+    // Only show a spinner when we have nothing cached to display for this user.
+    // With a cache hit the form is already filled, so revalidate silently.
+    const hasCachedData = cachedUidRef.current === user.$id;
+    if (!hasCachedData) {
+      setIsProfileLoading(true);
+    }
 
     (async () => {
-      // Read via the server route (Admin SDK) — client Firestore reads of the
-      // users collection are blocked by security rules on production.
-      const jwt = await createAuthJwt().catch(() => "");
-      if (!jwt) return;
-      const profile = await fetchUserProfileViaApi(jwt);
-      if (!alive || !profile) {
-        return;
-      }
-
-      let savedAddress: Partial<ShippingAddressForm> = {};
-      if (profile.address) {
-        try {
-          const parsed = JSON.parse(profile.address) as Partial<ShippingAddressForm>;
-          if (parsed && typeof parsed === "object") {
-            savedAddress = parsed;
-          }
-        } catch {
-          savedAddress = { houseNo: profile.address };
+      try {
+        // Read via the server route (Admin SDK) — client Firestore reads of the
+        // users collection are blocked by security rules on production.
+        const jwt = await createAuthJwt().catch(() => "");
+        if (!jwt) return;
+        const profile = await fetchUserProfileViaApi(jwt);
+        if (!alive || !profile) {
+          return;
         }
-      }
 
-      setShippingAddress({
-        fullName: savedAddress.fullName || profile.fullName || user.name || "",
-        phone: savedAddress.phone || profile.phone || "",
-        houseNo: savedAddress.houseNo || "",
-        locality: savedAddress.locality || "",
-        landmark: savedAddress.landmark || "",
-        city: savedAddress.city || "",
-        state: savedAddress.state || "",
-        postalCode: savedAddress.postalCode || "",
-        country: savedAddress.country || "India",
-      });
+        let savedAddress: Partial<ShippingAddressForm> = {};
+        if (profile.address) {
+          try {
+            const parsed = JSON.parse(profile.address) as Partial<ShippingAddressForm>;
+            if (parsed && typeof parsed === "object") {
+              savedAddress = parsed;
+            }
+          } catch {
+            savedAddress = { houseNo: profile.address };
+          }
+        }
+
+        const nextAddress: ShippingAddressForm = {
+          fullName: savedAddress.fullName || profile.fullName || user.name || "",
+          phone: savedAddress.phone || profile.phone || "",
+          houseNo: savedAddress.houseNo || "",
+          locality: savedAddress.locality || "",
+          landmark: savedAddress.landmark || "",
+          city: savedAddress.city || "",
+          state: savedAddress.state || "",
+          postalCode: savedAddress.postalCode || "",
+          country: savedAddress.country || "India",
+        };
+
+        setShippingAddress(nextAddress);
+        // Cache for instant prefill on the next reload.
+        cachedUidRef.current = user.$id;
+        writeCheckoutProfileCache(user.$id, nextAddress);
+      } finally {
+        if (alive) setIsProfileLoading(false);
+      }
     })();
 
     return () => {
@@ -492,6 +540,22 @@ export function CartPageClient() {
       setDeliveryEstimate(null);
       setCityType(null);
       setWantExpressDelivery(false);
+      return;
+    }
+
+    // Pincode → city/state/delivery never changes, so reuse a prior lookup and
+    // skip the India Post API entirely — instant, no network, no spinner.
+    const cachedPincode = readPincodeCache(code);
+    if (cachedPincode) {
+      setPostalLookupFailed(false);
+      setPostalLookupPending(false);
+      setCityType(cachedPincode.cityType);
+      setShippingAddress((prev) => ({
+        ...prev,
+        city: prev.city || cachedPincode.city,
+        state: prev.state || cachedPincode.state,
+      }));
+      setDeliveryEstimate({ days: cachedPincode.days });
       return;
     }
 
@@ -520,13 +584,22 @@ export function CartPageClient() {
 
         if (postalData[0]?.Status === "Success" && postalData[0]?.PostOffice?.length) {
           const po = postalData[0].PostOffice[0];
-          setCityType(detectCityType(po.District));
+          const resolvedCityType = detectCityType(po.District);
+          const resolvedDays = estimateDeliveryDays(po.State);
+          setCityType(resolvedCityType);
           setShippingAddress((prev) => ({
             ...prev,
             city: prev.city || po.District,
             state: prev.state || po.State,
           }));
-          setDeliveryEstimate({ days: estimateDeliveryDays(po.State) });
+          setDeliveryEstimate({ days: resolvedDays });
+          // Persist so re-entering this pincode never hits the API again.
+          writePincodeCache(code, {
+            city: po.District,
+            state: po.State,
+            days: resolvedDays,
+            cityType: resolvedCityType,
+          });
         } else {
           setPostalLookupFailed(true);
         }
@@ -913,6 +986,11 @@ export function CartPageClient() {
             phone: shippingAddress.phone.trim(),
             address: JSON.stringify(shippingAddress),
           });
+          // Keep the local cache in sync so the next reload prefills the edits.
+          if (user?.$id) {
+            cachedUidRef.current = user.$id;
+            writeCheckoutProfileCache(user.$id, shippingAddress);
+          }
         } catch {
           // Non-fatal — address save can be retried; checkout continues.
         }
@@ -1362,10 +1440,20 @@ export function CartPageClient() {
               <h3 className="text-lg font-semibold">Amount Breakup</h3>
 
               {/* Shipping address */}
-              <div className="mt-5 rounded-xl border border-primary/12 bg-paper p-3.5 sm:p-4">
+              <div className="relative mt-5 rounded-xl border border-primary/12 bg-paper p-3.5 sm:p-4">
                 <p className="text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-primary/62">
                   Shipping Address
                 </p>
+                {isProfileLoading ? (
+                  <div
+                    className="absolute inset-0 z-10 flex items-center justify-center gap-2.5 rounded-xl bg-paper/70 backdrop-blur-[1px]"
+                    role="status"
+                    aria-label="Loading your saved details"
+                  >
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary/20 border-t-primary/70" />
+                    <span className="text-xs font-medium text-primary/70">Loading your details…</span>
+                  </div>
+                ) : null}
                 <div className="mt-3 grid grid-cols-2 gap-2.5">
                   {/* Full name | Phone */}
                   <input
@@ -1845,10 +1933,20 @@ export function CartPageClient() {
               <div className="relative flex-1 overflow-y-auto p-5 pb-10">
 
                 {/* Shipping address */}
-                <div className="rounded-xl border border-primary/12 bg-paper p-3.5">
+                <div className="relative rounded-xl border border-primary/12 bg-paper p-3.5">
                   <p className="text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-primary/62">
                     Shipping Address
                   </p>
+                  {isProfileLoading ? (
+                    <div
+                      className="absolute inset-0 z-10 flex items-center justify-center gap-2.5 rounded-xl bg-paper/70 backdrop-blur-[1px]"
+                      role="status"
+                      aria-label="Loading your saved details"
+                    >
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary/20 border-t-primary/70" />
+                      <span className="text-xs font-medium text-primary/70">Loading your details…</span>
+                    </div>
+                  ) : null}
                   <div className="mt-3 grid grid-cols-2 gap-2.5">
                     <input aria-label="Shipping full name" placeholder="Full name" value={shippingAddress.fullName}
                       onChange={(e) => setShippingAddress((p) => ({ ...p, fullName: e.target.value }))}
