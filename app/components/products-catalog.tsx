@@ -2,7 +2,7 @@
 
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
 import { ProductCard } from "@/app/components/product-card";
@@ -371,7 +371,6 @@ export function ProductsCatalog({
   activeSubCategorySlug,
 }: ProductsCatalogProps) {
   const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
   const prefersReducedMotion = useReducedMotion();
   const [searchText, setSearchText] = useState("");
@@ -438,9 +437,20 @@ export function ProductsCatalog({
       : category
         ? `/products/${category}`
         : "/products";
-    if (pathname !== nextPath) {
-      router.push(nextPath);
+
+    if (typeof window === "undefined" || window.location.pathname === nextPath) {
+      return;
     }
+
+    // Update the URL for shareability/deep-linking WITHOUT a server round-trip.
+    // Every /products route renders the same catalog data and differs only by
+    // the active-category props, which this component already mirrors in local
+    // state. Using router.push here caused a full navigation (loading.tsx
+    // skeleton + remount + a brand-new products array) that replayed the filter
+    // animation a second time with a visible stutter. history.pushState keeps
+    // filtering to a single instant client pass while staying deep-link/SSR
+    // correct on direct load, reload, and browser back/forward.
+    window.history.pushState(null, "", nextPath);
   };
 
   useEffect(() => {
