@@ -9,20 +9,27 @@ import { AdminActionToast } from "@/app/components/admin-action-toast";
 import { AdminModalClose } from "@/app/components/admin-modal-close";
 import { AdminTransactionFilters } from "@/app/components/admin-transaction-filters";
 import { AdminRefundConfirm } from "@/app/components/admin-refund-confirm";
-import { AdminMultiSelectField } from "@/app/components/admin-multi-select-field";
 import { AdminMobileBottomBar } from "@/app/components/admin-mobile-bottom-bar";
 import { AdminProductTaxonomyFields } from "@/app/components/admin-product-taxonomy-fields";
 import { AdminSessionBootstrap } from "@/app/components/admin-session-bootstrap";
 import { AdminSubmitButton } from "@/app/components/admin-submit-button";
 import { AdminBadgeSelector } from "@/app/components/admin-badge-selector";
+import { AdminProductMerchandisingFields } from "@/app/components/admin-product-merchandising-fields";
 import { CloudinaryImage } from "@/app/components/cloudinary-image";
 import { createDatabasesWithApiKey, getDatabaseId } from "@/lib/appwrite/admin-server";
 import { listRefundWalletPayoutRequests, type WalletPayoutRequest } from "@/lib/appwrite/wallet-server";
-import { PRODUCT_CATALOG_CACHE_TAG } from "@/lib/cache-tags";
+import {
+  PRODUCT_CATALOG_CACHE_TAG,
+  PRODUCT_SEARCH_INDEX_CACHE_TAG,
+  SIZE_CHARTS_CACHE_TAG,
+} from "@/lib/cache-tags";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { timestampToIso } from "@/lib/firebase/document";
 import { hasVerifiedAdminSession } from "@/lib/firebase/admin-session";
 import { listCustomBadges } from "@/lib/firebase/product-badges-server";
+import { FIRESTORE_COLLECTIONS } from "@/lib/firebase/collection-map";
+import { upsertProductSearchEntry } from "@/lib/firebase/product-search-index";
+import { listSizeChartDocuments } from "@/lib/firebase/size-charts";
 import { PRODUCT_BADGES, getProductBadgeLabel } from "@/lib/product-badges";
 import {
   getCategoryLabelBySlug,
@@ -30,6 +37,13 @@ import {
   normalizeProductCategory,
 } from "@/lib/product-taxonomy";
 import { ensureSlug } from "@/lib/slug";
+import {
+  getTotalSizeStock,
+  parseColorMedia,
+  parseSizeChartSnapshot,
+  parseSizeInventory,
+} from "@/lib/product-merchandising";
+import { mergeSizeChartLibrary } from "@/lib/size-chart-presets";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -419,27 +433,12 @@ const PRODUCT_COLOR_PALETTE = [
 ];
 
 async function getProductFormOptions() {
-  const databases = createDatabasesWithApiKey();
-  const databaseId = getDatabaseId();
-
-  const [collection, documents] = await Promise.all([
-    databases.getCollection(databaseId, "sku"),
-    databases
-      .listDocuments(databaseId, "sku", [Query.limit(200), Query.orderDesc("$createdAt")])
-      .catch(() => ({ documents: [] as Record<string, unknown>[] })),
-  ]);
-
-  const enumOf = (key: string) => {
-    const attribute = collection.attributes.find((item) => (item as { key?: string }).key === key) as
-      | { elements?: unknown }
-      | undefined;
-    return Array.isArray(attribute?.elements)
-      ? (attribute?.elements.filter((value): value is string => typeof value === "string") ?? [])
-      : [];
-  };
+  const snapshot = await getAdminDb().collection(FIRESTORE_COLLECTIONS.products).limit(500).get();
+  const documents = snapshot.docs.map((document) => document.data());
 
   const colors = new Set<string>(PRODUCT_COLOR_PALETTE);
-  for (const document of documents.documents as Record<string, unknown>[]) {
+  const sizes = new Set<string>(["XS", "S", "M", "L", "XL", "XXL", "3XL", "Free Size"]);
+  for (const document of documents) {
     const docColors = Array.isArray(document.colorOptions) ? document.colorOptions : [];
     for (const color of docColors) {
       const value = String(color ?? "").trim();
@@ -447,6 +446,7 @@ async function getProductFormOptions() {
         colors.add(value);
       }
     }
+    for (const size of toStringArray(document.sizeOptions)) sizes.add(size);
   }
 
   const customBadges = await listCustomBadges().catch(() => []);
@@ -457,7 +457,7 @@ async function getProductFormOptions() {
   ];
 
   return {
-    sizes: enumOf("size"),
+    sizes: Array.from(sizes),
     colors: Array.from(colors).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })),
     badges: mergedBadges,
   };
@@ -535,11 +535,12 @@ function getAdminFeedback(
 
 function revalidateProductSurfaces(category: string, subCategory: string, slug: string): void {
   updateTag(PRODUCT_CATALOG_CACHE_TAG);
+  updateTag(PRODUCT_SEARCH_INDEX_CACHE_TAG);
+  updateTag(SIZE_CHARTS_CACHE_TAG);
   revalidatePath("/");
   revalidatePath("/products");
   revalidatePath("/products", "layout");
   revalidatePath("/api/catalog/products");
-  revalidatePath("/api/catalog/filters");
 
   if (category) {
     revalidatePath(`/products/${category}`);
@@ -711,20 +712,14 @@ function generateSkuCode(name: string) {
   return `${base}-${suffix}`.slice(0, 100);
 }
 
-async function generateUniqueSlug(
-  databases: ReturnType<typeof createDatabasesWithApiKey>,
-  databaseId: string,
-  name: string
-) {
+async function generateUniqueProductSlug(name: string): Promise<string> {
   const base = ensureSlug(name, "product");
-  try {
-    const existing = await databases.listDocuments(databaseId, "sku", [Query.equal("slug", base), Query.limit(1)]);
-    if (existing.documents.length === 0) {
-      return base;
-    }
-  } catch {
-    // Fall through to a suffixed slug if the lookup fails.
-  }
+  const existing = await getAdminDb()
+    .collection(FIRESTORE_COLLECTIONS.products)
+    .where("slug", "==", base)
+    .limit(1)
+    .get();
+  if (existing.empty) return base;
   return `${base}-${Math.random().toString(36).slice(2, 6)}`.slice(0, 140);
 }
 
@@ -738,9 +733,32 @@ async function saveProductAction(formData: FormData) {
 
   const name = String(formData.get("name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
-  const stockQty = toNumber(formData.get("stockQty"));
-  const sizeOptions = parseCommaSeparated(String(formData.get("sizeOptions") ?? ""));
+  const sizeInventory = parseSizeInventory(formData.get("sizeInventory"));
+  if (sizeInventory.length === 0) {
+    throw new Error("Add at least one size and its stock quantity.");
+  }
+  const stockQty = getTotalSizeStock(sizeInventory);
+  const sizeOptions = sizeInventory.map((item) => item.size);
   const primarySize = sizeOptions.find((value) => SIZE_ENUM.includes(value)) ?? "M";
+  const colorOptions = parseCommaSeparated(String(formData.get("colorOptions") ?? ""));
+  const colorMedia = parseColorMedia(formData.get("colorMedia"))
+    .filter((entry) => colorOptions.some((color) => color.toLowerCase() === entry.color.toLowerCase()));
+  const submittedSizeChart = parseSizeChartSnapshot(formData.get("sizeChart"));
+  const shouldCreateSizeChart = String(formData.get("createSizeChart") ?? "false") === "true";
+  let sizeChartId = String(formData.get("sizeChartId") ?? "").trim();
+  let sizeChart = submittedSizeChart;
+
+  if (shouldCreateSizeChart && submittedSizeChart) {
+    sizeChartId = ID.unique();
+    sizeChart = { ...submittedSizeChart, id: sizeChartId, isPreset: false };
+    const nowIso = new Date().toISOString();
+    await getAdminDb().collection(FIRESTORE_COLLECTIONS.sizeCharts).doc(sizeChartId).set({
+      ...sizeChart,
+      isActive: true,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    });
+  }
   const category = String(formData.get("category") ?? "").trim();
   const subCategory = String(formData.get("subcategory") ?? "").trim();
   const badge = String(formData.get("badge") ?? "").trim();
@@ -770,34 +788,38 @@ async function saveProductAction(formData: FormData) {
     inStock: stockQty > 0,
     size: primarySize,
     sizeOptions,
-    colorOptions: parseCommaSeparated(String(formData.get("colorOptions") ?? "")),
+    sizeInventory,
+    colorOptions,
+    colorMedia,
+    sizeChartId: sizeChart?.id ?? sizeChartId,
+    sizeChart,
     otherImageUrls: parseCommaSeparated(String(formData.get("otherImageUrls") ?? "")),
     badge: badge || "",
     isActive: true,
   };
 
-  const databases = createDatabasesWithApiKey();
-  const databaseId = getDatabaseId();
-  let savedSlug = "";
+  const db = getAdminDb();
+  const productReference = productId
+    ? db.collection(FIRESTORE_COLLECTIONS.products).doc(productId)
+    : db.collection(FIRESTORE_COLLECTIONS.products).doc();
+  const savedProductId = productReference.id;
+  const savedSlug = oldSlug || await generateUniqueProductSlug(name);
+  const nowIso = new Date().toISOString();
+  await productReference.set({
+    ...payload,
+    sku: String(formData.get("existingSku") ?? "").trim() || generateSkuCode(name),
+    slug: savedSlug,
+    updatedAt: nowIso,
+    ...(productId ? {} : { createdAt: nowIso }),
+  }, { merge: productId.length > 0 });
 
-  if (productId) {
-    // Include sku/slug in the payload so required fields are satisfied (TablesDB enforces required on every write).
-    const existingSku = String(formData.get("existingSku") ?? "").trim();
-    const existingSlug = oldSlug;
-    // Fall back to productId/generated slug if the row had null values (pre-existing rows before schema update).
-    payload.sku = existingSku || productId;
-    payload.slug = existingSlug || await generateUniqueSlug(databases, databaseId, name);
-    savedSlug = String(payload.slug);
-    await databases.updateDocument(databaseId, "sku", productId, payload);
-  } else {
-    const slug = await generateUniqueSlug(databases, databaseId, name);
-    savedSlug = slug;
-    await databases.createDocument(databaseId, "sku", ID.unique(), {
-      ...payload,
-      sku: generateSkuCode(name),
-      slug,
-    });
-  }
+  await upsertProductSearchEntry({
+    id: savedProductId,
+    name,
+    slug: savedSlug,
+    category: normalizedCategory.category,
+    subCategory: normalizedCategory.subCategory,
+  });
 
   revalidateProductSurfaces(normalizedCategory.category, normalizedCategory.subCategory, savedSlug);
   if (oldCategory || oldSubCategory || oldSlug) {
@@ -1065,29 +1087,23 @@ export default async function AdminPage({
   let products: AdminProduct[] = [];
   let productsTotal = 0;
   if (activeTab === "products") {
-    if (productQuery) {
-      const result = await listDocumentsFromCandidates(["sku"], [
-        Query.limit(500),
-      ]);
-
-      const filtered = sortAdminProductsByRecency(result.documents.map((document) => mapProduct(document)))
-        .filter((product) => {
-          const haystack = `${product.name} ${product.sku} ${product.category} ${product.subCategory}`.toLowerCase();
-          return haystack.includes(productQuery);
-        });
-
-      productsTotal = filtered.length;
-      const offset = (productPage - 1) * productPageSize;
-      products = filtered.slice(offset, offset + productPageSize);
-    } else {
-      const result = await listDocumentsFromCandidates(["sku"], [
-        Query.limit(500),
-      ]);
-
-      productsTotal = result.total;
-      const sorted = sortAdminProductsByRecency(result.documents.map((document) => mapProduct(document)));
-      products = sorted.slice((productPage - 1) * productPageSize, productPage * productPageSize);
-    }
+    const snapshot = await getAdminDb().collection(FIRESTORE_COLLECTIONS.products).limit(500).get();
+    const mapped = snapshot.docs.map((document) => {
+      const data = document.data();
+      return mapProduct({
+        ...data,
+        $id: document.id,
+        $createdAt: timestampToIso(data.createdAt),
+      });
+    });
+    const filtered = sortAdminProductsByRecency(mapped).filter((product) => {
+      if (!productQuery) return true;
+      const haystack = `${product.name} ${product.sku} ${product.category} ${product.subCategory}`.toLowerCase();
+      return haystack.includes(productQuery);
+    });
+    productsTotal = filtered.length;
+    const offset = (productPage - 1) * productPageSize;
+    products = filtered.slice(offset, offset + productPageSize);
   }
 
   let addons: AdminAddon[] = [];
@@ -1163,15 +1179,21 @@ export default async function AdminPage({
 
   const productFormOptions =
     modal === "product-create" || modal === "product-edit" ? await getProductFormOptions() : null;
+  const sizeCharts = modal === "product-create" || modal === "product-edit"
+    ? mergeSizeChartLibrary(await listSizeChartDocuments())
+    : [];
 
   let modalDocument: Record<string, unknown> | null = null;
   let modalDocumentType: "product" | "banner" | "coupon" | "order" | "payment" | "wallet-payout" | null = null;
 
   if (entityId && modal) {
     if (modal.startsWith("product-")) {
-      const result = await getDocumentFromCandidates(["sku"], entityId);
-      modalDocument = result.document;
-      modalDocumentType = result.document ? "product" : null;
+      const snapshot = await getAdminDb().collection(FIRESTORE_COLLECTIONS.products).doc(entityId).get();
+      const data = snapshot.data();
+      modalDocument = snapshot.exists && data
+        ? { ...data, $id: snapshot.id, $createdAt: timestampToIso(data.createdAt) }
+        : null;
+      modalDocumentType = modalDocument ? "product" : null;
     } else if (modal.startsWith("banner-")) {
       const result = await getDocumentFromCandidates(["banners", "banner"], entityId);
       modalDocument = result.document;
@@ -1792,11 +1814,6 @@ export default async function AdminPage({
               <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Discount Price</span>
               <input aria-label="Discount price" name="discountPrice" type="number" min="0" defaultValue={String(modalDocument?.discountPrice ?? 0)} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" />
             </label>
-            <label className="sm:col-span-2 flex flex-col gap-1.5">
-              <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Stock Qty</span>
-              <input aria-label="Stock quantity" name="stockQty" type="number" min="0" defaultValue={String(modalDocument?.stockQty ?? 0)} className="h-11 rounded-xl border border-primary/18 bg-paper px-3 text-sm" required />
-              <span className="text-[0.62rem] text-primary/55">In-stock is set automatically when quantity is above 0.</span>
-            </label>
             <div className="sm:col-span-2 flex flex-col gap-1.5">
               <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Product Badge</span>
               <AdminBadgeSelector
@@ -1808,27 +1825,17 @@ export default async function AdminPage({
               <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Description</span>
               <textarea aria-label="Product description" name="description" rows={4} defaultValue={String(modalDocument?.description ?? "")} className="rounded-xl border border-primary/18 bg-paper px-3 py-2.5 text-sm" required />
             </label>
-            <div className="sm:col-span-2 flex flex-col gap-1.5">
-              <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Sizes</span>
-              <AdminMultiSelectField
-                name="sizeOptions"
-                label="Size"
-                options={productFormOptions?.sizes ?? []}
-                defaultValue={toStringArray(modalDocument?.sizeOptions).join(", ")}
-                inline
-              />
-            </div>
-            <div className="sm:col-span-2 flex flex-col gap-1.5">
-              <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Colors</span>
-              <AdminMultiSelectField
-                name="colorOptions"
-                label="Color"
-                options={productFormOptions?.colors ?? []}
-                defaultValue={toStringArray(modalDocument?.colorOptions).join(", ")}
-                allowCustom
-              />
-              {/* inline not set → uses dropdown for the long color list */}
-            </div>
+            <AdminProductMerchandisingFields
+              availableSizes={productFormOptions?.sizes ?? []}
+              availableColors={productFormOptions?.colors ?? []}
+              charts={sizeCharts}
+              initialSizes={toStringArray(modalDocument?.sizeOptions)}
+              initialInventory={parseSizeInventory(modalDocument?.sizeInventory)}
+              initialColors={toStringArray(modalDocument?.colorOptions)}
+              initialColorMedia={parseColorMedia(modalDocument?.colorMedia)}
+              initialSizeChartId={String(modalDocument?.sizeChartId ?? "")}
+              initialSizeChart={parseSizeChartSnapshot(modalDocument?.sizeChart)}
+            />
             <div className="flex flex-col gap-1.5">
               <span className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary/62">Main Image</span>
               <AdminImageUploadField name="mainImageUrl" label="Main image" defaultValue={String(modalDocument?.mainImageUrl ?? "")} required />

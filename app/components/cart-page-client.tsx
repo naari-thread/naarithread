@@ -12,15 +12,17 @@ import { useAuth } from "@/app/components/auth-provider";
 import type { ProductRecord } from "@/lib/appwrite/products";
 import { SizeColorPickerModal } from "@/app/components/size-color-picker-modal";
 import {
+  createCartLineId,
+  parseCartLineId,
   readCartItemSelections,
   readCartItems,
   removeCartItemSelection,
-  writeCartItemSelection,
   writeCartItemSelections,
   writeCartItems,
   type CartItemSelectionsMap,
   type CartItemsMap,
 } from "@/lib/cart-state";
+import { getAvailableStockForSize } from "@/lib/product-merchandising";
 import { readUserCartMap, upsertUserCartMap } from "@/lib/appwrite/shop-sync";
 import { fetchUserProfileViaApi, saveUserProfileViaApi } from "@/lib/appwrite/profiles";
 import {
@@ -31,6 +33,17 @@ import {
   writePincodeCache,
   type CheckoutAddress,
 } from "@/lib/checkout-cache";
+import {
+  sanitizePhoneNumber,
+  sanitizePostalCode,
+  validateShippingAddress,
+  type AddressValidationErrors,
+} from "@/lib/address-validation";
+import {
+  DEFAULT_COUNTRY_CODE,
+  POPULAR_COUNTRY_CODES,
+  type CountryCodeOption,
+} from "@/lib/country-codes";
 import {
   fetchProductsByIds,
 } from "@/lib/product-catalog-cache";
@@ -103,13 +116,22 @@ function estimateDeliveryDays(state: string): string {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type CartLine = {
+  lineId: string;
   product: ProductRecord;
   quantity: number;
+  size: string;
+  color: string;
 };
 
 type MissingCartLine = {
+  lineId: string;
   productId: string;
   quantity: number;
+};
+
+type PickerLine = {
+  lineId: string;
+  product: ProductRecord;
 };
 
 type CreateOrderResponse = {
@@ -359,7 +381,7 @@ export function CartPageClient() {
   const { user, isLoading, isAuthenticated, createAuthJwt } = useAuth();
   const [cartItems, setCartItems] = useState<CartItemsMap>({});
   const [cartSelections, setCartSelections] = useState<CartItemSelectionsMap>({});
-  const [pickerProduct, setPickerProduct] = useState<ProductRecord | null>(null);
+  const [pickerLine, setPickerLine] = useState<PickerLine | null>(null);
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [hasCompletedCatalogSync, setHasCompletedCatalogSync] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -397,8 +419,30 @@ export function CartPageClient() {
   // True while the saved profile/address is being fetched after sign-in, so the
   // shipping fields can show a spinner instead of looking deceptively empty.
   const [isProfileLoading, setIsProfileLoading] = useState(false);
+  const [addressErrors, setAddressErrors] = useState<AddressValidationErrors>({});
+  const [selectedCountryCode, setSelectedCountryCode] = useState<CountryCodeOption>(DEFAULT_COUNTRY_CODE);
+  const [isCountryPickerOpen, setIsCountryPickerOpen] = useState(false);
+  const [isMobileCountryPickerOpen, setIsMobileCountryPickerOpen] = useState(false);
+  const countryPickerRef = useRef<HTMLDivElement | null>(null);
+  const mobileCountryPickerRef = useRef<HTMLDivElement | null>(null);
+  const [phoneWarning, setPhoneWarning] = useState<string>("");
+  const phoneWarningTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleProceedToBuyRef = useRef<(() => Promise<void>) | null>(null);
+
+  useEffect(() => {
+    if (!isCountryPickerOpen && !isMobileCountryPickerOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (countryPickerRef.current && !countryPickerRef.current.contains(event.target as Node)) {
+        setIsCountryPickerOpen(false);
+      }
+      if (mobileCountryPickerRef.current && !mobileCountryPickerRef.current.contains(event.target as Node)) {
+        setIsMobileCountryPickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isCountryPickerOpen, isMobileCountryPickerOpen]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -558,6 +602,12 @@ export function CartPageClient() {
         city: prev.city || cachedPincode.city,
         state: prev.state || cachedPincode.state,
       }));
+      setAddressErrors((prev) => ({
+        ...prev,
+        postalCode: undefined,
+        city: undefined,
+        state: undefined,
+      }));
       return;
     }
 
@@ -591,6 +641,12 @@ export function CartPageClient() {
             ...prev,
             city: prev.city || po.District,
             state: prev.state || po.State,
+          }));
+          setAddressErrors((prev) => ({
+            ...prev,
+            postalCode: undefined,
+            city: undefined,
+            state: undefined,
           }));
           // Persist so re-entering this pincode never hits the API again.
           writePincodeCache(code, {
@@ -646,7 +702,9 @@ export function CartPageClient() {
     // Using the general catalog endpoint (limit=12) would incorrectly flag
     // products from page 2+ as "stale" and auto-remove them.
     const hydrateCartProducts = async () => {
-      const cartIds = Object.keys(readCartItems());
+      const cartIds = [
+        ...new Set(Object.keys(readCartItems()).map((lineId) => parseCartLineId(lineId).productId)),
+      ];
 
       if (cartIds.length === 0) {
         if (alive) setHasCompletedCatalogSync(true);
@@ -746,7 +804,9 @@ export function CartPageClient() {
     if (!hasCompletedCatalogSync || products.length === 0) return;
 
     const byId = new Set(products.map((p) => p.id));
-    const staleIds = Object.keys(cartItems).filter((id) => !byId.has(id));
+    const staleIds = Object.keys(cartItems).filter(
+      (lineId) => !byId.has(parseCartLineId(lineId).productId)
+    );
     if (staleIds.length === 0) return;
 
     const next = { ...cartItems };
@@ -770,20 +830,28 @@ export function CartPageClient() {
     const resolvedLines: CartLine[] = [];
     const unresolvedLines: MissingCartLine[] = [];
 
-    for (const [productId, quantity] of Object.entries(cartItems)) {
+    for (const [lineId, quantity] of Object.entries(cartItems)) {
       if (quantity <= 0) {
         continue;
       }
 
+      const identity = parseCartLineId(lineId);
+      const legacySelection = cartSelections[lineId] ?? cartSelections[identity.productId];
+      const size = identity.size || legacySelection?.size || "";
+      const color = identity.color || legacySelection?.color || "";
+      const productId = identity.productId;
       const product = byId.get(productId);
       if (!product) {
-        unresolvedLines.push({ productId, quantity });
+        unresolvedLines.push({ lineId, productId, quantity });
         continue;
       }
 
       resolvedLines.push({
+        lineId,
         product,
         quantity,
+        size,
+        color,
       });
     }
 
@@ -791,7 +859,7 @@ export function CartPageClient() {
       lines: resolvedLines,
       missingLines: unresolvedLines,
     };
-  }, [cartItems, products]);
+  }, [cartItems, cartSelections, products]);
 
   const subtotal = lines.reduce((total, line) => {
     const sellingPrice = line.product.discountPrice > 0 ? line.product.discountPrice : line.product.originalPrice;
@@ -816,8 +884,7 @@ export function CartPageClient() {
     const itemsList = lines
       .map((l) => {
         const price = l.product.discountPrice > 0 ? l.product.discountPrice : l.product.originalPrice;
-        const sel = cartSelections[l.product.id];
-        const opts = [sel?.size ? `Size: ${sel.size}` : "", sel?.color ? `Color: ${sel.color}` : ""].filter(Boolean).join(", ");
+        const opts = [l.size ? `Size: ${l.size}` : "", l.color ? `Color: ${l.color}` : ""].filter(Boolean).join(", ");
         return `• ${l.product.name}${opts ? ` (${opts})` : ""} x${l.quantity} — ₹${(price * l.quantity).toLocaleString("en-IN")}`;
       })
       .join("\n");
@@ -839,12 +906,40 @@ export function CartPageClient() {
       "",
       `*Order Total:* ₹${total.toLocaleString("en-IN")} (incl. ₹49 COD charge)`,
       "",
-      `*Deliver to:*\n${addrParts}\nPhone: ${shippingAddress.phone}`,
+      `*Deliver to:*\n${addrParts}\nPhone: ${selectedCountryCode.dialCode} ${shippingAddress.phone}`,
       "",
       "Please confirm my order. Thank you!",
     ].join("\n");
     return `https://wa.me/${WHATSAPP_RAW}?text=${encodeURIComponent(msg)}`;
-  }, [useCod, isCodEligible, lines, cartSelections, shippingAddress, total]);
+  }, [useCod, isCodEligible, lines, shippingAddress, selectedCountryCode.dialCode, total]);
+
+  const handlePhoneKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (
+      event.key === "Backspace" ||
+      event.key === "Tab" ||
+      event.key === "Enter" ||
+      event.key === "ArrowLeft" ||
+      event.key === "ArrowRight" ||
+      event.key === "ArrowUp" ||
+      event.key === "ArrowDown" ||
+      event.key === "Delete" ||
+      event.key === "Home" ||
+      event.key === "End" ||
+      event.ctrlKey ||
+      event.metaKey
+    ) {
+      return;
+    }
+
+    if (!/^\d$/.test(event.key)) {
+      event.preventDefault();
+      setPhoneWarning("Only numbers (0–9) are allowed");
+      if (phoneWarningTimerRef.current) clearTimeout(phoneWarningTimerRef.current);
+      phoneWarningTimerRef.current = setTimeout(() => {
+        setPhoneWarning("");
+      }, 2500);
+    }
+  };
 
   const persistCart = async (nextItems: CartItemsMap) => {
     setCartItems(nextItems);
@@ -862,15 +957,25 @@ export function CartPageClient() {
     }
   };
 
-  const applyCartSelection = (product: ProductRecord, size: string, color: string) => {
-    writeCartItemSelection(product.id, { size, color });
-    const next = { ...cartSelections, [product.id]: { ...(size ? { size } : {}), ...(color ? { color } : {}) } };
-    setCartSelections(next);
+  const applyCartSelection = (line: PickerLine, size: string, color: string): void => {
+    const nextLineId = createCartLineId(line.product.id, size, color);
+    const nextItems = { ...cartItems };
+    const movedQuantity = nextItems[line.lineId] ?? 0;
+    delete nextItems[line.lineId];
+    nextItems[nextLineId] = (nextItems[nextLineId] ?? 0) + movedQuantity;
+
+    const nextSelections = { ...cartSelections };
+    delete nextSelections[line.lineId];
+    nextSelections[nextLineId] = { ...(size ? { size } : {}), ...(color ? { color } : {}) };
+    writeCartItemSelections(nextSelections);
+    writeCartItems(nextItems);
+    setCartSelections(nextSelections);
+    setCartItems(nextItems);
     if (isAuthenticated && user?.$id) {
       void (async () => {
         try {
           const jwt = await createAuthJwt();
-          await upsertUserCartMap(jwt, user.$id, cartItems, next);
+          await upsertUserCartMap(jwt, user.$id, nextItems, nextSelections);
         } catch {
           // Selection is persisted locally; cloud will sync on next change.
         }
@@ -879,32 +984,46 @@ export function CartPageClient() {
   };
 
   // A cart line needs a picker when the product offers sizes but none is chosen yet.
-  const findLineNeedingSelection = () =>
-    lines.find((line) => line.product.sizeOptions.length > 0 && !cartSelections[line.product.id]?.size)?.product ?? null;
+  const findLineNeedingSelection = (): CartLine | null =>
+    lines.find((line) => line.product.sizeOptions.length > 0 && !line.size) ?? null;
 
-  const updateQuantity = async (productId: string, quantity: number) => {
+  const updateQuantity = async (lineId: string, quantity: number): Promise<void> => {
     const next = { ...cartItems };
     const normalized = Math.max(0, Math.min(99, Math.trunc(quantity)));
-    const previousQuantity = cartItems[productId] ?? 0;
+    const previousQuantity = cartItems[lineId] ?? 0;
+    const line = lines.find((item) => item.lineId === lineId);
+    const availableStock = line
+      ? line.product.sizeInventory.length > 0
+        ? getAvailableStockForSize(line.product.sizeInventory, line.size)
+        : line.product.stockQty
+      : 0;
+
+    if (normalized > availableStock) {
+      toast.error(
+        `Only ${availableStock} available${line?.size ? ` in size ${line.size}` : ""}.`,
+        { id: `cart-stock-limit-${lineId}` }
+      );
+      return;
+    }
 
     if (normalized <= 0) {
-      delete next[productId];
-      removeCartItemSelection(productId);
+      delete next[lineId];
+      removeCartItemSelection(lineId);
       setCartSelections((previous) => {
         const rest = { ...previous };
-        delete rest[productId];
+        delete rest[lineId];
         return rest;
       });
     } else {
-      next[productId] = normalized;
+      next[lineId] = normalized;
     }
 
     await persistCart(next);
 
     if (previousQuantity > 0 && normalized <= 0) {
-      const productName = products.find((product) => product.id === productId)?.name ?? "Item";
+      const productName = line?.product.name ?? "Item";
       toast.info("Removed from cart", {
-        id: `cart-removed-${productId}`,
+        id: `cart-removed-${lineId}`,
         description: productName,
       });
     }
@@ -969,27 +1088,20 @@ export function CartPageClient() {
 
     // Safety net: never place an order missing a required size (e.g. selection lost
     // after localStorage was cleared, or item added before this feature existed).
-    const productNeedingSelection = findLineNeedingSelection();
-    if (productNeedingSelection) {
-      toast.error(`Please choose a size for "${productNeedingSelection.name}".`);
-      setPickerProduct(productNeedingSelection);
+    const lineNeedingSelection = findLineNeedingSelection();
+    if (lineNeedingSelection) {
+      toast.error(`Please choose a size for "${lineNeedingSelection.product.name}".`);
+      setPickerLine({ lineId: lineNeedingSelection.lineId, product: lineNeedingSelection.product });
       return;
     }
 
-    const hasShippingDetails =
-      shippingAddress.fullName.trim() &&
-      shippingAddress.phone.trim() &&
-      shippingAddress.houseNo.trim() &&
-      shippingAddress.locality.trim() &&
-      shippingAddress.city.trim() &&
-      shippingAddress.state.trim() &&
-      shippingAddress.postalCode.trim() &&
-      shippingAddress.country.trim();
-
-    if (!hasShippingDetails) {
-      toast.error("Please complete shipping address before payment.");
+    const addressValidation = validateShippingAddress(shippingAddress, selectedCountryCode.dialCode);
+    if (!addressValidation.isValid) {
+      setAddressErrors(addressValidation.errors);
+      toast.error(addressValidation.firstErrorMessage || "Please complete shipping address before payment.");
       return;
     }
+    setAddressErrors({});
 
     setCheckoutPhase("shopping");
     setCheckoutError("");
@@ -1003,7 +1115,7 @@ export function CartPageClient() {
           const saveJwt = await createAuthJwt();
           await saveUserProfileViaApi(saveJwt, {
             fullName: shippingAddress.fullName.trim() || user?.name || "",
-            phone: shippingAddress.phone.trim(),
+            phone: `${selectedCountryCode.dialCode} ${shippingAddress.phone.trim()}`.trim(),
             address: JSON.stringify(shippingAddress),
           });
           // Keep the local cache in sync so the next reload prefills the edits.
@@ -1024,8 +1136,8 @@ export function CartPageClient() {
         lines: lines.map((line) => ({
           productId: line.product.id,
           quantity: line.quantity,
-          size: cartSelections[line.product.id]?.size ?? "",
-          color: cartSelections[line.product.id]?.color ?? "",
+          size: line.size,
+          color: line.color,
         })),
         shippingAddress,
         couponCode: appliedCoupon?.code ?? "",
@@ -1240,16 +1352,16 @@ export function CartPageClient() {
 
   return (
     <>
-      {pickerProduct !== null && (
+      {pickerLine !== null && (
         <SizeColorPickerModal
-          product={pickerProduct}
+          product={pickerLine.product}
           actionLabel="Save Selection"
           onConfirm={({ size, color }) => {
-            const p = pickerProduct;
-            setPickerProduct(null);
-            applyCartSelection(p, size, color);
+            const line = pickerLine;
+            setPickerLine(null);
+            applyCartSelection(line, size, color);
           }}
-          onClose={() => setPickerProduct(null)}
+          onClose={() => setPickerLine(null)}
         />
       )}
       {/* Payment processing overlay — blocks all interactions during server-side verification */}
@@ -1296,7 +1408,7 @@ export function CartPageClient() {
 
                 return (
                   <article
-                    key={line.product.id}
+                    key={line.lineId}
                     className="flex flex-col gap-6 border-b border-primary/10 py-6 first:pt-0 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div className="flex flex-1 items-start sm:items-center gap-5">
@@ -1326,15 +1438,14 @@ export function CartPageClient() {
                           {line.product.categoryValue} • {line.product.subCategoryValue}
                         </p>
                         {(() => {
-                          const sel = cartSelections[line.product.id];
                           const hasOptions = line.product.sizeOptions.length > 0 || line.product.colorOptions.length > 0;
-                          const needsSize = line.product.sizeOptions.length > 0 && !sel?.size;
+                          const needsSize = line.product.sizeOptions.length > 0 && !line.size;
 
                           if (needsSize) {
                             return (
                               <button
                                 type="button"
-                                onClick={() => setPickerProduct(line.product)}
+                                onClick={() => setPickerLine({ lineId: line.lineId, product: line.product })}
                                 className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-amber-400 bg-amber-50 px-2.5 py-1 text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-amber-700 transition hover:bg-amber-100"
                               >
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
@@ -1343,18 +1454,18 @@ export function CartPageClient() {
                             );
                           }
 
-                          if (sel?.size || sel?.color) {
+                          if (line.size || line.color) {
                             return (
                               <div className="mt-2 flex items-center gap-2">
                                 <p className="text-[0.62rem] font-semibold uppercase tracking-[0.13em] text-primary/60">
-                                  {sel?.size ? `Size: ${sel.size}` : ""}
-                                  {sel?.size && sel?.color ? "  •  " : ""}
-                                  {sel?.color ? `Color: ${sel.color}` : ""}
+                                  {line.size ? `Size: ${line.size}` : ""}
+                                  {line.size && line.color ? "  •  " : ""}
+                                  {line.color ? `Color: ${line.color}` : ""}
                                 </p>
                                 {hasOptions ? (
                                   <button
                                     type="button"
-                                    onClick={() => setPickerProduct(line.product)}
+                                    onClick={() => setPickerLine({ lineId: line.lineId, product: line.product })}
                                     className="text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-primary/45 underline underline-offset-2 transition hover:text-primary/70"
                                   >
                                     Change
@@ -1383,7 +1494,7 @@ export function CartPageClient() {
                         <button
                           type="button"
                           aria-label={`Decrease ${line.product.name} quantity`}
-                          onClick={() => void updateQuantity(line.product.id, line.quantity - 1)}
+                          onClick={() => void updateQuantity(line.lineId, line.quantity - 1)}
                           className="flex h-7 w-7 items-center justify-center rounded-full transition hover:bg-primary/10"
                         >
                           <DynamicHugeIcon name="Remove01Icon" className="h-4 w-4" iconStrokeWidth={2} aria-hidden={true} />
@@ -1392,22 +1503,28 @@ export function CartPageClient() {
                         <button
                           type="button"
                           aria-label={`Increase ${line.product.name} quantity`}
-                          disabled={line.quantity >= line.product.stockQty}
-                          onClick={() => void updateQuantity(line.product.id, line.quantity + 1)}
+                          disabled={line.quantity >= (line.product.sizeInventory.length > 0
+                            ? getAvailableStockForSize(line.product.sizeInventory, line.size)
+                            : line.product.stockQty)}
+                          onClick={() => void updateQuantity(line.lineId, line.quantity + 1)}
                           className="flex h-7 w-7 items-center justify-center rounded-full transition hover:bg-primary/10 disabled:opacity-30"
                         >
                           <DynamicHugeIcon name="Add01Icon" className="h-4 w-4" iconStrokeWidth={2} aria-hidden={true} />
                         </button>
                       </div>
-                      {line.product.stockQty <= 3 && (
+                      {(line.product.sizeInventory.length > 0
+                        ? getAvailableStockForSize(line.product.sizeInventory, line.size)
+                        : line.product.stockQty) <= 3 && (
                         <p className="text-[0.62rem] font-semibold text-red-600">
-                          Only {line.product.stockQty} left in stock!
+                          Only {line.product.sizeInventory.length > 0
+                            ? getAvailableStockForSize(line.product.sizeInventory, line.size)
+                            : line.product.stockQty} left in stock!
                         </p>
                       )}
                       <button
                         type="button"
                         aria-label={`Remove ${line.product.name} from cart`}
-                        onClick={() => void updateQuantity(line.product.id, 0)}
+                        onClick={() => void updateQuantity(line.lineId, 0)}
                         className="inline-flex h-9 w-full items-center justify-center rounded-xl border border-primary/20 text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-primary transition hover:border-primary/45 hover:bg-primary/5"
                       >
                         Remove
@@ -1429,7 +1546,7 @@ export function CartPageClient() {
                       <button
                         type="button"
                         aria-label="Remove unavailable item from cart"
-                        onClick={() => void updateQuantity(line.productId, 0)}
+                        onClick={() => void updateQuantity(line.lineId, 0)}
                         className="mt-3 inline-flex h-9 items-center justify-center rounded-xl border border-primary/20 px-4 text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-primary transition hover:border-primary/45 hover:bg-primary/5"
                       >
                         Remove
@@ -1476,45 +1593,182 @@ export function CartPageClient() {
                 ) : null}
                 <div className="mt-3 grid grid-cols-2 gap-2.5">
                   {/* Full name | Phone */}
-                  <input
-                    aria-label="Shipping full name"
-                    placeholder="Full name"
-                    value={shippingAddress.fullName}
-                    onChange={(event) =>
-                      setShippingAddress((prev) => ({ ...prev, fullName: event.target.value }))
-                    }
-                    className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45"
-                  />
-                  <input
-                    aria-label="Shipping phone"
-                    placeholder="Phone"
-                    value={shippingAddress.phone}
-                    onChange={(event) =>
-                      setShippingAddress((prev) => ({ ...prev, phone: event.target.value }))
-                    }
-                    className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45"
-                  />
+                  <div className="flex flex-col">
+                    <input
+                      type="text"
+                      autoComplete="name"
+                      aria-label="Shipping full name"
+                      aria-invalid={Boolean(addressErrors.fullName)}
+                      placeholder="Full name"
+                      value={shippingAddress.fullName}
+                      onChange={(event) => {
+                        setShippingAddress((prev) => ({ ...prev, fullName: event.target.value }));
+                        if (addressErrors.fullName) {
+                          setAddressErrors((prev) => ({ ...prev, fullName: undefined }));
+                        }
+                      }}
+                      className={`h-10 rounded-lg border bg-secondary px-3 text-sm outline-none transition ${
+                        addressErrors.fullName
+                          ? "border-red-500/70 focus:border-red-500 ring-1 ring-red-500/30"
+                          : "border-primary/16 focus:border-primary/45"
+                      }`}
+                    />
+                    {addressErrors.fullName ? (
+                      <p className="mt-1 text-[0.68rem] font-medium text-red-600">{addressErrors.fullName}</p>
+                    ) : null}
+                  </div>
+
+                  <div className="flex flex-col">
+                    <div
+                      ref={countryPickerRef}
+                      className={`relative flex items-center rounded-lg border bg-secondary transition ${
+                        addressErrors.phone
+                          ? "border-red-500/70 focus-within:border-red-500 ring-1 ring-red-500/30"
+                          : "border-primary/16 focus-within:border-primary/45"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        aria-label={`Select country code, currently ${selectedCountryCode.name} ${selectedCountryCode.dialCode}`}
+                        onClick={() => setIsCountryPickerOpen((prev) => !prev)}
+                        className="inline-flex h-10 shrink-0 cursor-pointer items-center gap-1 border-r border-primary/14 bg-secondary px-2.5 text-xs font-semibold text-primary transition hover:bg-primary/[0.04]"
+                      >
+                        <span className="text-sm">{selectedCountryCode.flag}</span>
+                        <span>{selectedCountryCode.dialCode}</span>
+                        <svg viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3 text-primary/50" aria-hidden="true">
+                          <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+
+                      {isCountryPickerOpen ? (
+                        <div
+                          className="absolute left-0 top-full z-40 mt-1 max-h-56 w-56 overflow-y-auto rounded-xl border border-primary/18 bg-secondary p-1 shadow-xl"
+                          role="listbox"
+                        >
+                          {POPULAR_COUNTRY_CODES.map((country) => (
+                            <button
+                              key={country.code}
+                              type="button"
+                              role="option"
+                              aria-selected={selectedCountryCode.code === country.code}
+                              onClick={() => {
+                                setSelectedCountryCode(country);
+                                setIsCountryPickerOpen(false);
+                                if (addressErrors.phone) {
+                                  setAddressErrors((prev) => ({ ...prev, phone: undefined }));
+                                }
+                              }}
+                              className={`flex w-full cursor-pointer items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs transition ${
+                                selectedCountryCode.code === country.code
+                                  ? "bg-primary font-semibold text-secondary"
+                                  : "text-primary hover:bg-primary/8"
+                              }`}
+                            >
+                              <span className="flex items-center gap-2 truncate">
+                                <span>{country.flag}</span>
+                                <span className="truncate">{country.name}</span>
+                              </span>
+                              <span className="ml-2 font-mono text-[0.7rem] opacity-75">{country.dialCode}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      <input
+                        type="tel"
+                        inputMode="numeric"
+                        autoComplete="tel"
+                        maxLength={selectedCountryCode.maxDigits}
+                        aria-label="Shipping phone"
+                        aria-invalid={Boolean(addressErrors.phone)}
+                        placeholder={`Mobile (${selectedCountryCode.formatHint})`}
+                        value={shippingAddress.phone}
+                        onKeyDown={handlePhoneKeyDown}
+                        onChange={(event) => {
+                          const raw = event.target.value;
+                          const sanitized = sanitizePhoneNumber(raw, selectedCountryCode.dialCode, selectedCountryCode.maxDigits);
+                          if (raw && !/^\d+$/.test(raw)) {
+                            setPhoneWarning("Only numbers (0–9) are allowed");
+                            if (phoneWarningTimerRef.current) clearTimeout(phoneWarningTimerRef.current);
+                            phoneWarningTimerRef.current = setTimeout(() => setPhoneWarning(""), 2500);
+                          } else if (phoneWarning) {
+                            setPhoneWarning("");
+                          }
+                          setShippingAddress((prev) => ({ ...prev, phone: sanitized }));
+                          if (addressErrors.phone) {
+                            setAddressErrors((prev) => ({ ...prev, phone: undefined }));
+                          }
+                        }}
+                        className="h-10 w-full min-w-0 flex-1 bg-transparent px-3 text-sm outline-none"
+                      />
+                    </div>
+                    {phoneWarning ? (
+                      <p className="mt-1 flex items-center gap-1 text-[0.68rem] font-medium text-amber-700">
+                        <span aria-hidden={true}>⚠️</span>
+                        <span>{phoneWarning}</span>
+                      </p>
+                    ) : addressErrors.phone ? (
+                      <p className="mt-1 text-[0.68rem] font-medium text-red-600">{addressErrors.phone}</p>
+                    ) : shippingAddress.phone.length > 0 && shippingAddress.phone.length < selectedCountryCode.maxDigits ? (
+                      <p className="mt-1 text-[0.68rem] text-primary/50">{shippingAddress.phone.length}/{selectedCountryCode.maxDigits} digits</p>
+                    ) : null}
+                  </div>
+
                   {/* House no | Locality */}
-                  <input
-                    aria-label="House / flat number"
-                    placeholder="House / Flat No."
-                    value={shippingAddress.houseNo}
-                    onChange={(event) =>
-                      setShippingAddress((prev) => ({ ...prev, houseNo: event.target.value }))
-                    }
-                    className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45"
-                  />
-                  <input
-                    aria-label="Locality / area"
-                    placeholder="Locality / Area"
-                    value={shippingAddress.locality}
-                    onChange={(event) =>
-                      setShippingAddress((prev) => ({ ...prev, locality: event.target.value }))
-                    }
-                    className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45"
-                  />
+                  <div className="flex flex-col">
+                    <input
+                      type="text"
+                      autoComplete="address-line1"
+                      aria-label="House / flat number"
+                      aria-invalid={Boolean(addressErrors.houseNo)}
+                      placeholder="House / Flat No."
+                      value={shippingAddress.houseNo}
+                      onChange={(event) => {
+                        setShippingAddress((prev) => ({ ...prev, houseNo: event.target.value }));
+                        if (addressErrors.houseNo) {
+                          setAddressErrors((prev) => ({ ...prev, houseNo: undefined }));
+                        }
+                      }}
+                      className={`h-10 rounded-lg border bg-secondary px-3 text-sm outline-none transition ${
+                        addressErrors.houseNo
+                          ? "border-red-500/70 focus:border-red-500 ring-1 ring-red-500/30"
+                          : "border-primary/16 focus:border-primary/45"
+                      }`}
+                    />
+                    {addressErrors.houseNo ? (
+                      <p className="mt-1 text-[0.68rem] font-medium text-red-600">{addressErrors.houseNo}</p>
+                    ) : null}
+                  </div>
+
+                  <div className="flex flex-col">
+                    <input
+                      type="text"
+                      autoComplete="address-line2"
+                      aria-label="Locality / area"
+                      aria-invalid={Boolean(addressErrors.locality)}
+                      placeholder="Locality / Area"
+                      value={shippingAddress.locality}
+                      onChange={(event) => {
+                        setShippingAddress((prev) => ({ ...prev, locality: event.target.value }));
+                        if (addressErrors.locality) {
+                          setAddressErrors((prev) => ({ ...prev, locality: undefined }));
+                        }
+                      }}
+                      className={`h-10 rounded-lg border bg-secondary px-3 text-sm outline-none transition ${
+                        addressErrors.locality
+                          ? "border-red-500/70 focus:border-red-500 ring-1 ring-red-500/30"
+                          : "border-primary/16 focus:border-primary/45"
+                      }`}
+                    />
+                    {addressErrors.locality ? (
+                      <p className="mt-1 text-[0.68rem] font-medium text-red-600">{addressErrors.locality}</p>
+                    ) : null}
+                  </div>
+
                   {/* Landmark — full width */}
                   <input
+                    type="text"
+                    autoComplete="off"
                     aria-label="Landmark (optional)"
                     placeholder="Landmark (optional)"
                     value={shippingAddress.landmark}
@@ -1523,64 +1777,131 @@ export function CartPageClient() {
                     }
                     className="col-span-2 h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45"
                   />
+
                   {/* Pincode — full width, has autofill spinner */}
-                  <div className="relative col-span-2">
-                    <input
-                      aria-label="Shipping postal code"
-                      placeholder="Pincode — auto-fills city & state"
-                      maxLength={6}
-                      value={shippingAddress.postalCode}
-                      onChange={(event) => {
-                        const val = event.target.value.replace(/\D/g, "").slice(0, 6);
-                        setShippingAddress((prev) => ({
-                          ...prev,
-                          postalCode: val,
-                          city: val.length === 6 ? "" : prev.city,
-                          state: val.length === 6 ? "" : prev.state,
-                        }));
-                      }}
-                      className="h-10 w-full rounded-lg border border-primary/16 bg-secondary px-3 pr-8 text-sm outline-none transition focus:border-primary/45"
-                    />
-                    {postalLookupPending ? (
-                      <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center">
-                        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary/20 border-t-primary/60" />
-                      </span>
+                  <div className="relative col-span-2 flex flex-col">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="postal-code"
+                        aria-label="Shipping postal code"
+                        aria-invalid={Boolean(addressErrors.postalCode)}
+                        placeholder="Pincode — auto-fills city & state"
+                        maxLength={6}
+                        value={shippingAddress.postalCode}
+                        onChange={(event) => {
+                          const val = sanitizePostalCode(event.target.value);
+                          setShippingAddress((prev) => ({
+                            ...prev,
+                            postalCode: val,
+                            city: val.length === 6 ? "" : prev.city,
+                            state: val.length === 6 ? "" : prev.state,
+                          }));
+                          if (addressErrors.postalCode) {
+                            setAddressErrors((prev) => ({ ...prev, postalCode: undefined }));
+                          }
+                        }}
+                        className={`h-10 w-full rounded-lg border bg-secondary px-3 pr-8 text-sm outline-none transition ${
+                          addressErrors.postalCode
+                            ? "border-red-500/70 focus:border-red-500 ring-1 ring-red-500/30"
+                            : "border-primary/16 focus:border-primary/45"
+                        }`}
+                      />
+                      {postalLookupPending ? (
+                        <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center">
+                          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary/20 border-t-primary/60" />
+                        </span>
+                      ) : null}
+                    </div>
+                    {addressErrors.postalCode ? (
+                      <p className="mt-1 text-[0.68rem] font-medium text-red-600">{addressErrors.postalCode}</p>
                     ) : null}
                   </div>
+
                   {postalLookupFailed && (
                     <p className="col-span-2 text-xs text-amber-700">
                       Pincode not found — please fill in City and State manually.
                     </p>
                   )}
+
                   {/* City | State */}
-                  <input
-                    aria-label="Shipping city"
-                    placeholder="City"
-                    value={shippingAddress.city}
-                    onChange={(event) =>
-                      setShippingAddress((prev) => ({ ...prev, city: event.target.value }))
-                    }
-                    className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45"
-                  />
-                  <input
-                    aria-label="Shipping state"
-                    placeholder="State"
-                    value={shippingAddress.state}
-                    onChange={(event) =>
-                      setShippingAddress((prev) => ({ ...prev, state: event.target.value }))
-                    }
-                    className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45"
-                  />
+                  <div className="flex flex-col">
+                    <input
+                      type="text"
+                      autoComplete="address-level2"
+                      aria-label="Shipping city"
+                      aria-invalid={Boolean(addressErrors.city)}
+                      placeholder="City"
+                      value={shippingAddress.city}
+                      onChange={(event) => {
+                        setShippingAddress((prev) => ({ ...prev, city: event.target.value }));
+                        if (addressErrors.city) {
+                          setAddressErrors((prev) => ({ ...prev, city: undefined }));
+                        }
+                      }}
+                      className={`h-10 rounded-lg border bg-secondary px-3 text-sm outline-none transition ${
+                        addressErrors.city
+                          ? "border-red-500/70 focus:border-red-500 ring-1 ring-red-500/30"
+                          : "border-primary/16 focus:border-primary/45"
+                      }`}
+                    />
+                    {addressErrors.city ? (
+                      <p className="mt-1 text-[0.68rem] font-medium text-red-600">{addressErrors.city}</p>
+                    ) : null}
+                  </div>
+
+                  <div className="flex flex-col">
+                    <input
+                      type="text"
+                      autoComplete="address-level1"
+                      aria-label="Shipping state"
+                      aria-invalid={Boolean(addressErrors.state)}
+                      placeholder="State"
+                      value={shippingAddress.state}
+                      onChange={(event) => {
+                        setShippingAddress((prev) => ({ ...prev, state: event.target.value }));
+                        if (addressErrors.state) {
+                          setAddressErrors((prev) => ({ ...prev, state: undefined }));
+                        }
+                      }}
+                      className={`h-10 rounded-lg border bg-secondary px-3 text-sm outline-none transition ${
+                        addressErrors.state
+                          ? "border-red-500/70 focus:border-red-500 ring-1 ring-red-500/30"
+                          : "border-primary/16 focus:border-primary/45"
+                      }`}
+                    />
+                    {addressErrors.state ? (
+                      <p className="mt-1 text-[0.68rem] font-medium text-red-600">{addressErrors.state}</p>
+                    ) : null}
+                  </div>
+
                   {/* Country — full width */}
-                  <input
-                    aria-label="Shipping country"
-                    placeholder="Country"
-                    value={shippingAddress.country}
-                    onChange={(event) =>
-                      setShippingAddress((prev) => ({ ...prev, country: event.target.value }))
-                    }
-                    className="col-span-2 h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45"
-                  />
+                  <div className="col-span-2 flex flex-col">
+                    <input
+                      type="text"
+                      autoComplete="country-name"
+                      aria-label="Shipping country"
+                      aria-invalid={Boolean(addressErrors.country)}
+                      placeholder="Country"
+                      value={shippingAddress.country}
+                      onChange={(event) => {
+                        setShippingAddress((prev) => ({ ...prev, country: event.target.value }));
+                        if (addressErrors.country) {
+                          setAddressErrors((prev) => ({ ...prev, country: undefined }));
+                        }
+                      }}
+                      className={`h-10 rounded-lg border bg-secondary px-3 text-sm outline-none transition ${
+                        addressErrors.country
+                          ? "border-red-500/70 focus:border-red-500 ring-1 ring-red-500/30"
+                          : "border-primary/16 focus:border-primary/45"
+                      }`}
+                    />
+                    {addressErrors.country ? (
+                      <p className="mt-1 text-[0.68rem] font-medium text-red-600">{addressErrors.country}</p>
+                    ) : null}
+                  </div>
+
                   {/* Save-for-later checkbox */}
                   {isAuthenticated &&
                   (shippingAddress.fullName || shippingAddress.phone || shippingAddress.houseNo || shippingAddress.city) ? (
@@ -1978,47 +2299,277 @@ export function CartPageClient() {
                     </div>
                   ) : null}
                   <div className="mt-3 grid grid-cols-2 gap-2.5">
-                    <input aria-label="Shipping full name" placeholder="Full name" value={shippingAddress.fullName}
-                      onChange={(e) => setShippingAddress((p) => ({ ...p, fullName: e.target.value }))}
-                      className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45" />
-                    <input aria-label="Shipping phone" placeholder="Phone" value={shippingAddress.phone}
-                      onChange={(e) => setShippingAddress((p) => ({ ...p, phone: e.target.value }))}
-                      className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45" />
-                    <input aria-label="House / flat number" placeholder="House / Flat No." value={shippingAddress.houseNo}
-                      onChange={(e) => setShippingAddress((p) => ({ ...p, houseNo: e.target.value }))}
-                      className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45" />
-                    <input aria-label="Locality / area" placeholder="Locality / Area" value={shippingAddress.locality}
-                      onChange={(e) => setShippingAddress((p) => ({ ...p, locality: e.target.value }))}
-                      className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45" />
-                    <input aria-label="Landmark (optional)" placeholder="Landmark (optional)" value={shippingAddress.landmark}
-                      onChange={(e) => setShippingAddress((p) => ({ ...p, landmark: e.target.value }))}
-                      className="col-span-2 h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45" />
-                    <div className="relative col-span-2">
-                      <input aria-label="Shipping postal code" placeholder="Pincode — auto-fills city & state"
-                        maxLength={6} value={shippingAddress.postalCode}
+                    {/* Full name | Phone */}
+                    <div className="flex flex-col">
+                      <input
+                        type="text"
+                        autoComplete="name"
+                        aria-label="Shipping full name"
+                        aria-invalid={Boolean(addressErrors.fullName)}
+                        placeholder="Full name"
+                        value={shippingAddress.fullName}
                         onChange={(e) => {
-                          const val = e.target.value.replace(/\D/g, "").slice(0, 6);
-                          setShippingAddress((p) => ({ ...p, postalCode: val, city: val.length === 6 ? "" : p.city, state: val.length === 6 ? "" : p.state }));
+                          setShippingAddress((p) => ({ ...p, fullName: e.target.value }));
+                          if (addressErrors.fullName) setAddressErrors((p) => ({ ...p, fullName: undefined }));
                         }}
-                        className="h-10 w-full rounded-lg border border-primary/16 bg-secondary px-3 pr-8 text-sm outline-none transition focus:border-primary/45" />
-                      {postalLookupPending ? (
-                        <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center">
-                          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary/20 border-t-primary/60" />
-                        </span>
+                        className={`h-10 rounded-lg border bg-secondary px-3 text-sm outline-none transition ${
+                          addressErrors.fullName ? "border-red-500/70 focus:border-red-500 ring-1 ring-red-500/30" : "border-primary/16 focus:border-primary/45"
+                        }`}
+                      />
+                      {addressErrors.fullName ? (
+                        <p className="mt-1 text-[0.68rem] font-medium text-red-600">{addressErrors.fullName}</p>
                       ) : null}
                     </div>
+
+                    <div className="flex flex-col">
+                      <div
+                        ref={mobileCountryPickerRef}
+                        className={`relative flex items-center rounded-lg border bg-secondary transition ${
+                          addressErrors.phone
+                            ? "border-red-500/70 focus-within:border-red-500 ring-1 ring-red-500/30"
+                            : "border-primary/16 focus-within:border-primary/45"
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          aria-label={`Select country code, currently ${selectedCountryCode.name} ${selectedCountryCode.dialCode}`}
+                          onClick={() => setIsMobileCountryPickerOpen((prev) => !prev)}
+                          className="inline-flex h-10 shrink-0 cursor-pointer items-center gap-1 border-r border-primary/14 bg-secondary px-2.5 text-xs font-semibold text-primary transition hover:bg-primary/[0.04]"
+                        >
+                          <span className="text-sm">{selectedCountryCode.flag}</span>
+                          <span>{selectedCountryCode.dialCode}</span>
+                          <svg viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3 text-primary/50" aria-hidden="true">
+                            <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+
+                        {isMobileCountryPickerOpen ? (
+                          <div
+                            className="absolute left-0 top-full z-40 mt-1 max-h-56 w-56 overflow-y-auto rounded-xl border border-primary/18 bg-secondary p-1 shadow-xl"
+                            role="listbox"
+                          >
+                            {POPULAR_COUNTRY_CODES.map((country) => (
+                              <button
+                                key={country.code}
+                                type="button"
+                                role="option"
+                                aria-selected={selectedCountryCode.code === country.code}
+                                onClick={() => {
+                                  setSelectedCountryCode(country);
+                                  setIsMobileCountryPickerOpen(false);
+                                  if (addressErrors.phone) {
+                                    setAddressErrors((prev) => ({ ...prev, phone: undefined }));
+                                  }
+                                }}
+                                className={`flex w-full cursor-pointer items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs transition ${
+                                  selectedCountryCode.code === country.code
+                                    ? "bg-primary font-semibold text-secondary"
+                                    : "text-primary hover:bg-primary/8"
+                                }`}
+                              >
+                                <span className="flex items-center gap-2 truncate">
+                                  <span>{country.flag}</span>
+                                  <span className="truncate">{country.name}</span>
+                                </span>
+                                <span className="ml-2 font-mono text-[0.7rem] opacity-75">{country.dialCode}</span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+
+                        <input
+                          type="tel"
+                          inputMode="numeric"
+                          autoComplete="tel"
+                          maxLength={selectedCountryCode.maxDigits}
+                          aria-label="Shipping phone"
+                          aria-invalid={Boolean(addressErrors.phone)}
+                          placeholder={`Mobile (${selectedCountryCode.formatHint})`}
+                          value={shippingAddress.phone}
+                          onKeyDown={handlePhoneKeyDown}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            const sanitized = sanitizePhoneNumber(raw, selectedCountryCode.dialCode, selectedCountryCode.maxDigits);
+                            if (raw && !/^\d+$/.test(raw)) {
+                              setPhoneWarning("Only numbers (0–9) are allowed");
+                              if (phoneWarningTimerRef.current) clearTimeout(phoneWarningTimerRef.current);
+                              phoneWarningTimerRef.current = setTimeout(() => setPhoneWarning(""), 2500);
+                            } else if (phoneWarning) {
+                              setPhoneWarning("");
+                            }
+                            setShippingAddress((p) => ({ ...p, phone: sanitized }));
+                            if (addressErrors.phone) setAddressErrors((p) => ({ ...p, phone: undefined }));
+                          }}
+                          className="h-10 w-full min-w-0 flex-1 bg-transparent px-3 text-sm outline-none"
+                        />
+                      </div>
+                      {phoneWarning ? (
+                        <p className="mt-1 flex items-center gap-1 text-[0.68rem] font-medium text-amber-700">
+                          <span aria-hidden={true}>⚠️</span>
+                          <span>{phoneWarning}</span>
+                        </p>
+                      ) : addressErrors.phone ? (
+                        <p className="mt-1 text-[0.68rem] font-medium text-red-600">{addressErrors.phone}</p>
+                      ) : shippingAddress.phone.length > 0 && shippingAddress.phone.length < selectedCountryCode.maxDigits ? (
+                        <p className="mt-1 text-[0.68rem] text-primary/50">{shippingAddress.phone.length}/{selectedCountryCode.maxDigits} digits</p>
+                      ) : null}
+                    </div>
+
+                    {/* House no | Locality */}
+                    <div className="flex flex-col">
+                      <input
+                        type="text"
+                        autoComplete="address-line1"
+                        aria-label="House / flat number"
+                        aria-invalid={Boolean(addressErrors.houseNo)}
+                        placeholder="House / Flat No."
+                        value={shippingAddress.houseNo}
+                        onChange={(e) => {
+                          setShippingAddress((p) => ({ ...p, houseNo: e.target.value }));
+                          if (addressErrors.houseNo) setAddressErrors((p) => ({ ...p, houseNo: undefined }));
+                        }}
+                        className={`h-10 rounded-lg border bg-secondary px-3 text-sm outline-none transition ${
+                          addressErrors.houseNo ? "border-red-500/70 focus:border-red-500 ring-1 ring-red-500/30" : "border-primary/16 focus:border-primary/45"
+                        }`}
+                      />
+                      {addressErrors.houseNo ? (
+                        <p className="mt-1 text-[0.68rem] font-medium text-red-600">{addressErrors.houseNo}</p>
+                      ) : null}
+                    </div>
+
+                    <div className="flex flex-col">
+                      <input
+                        type="text"
+                        autoComplete="address-line2"
+                        aria-label="Locality / area"
+                        aria-invalid={Boolean(addressErrors.locality)}
+                        placeholder="Locality / Area"
+                        value={shippingAddress.locality}
+                        onChange={(e) => {
+                          setShippingAddress((p) => ({ ...p, locality: e.target.value }));
+                          if (addressErrors.locality) setAddressErrors((p) => ({ ...p, locality: undefined }));
+                        }}
+                        className={`h-10 rounded-lg border bg-secondary px-3 text-sm outline-none transition ${
+                          addressErrors.locality ? "border-red-500/70 focus:border-red-500 ring-1 ring-red-500/30" : "border-primary/16 focus:border-primary/45"
+                        }`}
+                      />
+                      {addressErrors.locality ? (
+                        <p className="mt-1 text-[0.68rem] font-medium text-red-600">{addressErrors.locality}</p>
+                      ) : null}
+                    </div>
+
+                    {/* Landmark — full width */}
+                    <input
+                      type="text"
+                      autoComplete="off"
+                      aria-label="Landmark (optional)"
+                      placeholder="Landmark (optional)"
+                      value={shippingAddress.landmark}
+                      onChange={(e) => setShippingAddress((p) => ({ ...p, landmark: e.target.value }))}
+                      className="col-span-2 h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45"
+                    />
+
+                    {/* Pincode — full width, has autofill spinner */}
+                    <div className="relative col-span-2 flex flex-col">
+                      <div className="relative">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          autoComplete="postal-code"
+                          aria-label="Shipping postal code"
+                          aria-invalid={Boolean(addressErrors.postalCode)}
+                          placeholder="Pincode — auto-fills city & state"
+                          maxLength={6}
+                          value={shippingAddress.postalCode}
+                          onChange={(e) => {
+                            const val = sanitizePostalCode(e.target.value);
+                            setShippingAddress((p) => ({ ...p, postalCode: val, city: val.length === 6 ? "" : p.city, state: val.length === 6 ? "" : p.state }));
+                            if (addressErrors.postalCode) setAddressErrors((p) => ({ ...p, postalCode: undefined }));
+                          }}
+                          className={`h-10 w-full rounded-lg border bg-secondary px-3 pr-8 text-sm outline-none transition ${
+                            addressErrors.postalCode ? "border-red-500/70 focus:border-red-500 ring-1 ring-red-500/30" : "border-primary/16 focus:border-primary/45"
+                          }`}
+                        />
+                        {postalLookupPending ? (
+                          <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center">
+                            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary/20 border-t-primary/60" />
+                          </span>
+                        ) : null}
+                      </div>
+                      {addressErrors.postalCode ? (
+                        <p className="mt-1 text-[0.68rem] font-medium text-red-600">{addressErrors.postalCode}</p>
+                      ) : null}
+                    </div>
+
                     {postalLookupFailed ? (
                       <p className="col-span-2 text-xs text-amber-700">Pincode not found — please fill in City and State manually.</p>
                     ) : null}
-                    <input aria-label="Shipping city" placeholder="City" value={shippingAddress.city}
-                      onChange={(e) => setShippingAddress((p) => ({ ...p, city: e.target.value }))}
-                      className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45" />
-                    <input aria-label="Shipping state" placeholder="State" value={shippingAddress.state}
-                      onChange={(e) => setShippingAddress((p) => ({ ...p, state: e.target.value }))}
-                      className="h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45" />
-                    <input aria-label="Shipping country" placeholder="Country" value={shippingAddress.country}
-                      onChange={(e) => setShippingAddress((p) => ({ ...p, country: e.target.value }))}
-                      className="col-span-2 h-10 rounded-lg border border-primary/16 bg-secondary px-3 text-sm outline-none transition focus:border-primary/45" />
+
+                    {/* City | State */}
+                    <div className="flex flex-col">
+                      <input
+                        type="text"
+                        autoComplete="address-level2"
+                        aria-label="Shipping city"
+                        aria-invalid={Boolean(addressErrors.city)}
+                        placeholder="City"
+                        value={shippingAddress.city}
+                        onChange={(e) => {
+                          setShippingAddress((p) => ({ ...p, city: e.target.value }));
+                          if (addressErrors.city) setAddressErrors((p) => ({ ...p, city: undefined }));
+                        }}
+                        className={`h-10 rounded-lg border bg-secondary px-3 text-sm outline-none transition ${
+                          addressErrors.city ? "border-red-500/70 focus:border-red-500 ring-1 ring-red-500/30" : "border-primary/16 focus:border-primary/45"
+                        }`}
+                      />
+                      {addressErrors.city ? (
+                        <p className="mt-1 text-[0.68rem] font-medium text-red-600">{addressErrors.city}</p>
+                      ) : null}
+                    </div>
+
+                    <div className="flex flex-col">
+                      <input
+                        type="text"
+                        autoComplete="address-level1"
+                        aria-label="Shipping state"
+                        aria-invalid={Boolean(addressErrors.state)}
+                        placeholder="State"
+                        value={shippingAddress.state}
+                        onChange={(e) => {
+                          setShippingAddress((p) => ({ ...p, state: e.target.value }));
+                          if (addressErrors.state) setAddressErrors((p) => ({ ...p, state: undefined }));
+                        }}
+                        className={`h-10 rounded-lg border bg-secondary px-3 text-sm outline-none transition ${
+                          addressErrors.state ? "border-red-500/70 focus:border-red-500 ring-1 ring-red-500/30" : "border-primary/16 focus:border-primary/45"
+                        }`}
+                      />
+                      {addressErrors.state ? (
+                        <p className="mt-1 text-[0.68rem] font-medium text-red-600">{addressErrors.state}</p>
+                      ) : null}
+                    </div>
+
+                    {/* Country — full width */}
+                    <div className="col-span-2 flex flex-col">
+                      <input
+                        type="text"
+                        autoComplete="country-name"
+                        aria-label="Shipping country"
+                        aria-invalid={Boolean(addressErrors.country)}
+                        placeholder="Country"
+                        value={shippingAddress.country}
+                        onChange={(e) => {
+                          setShippingAddress((p) => ({ ...p, country: e.target.value }));
+                          if (addressErrors.country) setAddressErrors((p) => ({ ...p, country: undefined }));
+                        }}
+                        className={`h-10 rounded-lg border bg-secondary px-3 text-sm outline-none transition ${
+                          addressErrors.country ? "border-red-500/70 focus:border-red-500 ring-1 ring-red-500/30" : "border-primary/16 focus:border-primary/45"
+                        }`}
+                      />
+                      {addressErrors.country ? (
+                        <p className="mt-1 text-[0.68rem] font-medium text-red-600">{addressErrors.country}</p>
+                      ) : null}
+                    </div>
+
                     {isAuthenticated && (shippingAddress.fullName || shippingAddress.phone || shippingAddress.houseNo || shippingAddress.city) ? (
                       <label className="col-span-2 flex cursor-pointer items-center gap-2.5 pt-0.5">
                         <input type="checkbox" checked={saveAddress} onChange={(e) => setSaveAddress(e.target.checked)}

@@ -12,6 +12,8 @@ export const FIRESTORE_COLLECTIONS = {
   walletTransactions: "walletTransactions",
   walletPayoutRequests: "walletPayoutRequests",
   notifications: "notifications",
+  sizeCharts: "sizeCharts",
+  catalogMetadata: "catalogMetadata",
 } as const;
 
 const COLLECTION_ALIASES: Record<string, string> = {
@@ -41,6 +43,9 @@ const COLLECTION_ALIASES: Record<string, string> = {
   wallet_payout_requests: FIRESTORE_COLLECTIONS.walletPayoutRequests,
   walletPayoutRequests: FIRESTORE_COLLECTIONS.walletPayoutRequests,
   notifications: FIRESTORE_COLLECTIONS.notifications,
+  sizeCharts: FIRESTORE_COLLECTIONS.sizeCharts,
+  size_charts: FIRESTORE_COLLECTIONS.sizeCharts,
+  catalogMetadata: FIRESTORE_COLLECTIONS.catalogMetadata,
 };
 
 export function resolveFirestoreCollection(collectionId: string): string {

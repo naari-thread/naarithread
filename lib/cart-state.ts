@@ -5,6 +5,52 @@ export type CartItemSelection = {
 };
 export type CartItemSelectionsMap = Record<string, CartItemSelection>;
 
+const CART_LINE_SEPARATOR = "::";
+
+export type CartLineIdentity = {
+  lineId: string;
+  productId: string;
+  size: string;
+  color: string;
+};
+
+/** Creates a stable cart-line key so the same product can exist in multiple variants. */
+export function createCartLineId(productId: string, size = "", color = ""): string {
+  return [productId.trim(), size.trim(), color.trim()]
+    .map((part) => encodeURIComponent(part))
+    .join(CART_LINE_SEPARATOR);
+}
+
+/** Reads both variant-aware keys and legacy product-only cart keys. */
+export function parseCartLineId(lineId: string): CartLineIdentity {
+  const parts = lineId.split(CART_LINE_SEPARATOR);
+  if (parts.length !== 3) {
+    return { lineId, productId: lineId.trim(), size: "", color: "" };
+  }
+
+  try {
+    return {
+      lineId,
+      productId: decodeURIComponent(parts[0]).trim(),
+      size: decodeURIComponent(parts[1]).trim(),
+      color: decodeURIComponent(parts[2]).trim(),
+    };
+  } catch {
+    return { lineId, productId: lineId.trim(), size: "", color: "" };
+  }
+}
+
+export function getProductCartLineIds(items: CartItemsMap, productId: string): string[] {
+  return Object.keys(items).filter((lineId) => parseCartLineId(lineId).productId === productId);
+}
+
+export function getProductCartQuantity(items: CartItemsMap, productId: string): number {
+  return getProductCartLineIds(items, productId).reduce(
+    (total, lineId) => total + normalizeQuantity(items[lineId]),
+    0
+  );
+}
+
 const CART_STORAGE_KEY = "nt-cart-items-v1";
 const CART_SELECTIONS_STORAGE_KEY = "nt-cart-item-selections-v1";
 const CART_CHANGE_EVENT = "nt-cart-change";
@@ -120,7 +166,7 @@ export function getCartItemsCount(items: CartItemsMap): number {
   return Object.values(items).reduce((total, quantity) => total + normalizeQuantity(quantity), 0);
 }
 
-export function writeCartItems(items: CartItemsMap) {
+export function writeCartItems(items: CartItemsMap): void {
   if (typeof window === "undefined") {
     return;
   }
@@ -143,7 +189,7 @@ export function writeCartItems(items: CartItemsMap) {
   );
 }
 
-export function writeCartItemSelections(selections: CartItemSelectionsMap) {
+export function writeCartItemSelections(selections: CartItemSelectionsMap): void {
   if (typeof window === "undefined") {
     return;
   }
@@ -167,9 +213,9 @@ export function writeCartItemSelections(selections: CartItemSelectionsMap) {
   );
 }
 
-export function writeCartItemSelection(productId: string, selection: CartItemSelection | null) {
-  const safeProductId = productId.trim();
-  if (!safeProductId) {
+export function writeCartItemSelection(lineId: string, selection: CartItemSelection | null): void {
+  const safeLineId = lineId.trim();
+  if (!safeLineId) {
     return;
   }
 
@@ -179,19 +225,19 @@ export function writeCartItemSelection(productId: string, selection: CartItemSel
 
   const normalizedSelection = normalizeSelectionValue(selection);
   if (!normalizedSelection) {
-    delete nextSelections[safeProductId];
+    delete nextSelections[safeLineId];
   } else {
-    nextSelections[safeProductId] = normalizedSelection;
+    nextSelections[safeLineId] = normalizedSelection;
   }
 
   writeCartItemSelections(nextSelections);
 }
 
-export function removeCartItemSelection(productId: string) {
-  writeCartItemSelection(productId, null);
+export function removeCartItemSelection(lineId: string): void {
+  writeCartItemSelection(lineId, null);
 }
 
-export function subscribeToCartChanges(listener: (items: CartItemsMap) => void) {
+export function subscribeToCartChanges(listener: (items: CartItemsMap) => void): () => void {
   if (typeof window === "undefined") {
     return () => {};
   }

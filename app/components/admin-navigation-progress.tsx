@@ -64,7 +64,7 @@ export function AdminNavigationProgress() {
       document.removeEventListener("submit", handleSubmit);
       clearAllTimers();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
 
   if (!visible) return null;

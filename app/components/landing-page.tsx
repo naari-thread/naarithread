@@ -325,12 +325,10 @@ const revealItem = {
   },
 };
 
-function categoryHref(category: string, subcategory?: string) {
-  const params = new URLSearchParams({ category });
-  if (subcategory) {
-    params.set("subcategory", subcategory);
-  }
-  return `/products?${params.toString()}`;
+function categoryHref(category: string, subcategory?: string): string {
+  return subcategory
+    ? `/products/${category}/${subcategory}`
+    : `/products/${category}`;
 }
 
 type LandingPageProps = {

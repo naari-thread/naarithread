@@ -81,6 +81,11 @@ const COLORS = [
   "Gold", "Rose Gold", "Peach", "Lavender", "Sea Green", "Coral",
 ];
 const SIZES = ["XS", "S", "M", "L", "XL", "XXL"];
+const VALID_CATEGORIES = new Set(["ethnic-wear", "western-wear", "bottom-wear", "fusion-wear"]);
+const VALID_SUBCATEGORIES = new Set([
+  "saree", "lehenga", "anarkali", "dresses", "tops", "skirts", "jeans", "trousers-pants",
+  "palazzo", "indo-western-dresses", "crop-top-skirt", "kurti-jeans",
+]);
 const BADGES = ["", "", "", "bestseller", "new-arrival", "festive-edit", "clearance-sale"];
 
 const FABRICS = ["Banarasi silk", "Kanjivaram silk", "organza", "georgette", "chiffon", "art silk", "cotton silk", "velvet", "net"];
@@ -161,6 +166,31 @@ function buildProduct(subCategory, indexAcrossBatch) {
     `Comfortable, lightweight drape with a premium finish.`;
 
   const now = new Date().toISOString();
+  const sizeInventory = sizes.map((size) => ({ size, stockQty: 2 + rand(8) }));
+  const stockQty = sizeInventory.reduce((sum, item) => sum + item.stockQty, 0);
+  const colorMedia = colors.map((color, colorIndex) => ({
+    color,
+    imageUrls: colorIndex === 0 ? [mainImageUrl, ...otherImageUrls] : [otherImageUrls[colorIndex % otherImageUrls.length]],
+  }));
+  const sizeChart = {
+    id: "preset-tops",
+    name: "Tops, Kurtis & Blouses",
+    garmentType: "tops",
+    unit: "in",
+    isPreset: true,
+    columns: ["bust", "waist", "acrossShoulder", "garmentLength", "sleeveLength"],
+    rows: sizes.map((size, sizeIndex) => ({
+      size,
+      brandSize: String(34 + sizeIndex * 2),
+      measurements: {
+        bust: 34 + sizeIndex * 2,
+        waist: 30 + sizeIndex * 2,
+        acrossShoulder: 13.5 + sizeIndex * 0.5,
+        garmentLength: 44,
+        sleeveLength: 18,
+      },
+    })),
+  };
 
   return {
     name,
@@ -173,7 +203,7 @@ function buildProduct(subCategory, indexAcrossBatch) {
     altImages: otherImageUrls, // legacy field name kept for read compatibility
     originalPrice,
     discountPrice,
-    stockQty: 5 + rand(26), // 5-30
+    stockQty,
     inStock: true,
     rating: 0,
     aggRating: 0,
@@ -181,6 +211,10 @@ function buildProduct(subCategory, indexAcrossBatch) {
     reviewIds: [],
     colorOptions: colors,
     sizeOptions: sizes,
+    sizeInventory,
+    colorMedia,
+    sizeChartId: sizeChart.id,
+    sizeChart,
     size: sizes[0],
     badge: pick(BADGES),
     isActive: true,
@@ -250,6 +284,23 @@ async function main() {
   }
 
   await batch.commit();
+
+  const activeProducts = await db.collection("products").where("isActive", "==", true).get();
+  const searchIndex = activeProducts.docs.map((document) => {
+    const data = document.data();
+    return {
+      id: document.id,
+      name: String(data.name ?? ""),
+      slug: String(data.slug ?? ""),
+      category: String(data.category ?? ""),
+      subCategory: String(data.subCategory ?? data.subcategory ?? ""),
+    };
+  }).filter((entry) => entry.name && entry.slug && VALID_CATEGORIES.has(entry.category) && VALID_SUBCATEGORIES.has(entry.subCategory));
+  await db.collection("catalogMetadata").doc("productSearchIndex").set({
+    version: 1,
+    updatedAt: new Date().toISOString(),
+    products: searchIndex,
+  });
 
   // summary
   const bySub = plan.reduce((acc, s) => ({ ...acc, [s]: (acc[s] ?? 0) + 1 }), {});

@@ -4,15 +4,27 @@ import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactElement } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type FormEvent,
+  type ReactElement,
+} from "react";
 
 import { AuthModal } from "@/app/components/auth-modal";
 import { useAuth } from "@/app/components/auth-provider";
 import { CloudinaryImage } from "@/app/components/cloudinary-image";
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
+import { ProductSizeGuide } from "@/app/components/product-size-guide";
 import { showActionToast } from "@/lib/action-toast";
 import { upsertUserCartMap } from "@/lib/appwrite/shop-sync";
 import {
+  createCartLineId,
+  getProductCartQuantity,
   type CartItemsMap,
   readCartItems,
   readCartItemSelections,
@@ -27,6 +39,11 @@ import {
   type ProductReview,
 } from "@/lib/appwrite/reviews";
 import { uploadImageToCloudinary } from "@/lib/cloudinary-upload-client";
+import {
+  getAvailableStockForSize,
+  getImagesForColor,
+  type ProductColorMedia,
+} from "@/lib/product-merchandising";
 import {
   readWishlistItems,
   toggleWishlistItem,
@@ -52,6 +69,14 @@ type ReviewSpotlightItem = {
   verified: boolean;
   isAggregate: boolean;
 };
+
+function subscribeToHydration(): () => void {
+  return () => undefined;
+}
+
+function useIsHydrated(): boolean {
+  return useSyncExternalStore(subscribeToHydration, () => true, () => false);
+}
 
 function AggregateRatingStars({
   rating,
@@ -136,6 +161,34 @@ function formatReviewDate(value: string) {
   }).format(date);
 }
 
+function buildProductGallery(
+  baseImages: string[],
+  colorMedia: ProductColorMedia[],
+  initialColor: string | null
+): string[] {
+  const initialColorImages = getImagesForColor(colorMedia, initialColor);
+  const allColorImages = colorMedia.flatMap((mapping) =>
+    getImagesForColor([mapping], mapping.color)
+  );
+  return [...new Set([...initialColorImages, ...baseImages, ...allColorImages])];
+}
+
+function getColorForGalleryImage(
+  imageUrl: string,
+  colorMedia: ProductColorMedia[],
+  activeColor: string | null
+): string | null {
+  const currentMapping = colorMedia.find(
+    (mapping) => mapping.color.toLowerCase() === activeColor?.toLowerCase()
+      && getImagesForColor([mapping], mapping.color).includes(imageUrl)
+  );
+  if (currentMapping) return currentMapping.color;
+
+  return colorMedia.find((mapping) =>
+    getImagesForColor([mapping], mapping.color).includes(imageUrl)
+  )?.color ?? null;
+}
+
 export function ProductDetailsClient({
   product,
   category,
@@ -146,8 +199,11 @@ export function ProductDetailsClient({
   const router = useRouter();
   const { isAuthenticated, isLoading, user, createAuthJwt, normalizeError } =
     useAuth();
+  const isHydrated = useIsHydrated();
+  const isReviewAuthReady = isHydrated && !isLoading;
+  const canReview = isReviewAuthReady && isAuthenticated;
 
-  const galleryImages = useMemo(() => {
+  const baseGalleryImages = useMemo(() => {
     const imagePool = [product.mainImageUrl, ...product.otherImageUrls]
       .map((value) => value.trim())
       .filter(Boolean);
@@ -155,6 +211,18 @@ export function ProductDetailsClient({
     const unique = Array.from(new Set(imagePool));
     return unique.length > 0 ? unique : ["/logo4.png"];
   }, [product.mainImageUrl, product.otherImageUrls]);
+
+  const [activeColor, setActiveColor] = useState<string | null>(
+    product.colorOptions[0] ?? null,
+  );
+  const galleryImages = useMemo(
+    () => buildProductGallery(
+      baseGalleryImages,
+      product.colorMedia,
+      product.colorOptions[0] ?? null
+    ),
+    [baseGalleryImages, product.colorMedia, product.colorOptions]
+  );
 
   const sellingPrice = getProductPrice(product);
   const isDiscounted =
@@ -169,9 +237,6 @@ export function ProductDetailsClient({
     galleryImages[0] ?? "/logo4.png",
   );
   const [activeSize, setActiveSize] = useState<string | null>(null);
-  const [activeColor, setActiveColor] = useState<string | null>(
-    product.colorOptions[0] ?? null,
-  );
   const [cartActionError, setCartActionError] = useState("");
 
   const [reviews, setReviews] = useState<ProductReview[]>([]);
@@ -185,7 +250,6 @@ export function ProductDetailsClient({
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
-  const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
   const [supportsHover, setSupportsHover] = useState(false);
   const [isReviewsSectionVisible, setIsReviewsSectionVisible] = useState(false);
 
@@ -201,6 +265,50 @@ export function ProductDetailsClient({
   const [mobileCarouselIndex, setMobileCarouselIndex] = useState(0);
   const mobileCarouselRef = useRef<HTMLDivElement>(null);
 
+  const scrollMobileCarouselToIndex = useCallback((index: number): void => {
+    window.requestAnimationFrame(() => {
+      const carousel = mobileCarouselRef.current;
+      if (!carousel) return;
+      carousel.scrollTo({
+        left: index * carousel.clientWidth,
+        behavior: "smooth",
+      });
+    });
+  }, []);
+
+  const selectGalleryImage = useCallback((imageUrl: string, scrollMobile = false): void => {
+    const mappedColor = getColorForGalleryImage(
+      imageUrl,
+      product.colorMedia,
+      activeColor
+    );
+    const imageIndex = Math.max(0, galleryImages.indexOf(imageUrl));
+    if (mappedColor) setActiveColor(mappedColor);
+    setActiveImage(imageUrl);
+    setLightboxIndex(imageIndex);
+    setMobileCarouselIndex(imageIndex);
+    if (scrollMobile) scrollMobileCarouselToIndex(imageIndex);
+  }, [activeColor, galleryImages, product.colorMedia, scrollMobileCarouselToIndex]);
+
+  const selectProductColor = useCallback((color: string): void => {
+    setActiveColor(color);
+    setCartActionError("");
+    const firstMappedImage = getImagesForColor(product.colorMedia, color)[0];
+    if (!firstMappedImage) return;
+    const imageIndex = Math.max(0, galleryImages.indexOf(firstMappedImage));
+    setActiveImage(firstMappedImage);
+    setLightboxIndex(imageIndex);
+    setMobileCarouselIndex(imageIndex);
+    scrollMobileCarouselToIndex(imageIndex);
+  }, [galleryImages, product.colorMedia, scrollMobileCarouselToIndex]);
+
+  useEffect(() => {
+    const firstImage = galleryImages[0] ?? "/logo4.png";
+    setActiveImage(firstImage);
+    setMobileCarouselIndex(0);
+    mobileCarouselRef.current?.scrollTo({ left: 0, behavior: "smooth" });
+  }, [galleryImages]);
+
   // Mobile viewer state
   const [pinchScale, setPinchScale] = useState(1);
   const lastTapRef = useRef<number>(0);
@@ -214,9 +322,7 @@ export function ProductDetailsClient({
   const [reviewImagePreviews, setReviewImagePreviews] = useState<string[]>([]);
   const [reviewSpotlightIndex, setReviewSpotlightIndex] = useState(0);
 
-  const [wishlistItems, setWishlistItems] = useState<WishlistItemsMap>(() =>
-    readWishlistItems(),
-  );
+  const [wishlistItems, setWishlistItems] = useState<WishlistItemsMap>({});
 
   useEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
@@ -231,9 +337,7 @@ export function ProductDetailsClient({
     };
   }, []);
 
-  const [cartItems, setCartItems] = useState<CartItemsMap>(() =>
-    readCartItems(),
-  );
+  const [cartItems, setCartItems] = useState<CartItemsMap>({});
 
   useEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
@@ -249,7 +353,7 @@ export function ProductDetailsClient({
   }, []);
 
   const isWishlisted = !!wishlistItems[product.id];
-  const isAddedToCart = !!cartItems[product.id] && cartItems[product.id] > 0;
+  const isAddedToCart = getProductCartQuantity(cartItems, product.id) > 0;
 
   // Urgency numbers — deterministic per product id
   const urgencyViewersBase = deterministicInt(product.id, 1, 5, 15);
@@ -389,13 +493,12 @@ export function ProductDetailsClient({
       const itemWidth = carousel.scrollWidth / galleryImages.length;
       const index = Math.round(scrollLeft / itemWidth);
       const nextIndex = Math.max(0, Math.min(index, galleryImages.length - 1));
-      setMobileCarouselIndex(nextIndex);
-      setActiveImage(galleryImages[nextIndex] ?? galleryImages[0] ?? "/logo4.png");
+      selectGalleryImage(galleryImages[nextIndex] ?? galleryImages[0] ?? "/logo4.png");
     };
 
     carousel.addEventListener("scroll", handleScroll);
     return () => carousel.removeEventListener("scroll", handleScroll);
-  }, [galleryImages, galleryImages.length]);
+  }, [galleryImages, galleryImages.length, selectGalleryImage]);
 
   useEffect(() => {
     let alive = true;
@@ -407,11 +510,7 @@ export function ProductDetailsClient({
 
     const loadReviews = async () => {
       try {
-        const jwt = isAuthenticated ? await createAuthJwt() : undefined;
-        const response = await listProductReviews(product.id, jwt, [
-          product.sku,
-          product.slug,
-        ]);
+        const response = await listProductReviews(product.id);
         if (!alive) {
           return;
         }
@@ -439,12 +538,8 @@ export function ProductDetailsClient({
       window.cancelAnimationFrame(frameId);
     };
   }, [
-    createAuthJwt,
-    isAuthenticated,
     normalizeError,
     product.id,
-    product.slug,
-    product.sku,
   ]);
 
   const handleReviewSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -486,10 +581,6 @@ export function ProductDetailsClient({
       const createdReview = await createProductReview({
         jwt,
         productId: product.id,
-        productAliases: [product.sku, product.slug, product.id],
-        userId: user.$id,
-        userName: user.name?.trim() || user.email.split("@")[0] || "Customer",
-        userEmail: user.email,
         rating: reviewRating,
         comment: safeComment,
         imageUrls,
@@ -620,14 +711,29 @@ export function ProductDetailsClient({
     setCartActionError("");
 
     const current = readCartItems();
-    const currentQuantity = Math.max(0, Math.trunc(current[product.id] ?? 0));
+    const lineId = createCartLineId(product.id, activeSize ?? "", activeColor ?? "");
+    const currentQuantity = Math.max(0, Math.trunc(current[lineId] ?? 0));
+    const availableStock = product.sizeInventory.length > 0
+      ? getAvailableStockForSize(product.sizeInventory, activeSize)
+      : product.stockQty;
+    if (availableStock <= 0 || currentQuantity >= availableStock) {
+      const sizeDescription = activeSize ? ` in size ${activeSize}` : "";
+      setCartActionError(`Only ${availableStock} available${sizeDescription}.`);
+      showActionToast({
+        id: `cart-stock-limit-${product.id}-${activeSize ?? "default"}`,
+        message: "Stock limit reached",
+        description: `Only ${availableStock} available${sizeDescription}.`,
+        tone: "error",
+      });
+      return;
+    }
     const next = {
       ...current,
-      [product.id]: currentQuantity + 1,
+      [lineId]: currentQuantity + 1,
     };
 
     writeCartItems(next);
-    writeCartItemSelection(product.id, {
+    writeCartItemSelection(lineId, {
       ...(activeSize ? { size: activeSize } : {}),
       ...(activeColor ? { color: activeColor } : {}),
     });
@@ -760,9 +866,9 @@ export function ProductDetailsClient({
                     src={activeImage}
                     alt={`${product.name} main view`}
                     fill
-                    sizes="(max-width: 1024px) 42vw, 34vw"
+                    sizes="(max-width: 767px) 1px, (max-width: 1024px) 42vw, 34vw"
                     className="object-cover w-full h-full"
-                    priority
+                    loading="eager"
                     style={{
                       transformOrigin: `${zoomPos.x}% ${zoomPos.y}%`,
                       transform:
@@ -784,8 +890,7 @@ export function ProductDetailsClient({
                       aria-label={`Show image ${index + 1} as the main product image`}
                       title={`View image ${index + 1}`}
                       onClick={() => {
-                        setActiveImage(src);
-                        setLightboxIndex(index);
+                        selectGalleryImage(src);
                       }}
                       className={`relative aspect-square w-18 shrink-0 overflow-hidden rounded-2xl border transition-all ${
                         activeImage === src
@@ -813,8 +918,7 @@ export function ProductDetailsClient({
                       key={src}
                       className="relative min-h-[82vw] w-full shrink-0 snap-start overflow-hidden border-y border-primary/10 bg-secondary cursor-pointer"
                       onClick={() => {
-                        setActiveImage(src);
-                        setLightboxIndex(index);
+                        selectGalleryImage(src);
                         setLightboxOpen(true);
                       }}
                     >
@@ -822,9 +926,9 @@ export function ProductDetailsClient({
                         src={src}
                         alt={`${product.name} image ${index + 1}`}
                         fill
-                        sizes="100vw"
+                        sizes="(max-width: 767px) 100vw, 1px"
                         className="object-cover object-center"
-                        priority={index === 0}
+                        loading="lazy"
                       />
                     </div>
                   ))}
@@ -898,16 +1002,7 @@ export function ProductDetailsClient({
                       type="button"
                       aria-label={`Open image ${index + 1}`}
                       onClick={() => {
-                        setActiveImage(src);
-                        setMobileCarouselIndex(index);
-                        const carousel = mobileCarouselRef.current;
-                        if (carousel) {
-                          const width = carousel.clientWidth;
-                          carousel.scrollTo({
-                            left: index * width,
-                            behavior: "smooth",
-                          });
-                        }
+                        selectGalleryImage(src, true);
                       }}
                       className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border ${
                         activeImage === src
@@ -1000,8 +1095,7 @@ export function ProductDetailsClient({
                               key={color}
                               type="button"
                               onClick={() => {
-                                setActiveColor(color);
-                                setCartActionError("");
+                                selectProductColor(color);
                               }}
                               aria-label={`Select color ${color}`}
                               className={`flex h-9 min-w-[3.4rem] items-center justify-center rounded-full border px-3.5 text-[0.72rem] font-semibold uppercase tracking-wide transition-colors sm:h-10 sm:min-w-[3.6rem] sm:px-4 sm:text-xs ${
@@ -1023,81 +1117,36 @@ export function ProductDetailsClient({
                           <h3 className="text-[0.65rem] font-bold uppercase tracking-[0.15em] text-primary/80">
                             Size
                           </h3>
-                          <div
-                            className="relative"
-                            onMouseEnter={() => {
-                              if (supportsHover) {
-                                setIsSizeGuideOpen(true);
-                              }
-                            }}
-                            onMouseLeave={() => {
-                              if (supportsHover) {
-                                setIsSizeGuideOpen(false);
-                              }
-                            }}
-                          >
-                            <button
-                              type="button"
-                              aria-label="Open size guide"
-                              aria-expanded={isSizeGuideOpen}
-                              onClick={() =>
-                                setIsSizeGuideOpen((previous) => !previous)
-                              }
-                              className="text-[0.62rem] uppercase tracking-widest text-primary/50 underline decoration-primary/30 underline-offset-4 transition-colors hover:text-primary sm:text-[0.65rem]"
-                            >
-                              Size Guide
-                            </button>
-                            <AnimatePresence>
-                              {isSizeGuideOpen ? (
-                                <motion.div
-                                  initial={{ opacity: 0, y: 8, scale: 0.98 }}
-                                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                                  exit={{ opacity: 0, y: 6, scale: 0.98 }}
-                                  transition={{
-                                    duration: 0.2,
-                                    ease: [0.22, 1, 0.36, 1],
-                                  }}
-                                  className="absolute right-0 top-7 z-20 w-[14.5rem] rounded-2xl border border-primary/15 bg-secondary/95 p-3 shadow-[0_20px_40px_rgba(54,19,19,0.16)] backdrop-blur-sm"
-                                >
-                                  <p className="text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-primary/55">
-                                    Size Chart (Bust)
-                                  </p>
-                                  <div className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[0.72rem] text-primary/80">
-                                    <span className="font-semibold">S</span>
-                                    <span>34 in</span>
-                                    <span className="font-semibold">M</span>
-                                    <span>36 in</span>
-                                    <span className="font-semibold">L</span>
-                                    <span>38 in</span>
-                                    <span className="font-semibold">XL</span>
-                                    <span>40 in</span>
-                                    <span className="font-semibold">XXL</span>
-                                    <span>42 in</span>
-                                  </div>
-                                </motion.div>
-                              ) : null}
-                            </AnimatePresence>
-                          </div>
+                          {product.sizeChart ? <ProductSizeGuide chart={product.sizeChart} /> : null}
                         </div>
                         <div className="flex flex-wrap gap-2">
-                          {product.sizeOptions.map((size) => (
-                            <button
-                              key={size}
-                              type="button"
-                              onClick={() => {
-                                setActiveSize(size);
-                                setCartActionError("");
-                              }}
-                              aria-label={`Select size ${size}`}
-                              className={`flex h-9 min-w-[3rem] items-center justify-center rounded-full border px-3 text-[0.72rem] font-semibold uppercase tracking-wide transition-colors sm:h-10 sm:text-xs ${
-                                activeSize === size
-                                  ? "border-primary bg-primary text-secondary"
-                                  : "border-primary/20 bg-transparent text-primary hover:border-primary/50"
-                              }`}
-                            >
-                              {size}
-                            </button>
-                          ))}
+                          {product.sizeOptions.map((size) => {
+                            const sizeStock = product.sizeInventory.length > 0
+                              ? getAvailableStockForSize(product.sizeInventory, size)
+                              : product.stockQty;
+                            const unavailable = sizeStock <= 0;
+                            return (
+                              <button
+                                key={size}
+                                type="button"
+                                disabled={unavailable}
+                                onClick={() => {
+                                  setActiveSize(size);
+                                  setCartActionError("");
+                                }}
+                                aria-label={unavailable ? `Size ${size} unavailable` : `Select size ${size}`}
+                                className={`flex h-9 min-w-[3rem] items-center justify-center rounded-full border px-3 text-[0.72rem] font-semibold uppercase tracking-wide transition-colors sm:h-10 sm:text-xs ${
+                                  unavailable
+                                    ? "cursor-not-allowed border-primary/10 bg-primary/[0.03] text-primary/30 line-through"
+                                    : activeSize === size
+                                      ? "border-primary bg-primary text-secondary"
+                                      : "border-primary/20 bg-transparent text-primary hover:border-primary/50"
+                                }`}
+                              >
+                                {size}
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -1116,13 +1165,14 @@ export function ProductDetailsClient({
                   <div className="relative z-10 mt-4 flex w-full flex-row gap-2.5 md:mt-0">
                     <button
                       type="button"
+                      disabled={product.stockQty <= 0}
                       onClick={() => {
                         void handleAddToCart();
                       }}
                       aria-label="Add to cart"
-                      className="flex h-11 flex-1 items-center justify-center rounded-full border border-primary bg-primary px-4 py-2 text-[0.64rem] font-bold uppercase tracking-[0.16em] text-secondary transition-colors hover:bg-primary/90 sm:h-12 sm:px-8 sm:text-[0.7rem] sm:tracking-[0.2em]"
+                      className="flex h-11 flex-1 items-center justify-center rounded-full border border-primary bg-primary px-4 py-2 text-[0.64rem] font-bold uppercase tracking-[0.16em] text-secondary transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-45 sm:h-12 sm:px-8 sm:text-[0.7rem] sm:tracking-[0.2em]"
                     >
-                      Add to Cart
+                      {product.stockQty > 0 ? "Add to Cart" : "Out of Stock"}
                     </button>
                     <button
                       type="button"
@@ -1269,13 +1319,13 @@ export function ProductDetailsClient({
                     value={reviewDraft}
                     onChange={(event) => setReviewDraft(event.target.value)}
                     placeholder={
-                      isAuthenticated
+                      canReview
                         ? "Share your experience with fit, comfort, and craftsmanship..."
-                        : "Sign in to write your review..."
+                        : isReviewAuthReady
+                          ? "Sign in to write your review..."
+                          : "Checking your account..."
                     }
-                    disabled={
-                      !isAuthenticated || isLoading || isSubmittingReview
-                    }
+                    disabled={!canReview || isSubmittingReview}
                     className="mt-3 min-h-[6.2rem] w-full resize-y rounded-2xl border border-primary/15 bg-paper px-3.5 py-3 text-sm leading-relaxed text-primary placeholder:text-primary/45 focus:border-primary/35 focus:outline-none disabled:cursor-not-allowed disabled:opacity-65"
                   />
                   {/* Image upload section */}
@@ -1304,7 +1354,7 @@ export function ProductDetailsClient({
                           </button>
                         </div>
                       ))}
-                      {reviewImages.length < 3 && isAuthenticated && (
+                      {reviewImages.length < 3 && canReview && (
                         <label
                           className="flex h-16 w-16 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-primary/25 bg-primary/[0.03] text-primary/55 transition hover:border-primary/40 hover:bg-primary/[0.06]"
                           aria-label="Upload review image"
@@ -1336,7 +1386,7 @@ export function ProductDetailsClient({
                     <p className="mt-2 text-xs text-[#a83232]">{reviewError}</p>
                   ) : null}
                   <div className="mt-3 flex flex-wrap items-center gap-2.5">
-                    {isAuthenticated ? (
+                    {canReview ? (
                       <button
                         type="submit"
                         aria-label="Submit review"
@@ -1353,10 +1403,11 @@ export function ProductDetailsClient({
                       <button
                         type="button"
                         aria-label="Sign in to review"
+                        disabled={!isReviewAuthReady}
                         onClick={() => setIsAuthModalOpen(true)}
-                        className="inline-flex h-10 items-center justify-center rounded-full border border-primary bg-primary px-5 text-[0.65rem] font-bold uppercase tracking-[0.17em] text-secondary transition-colors hover:bg-primary/90"
+                        className="inline-flex h-10 items-center justify-center rounded-full border border-primary bg-primary px-5 text-[0.65rem] font-bold uppercase tracking-[0.17em] text-secondary transition-colors hover:bg-primary/90 disabled:cursor-wait disabled:opacity-60"
                       >
-                        Sign In to Review
+                        {isReviewAuthReady ? "Sign In to Review" : "Checking Account..."}
                       </button>
                     )}
                     <span className="text-xs text-primary/58">
@@ -1568,10 +1619,8 @@ export function ProductDetailsClient({
                 aria-label="Previous image"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setLightboxIndex(
-                    (i) =>
-                      (i - 1 + galleryImages.length) % galleryImages.length,
-                  );
+                  const nextIndex = (lightboxIndex - 1 + galleryImages.length) % galleryImages.length;
+                  selectGalleryImage(galleryImages[nextIndex] ?? galleryImages[0] ?? "/logo4.png");
                   setPinchScale(1);
                 }}
                 className="absolute left-3 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-primary/30 bg-white text-primary transition hover:bg-primary/5 sm:left-6"
@@ -1586,7 +1635,8 @@ export function ProductDetailsClient({
                 aria-label="Next image"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setLightboxIndex((i) => (i + 1) % galleryImages.length);
+                  const nextIndex = (lightboxIndex + 1) % galleryImages.length;
+                  selectGalleryImage(galleryImages[nextIndex] ?? galleryImages[0] ?? "/logo4.png");
                   setPinchScale(1);
                 }}
                 className="absolute right-3 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-primary/30 bg-white text-primary transition hover:bg-primary/5 sm:right-6"
@@ -1626,10 +1676,12 @@ export function ProductDetailsClient({
                     if (Math.abs(deltaX) > 60) {
                       if (deltaX > 0) {
                         // Swipe Right -> Prev
-                        setLightboxIndex((i) => (i - 1 + galleryImages.length) % galleryImages.length);
+                        const nextIndex = (lightboxIndex - 1 + galleryImages.length) % galleryImages.length;
+                        selectGalleryImage(galleryImages[nextIndex] ?? galleryImages[0] ?? "/logo4.png");
                       } else {
                         // Swipe Left -> Next
-                        setLightboxIndex((i) => (i + 1) % galleryImages.length);
+                        const nextIndex = (lightboxIndex + 1) % galleryImages.length;
+                        selectGalleryImage(galleryImages[nextIndex] ?? galleryImages[0] ?? "/logo4.png");
                       }
                     }
                   }
@@ -1667,7 +1719,7 @@ export function ProductDetailsClient({
                     aria-label={`Go to image ${i + 1}`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setLightboxIndex(i);
+                      selectGalleryImage(galleryImages[i] ?? galleryImages[0] ?? "/logo4.png");
                       setPinchScale(1);
                     }}
                     className={`h-1.5 rounded-full transition-all ${i === lightboxIndex ? "w-5 bg-white" : "w-1.5 bg-white/40"}`}

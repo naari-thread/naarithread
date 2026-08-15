@@ -118,6 +118,52 @@ function createProductFingerprint(product: ProductRecord) {
   ].join("::");
 }
 
+export type CatalogProductsPage = {
+  products: ProductRecord[];
+  total: number;
+  hasMore: boolean;
+  nextOffset: number | null;
+};
+
+function normalizeCatalogPage(value: unknown): CatalogProductsPage {
+  if (!value || typeof value !== "object" || !("products" in value)) {
+    return { products: [], total: 0, hasMore: false, nextOffset: null };
+  }
+
+  const products = normalizeProducts(value.products);
+  const total = "total" in value && typeof value.total === "number" ? value.total : products.length;
+  const hasMore = "hasMore" in value && value.hasMore === true;
+  const nextOffset = "nextOffset" in value && typeof value.nextOffset === "number" ? value.nextOffset : null;
+  return { products, total, hasMore, nextOffset };
+}
+
+export async function fetchCatalogProductsPage(args: {
+  offset: number;
+  limit?: number;
+  category?: string;
+  subCategory?: string;
+  signal?: AbortSignal;
+}): Promise<CatalogProductsPage> {
+  const searchParams = new URLSearchParams({
+    offset: String(Math.max(0, Math.trunc(args.offset))),
+    limit: String(Math.max(1, Math.min(100, Math.trunc(args.limit ?? 24)))),
+  });
+  if (args.category) searchParams.set("category", args.category);
+  if (args.subCategory) searchParams.set("subcategory", args.subCategory);
+
+  try {
+    const response = await fetch(`/api/catalog/products?${searchParams.toString()}`, {
+      cache: "no-store",
+      signal: args.signal,
+    });
+    if (!response.ok) return { products: [], total: 0, hasMore: false, nextOffset: null };
+    const payload: unknown = await response.json();
+    return normalizeCatalogPage(payload);
+  } catch {
+    return { products: [], total: 0, hasMore: false, nextOffset: null };
+  }
+}
+
 export function areProductsEquivalent(next: ProductRecord[], current: ProductRecord[]) {
   if (next.length !== current.length) {
     return false;

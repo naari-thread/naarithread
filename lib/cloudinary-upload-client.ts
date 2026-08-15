@@ -7,7 +7,6 @@ type SignatureResponse = {
   apiKey: string;
   timestamp: number;
   folder: string;
-  uploadPreset?: string;
   signature: string;
   error?: string;
 };
@@ -51,10 +50,6 @@ export async function uploadImageToCloudinary(
   form.append("timestamp", String(signature.timestamp));
   form.append("folder", signature.folder);
   form.append("signature", signature.signature);
-  if (signature.uploadPreset) {
-    form.append("upload_preset", signature.uploadPreset);
-  }
-
   const uploadResponse = await fetch(
     `https://api.cloudinary.com/v1_1/${signature.cloudName}/image/upload`,
     { method: "POST", body: form }

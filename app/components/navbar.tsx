@@ -325,7 +325,8 @@ export function Navbar() {
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated || notifFetched) return;
+    const notificationPanelRequested = isNotificationsOpen || isMobileNotificationsOpen;
+    if (!isAuthenticated || notifFetched || !notificationPanelRequested) return;
 
     const load = async () => {
       try {
@@ -344,7 +345,13 @@ export function Navbar() {
     };
 
     void load();
-  }, [isAuthenticated, notifFetched, createAuthJwt]);
+  }, [
+    createAuthJwt,
+    isAuthenticated,
+    isMobileNotificationsOpen,
+    isNotificationsOpen,
+    notifFetched,
+  ]);
 
   const markNotifRead = async (id: string) => {
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
@@ -459,9 +466,10 @@ export function Navbar() {
               <Image
                 src="/logoname2.png"
                 alt="NaariThread logotype"
-                width={128}
-                height={128}
-                className="mb-1 block h-7 w-auto object-contain sm:mb-2 sm:h-auto sm:w-auto"
+                width={501}
+                height={121}
+                loading="eager"
+                className="mb-1 block h-7 w-auto max-w-[11rem] object-contain sm:mb-1 sm:h-8 sm:max-w-[13rem]"
               />
             </Link>
 
@@ -763,9 +771,10 @@ export function Navbar() {
               <Image
                 src="/logoname2.png"
                 alt="NaariThread logotype"
-                width={128}
-                height={128}
-                className="mb-1 block h-8 w-auto object-contain sm:mb-2 sm:h-auto sm:w-auto"
+                width={501}
+                height={121}
+                loading="eager"
+                className="mb-1 block h-8 w-auto max-w-[12rem] object-contain sm:mb-1 sm:h-9 sm:max-w-[14rem]"
               />
             </Link>
 
@@ -1296,8 +1305,8 @@ export function Navbar() {
                   <Image
                     src="/logoname2.png"
                     alt="NaariThread logotype"
-                    width={128}
-                    height={128}
+                    width={501}
+                    height={121}
                     className="h-8 w-auto object-contain"
                   />
                 </Link>

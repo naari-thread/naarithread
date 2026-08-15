@@ -1,126 +1,285 @@
+import { FieldValue, type DocumentData } from "firebase-admin/firestore";
+import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { NextResponse } from "next/server";
-import { Query, type Models } from "node-appwrite";
 
-import { createDatabasesWithApiKey, getDatabaseId } from "@/lib/appwrite/admin-server";
+import { toProductRecord, type ProductRecord } from "@/lib/appwrite/products";
+import { PRODUCT_CATALOG_CACHE_TAG, PRODUCT_REVIEWS_CACHE_TAG } from "@/lib/cache-tags";
+import { getUserFromJwt } from "@/lib/appwrite/admin-server";
+import { getAdminDb, getBearerToken } from "@/lib/firebase/admin";
+import { FIRESTORE_COLLECTIONS } from "@/lib/firebase/collection-map";
+import { timestampToIso } from "@/lib/firebase/document";
+import { readProductSearchIndex } from "@/lib/firebase/product-search-index";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-const REVIEWS_COLLECTION_CANDIDATES = ["reviews", "review"] as const;
+const REVIEW_CACHE_SECONDS = 900;
+const MAX_COMMENT_LENGTH = 2_000;
+const MAX_TITLE_LENGTH = 120;
+const MAX_IMAGE_URL_LENGTH = 2_048;
 
-type ReviewDocument = Models.Document & {
-  productId?: string;
-  userId?: string;
-  userName?: string;
-  userEmail?: string;
-  rating?: number;
-  title?: string;
-  comment?: string;
-  imageUrls?: string[];
-  isVerifiedPurchase?: boolean;
-  isApproved?: boolean;
+type ReviewRecord = {
+  id: string;
+  productId: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  rating: number;
+  title: string;
+  comment: string;
+  imageUrls: string[];
+  isVerifiedPurchase: boolean;
+  isApproved: boolean;
+  createdAt: string;
 };
 
-function toReviewRecord(document: ReviewDocument) {
+type CreateReviewInput = {
+  productId: string;
+  rating: number;
+  title: string;
+  comment: string;
+  imageUrls: string[];
+};
+
+class ReviewRequestError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ReviewRequestError";
+    this.status = status;
+  }
+}
+
+function toNumber(value: unknown, fallback = 0): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function toReviewRecord(id: string, document: DocumentData): ReviewRecord {
   return {
-    id: document.$id,
+    id,
     productId: String(document.productId ?? "").trim(),
     userId: String(document.userId ?? "").trim(),
     userName: String(document.userName ?? "Guest").trim() || "Guest",
     userEmail: String(document.userEmail ?? "").trim(),
-    rating: Math.max(1, Math.min(5, Math.trunc(Number(document.rating ?? 5) || 5))),
+    rating: Math.max(1, Math.min(5, Math.trunc(toNumber(document.rating, 5)))),
     title: String(document.title ?? "").trim(),
     comment: String(document.comment ?? "").trim(),
     imageUrls: Array.isArray(document.imageUrls)
-      ? document.imageUrls.map((url) => String(url ?? "").trim()).filter(Boolean)
+      ? document.imageUrls
+          .filter((url: unknown): url is string => typeof url === "string")
+          .map((url: string) => url.trim())
+          .filter(Boolean)
       : [],
-    isVerifiedPurchase: Boolean(document.isVerifiedPurchase),
-    isApproved: typeof document.isApproved === "boolean" ? document.isApproved : true,
-    createdAt: String(document.$createdAt ?? ""),
+    isVerifiedPurchase: document.isVerifiedPurchase === true,
+    isApproved: document.isApproved !== false,
+    createdAt: timestampToIso(document.createdAt),
   };
 }
 
-async function resolveReviewsCollectionId(databases: ReturnType<typeof createDatabasesWithApiKey>, databaseId: string) {
-  for (const collectionId of REVIEWS_COLLECTION_CANDIDATES) {
-    try {
-      await databases.listDocuments(databaseId, collectionId, [Query.limit(1)]);
-      return collectionId;
-    } catch {
-      // Try next fallback collection candidate.
-    }
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function parseCreateReviewInput(value: unknown): CreateReviewInput {
+  if (!value || typeof value !== "object") {
+    throw new ReviewRequestError("Invalid review payload.", 400);
   }
 
-  return null;
+  const input = value as Record<string, unknown>;
+  const productId = typeof input.productId === "string" ? input.productId.trim() : "";
+  const comment = typeof input.comment === "string" ? input.comment.trim() : "";
+  const title = typeof input.title === "string" ? input.title.trim() : "";
+  const rating = toNumber(input.rating, 0);
+  const imageUrls = Array.isArray(input.imageUrls)
+    ? Array.from(
+        new Set(
+          input.imageUrls
+            .filter((url): url is string => typeof url === "string")
+            .map((url) => url.trim())
+            .filter(Boolean)
+        )
+      )
+    : [];
+
+  if (!productId || productId.length > 256) {
+    throw new ReviewRequestError("A valid product reference is required.", 400);
+  }
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    throw new ReviewRequestError("Select a rating from 1 to 5.", 400);
+  }
+  if (!comment || comment.length > MAX_COMMENT_LENGTH) {
+    throw new ReviewRequestError(`Review text must be between 1 and ${MAX_COMMENT_LENGTH} characters.`, 400);
+  }
+  if (title.length > MAX_TITLE_LENGTH) {
+    throw new ReviewRequestError(`Review title must be ${MAX_TITLE_LENGTH} characters or fewer.`, 400);
+  }
+  if (
+    imageUrls.length > 3 ||
+    imageUrls.some((url) => url.length > MAX_IMAGE_URL_LENGTH || !isHttpUrl(url))
+  ) {
+    throw new ReviewRequestError("Provide up to three valid review image URLs.", 400);
+  }
+
+  return { productId, rating, title, comment, imageUrls };
 }
 
-function matchesProductId(document: ReviewDocument, matchValues: string[]) {
-  const candidate = [
-    document.productId,
-    (document as { productID?: string }).productID,
-    (document as { sku?: string }).sku,
-    (document as { productSku?: string }).productSku,
-    (document as { product?: string }).product,
-    (document as { slug?: string }).slug,
-  ]
-    .map((value) => String(value ?? "").trim())
-    .filter(Boolean);
+async function listApprovedProductReviewsUncached(productId: string): Promise<ReviewRecord[]> {
+  const snapshot = await getAdminDb()
+    .collection(FIRESTORE_COLLECTIONS.reviews)
+    .where("productId", "==", productId)
+    .where("isApproved", "==", true)
+    .orderBy("createdAt", "desc")
+    .limit(50)
+    .get();
 
-  return candidate.some((value) => matchValues.includes(value));
+  return snapshot.docs.map((document) => toReviewRecord(document.id, document.data()));
 }
 
-export async function GET(request: Request) {
-  try {
-    const url = new URL(request.url);
-    const productId = url.searchParams.get("productId")?.trim() ?? "";
-    const aliases = url.searchParams.get("aliases")?.split(",").map((value) => value.trim()) ?? [];
-    const matchValues = Array.from(new Set([productId, ...aliases].filter(Boolean)));
+const listApprovedProductReviewsCached = unstable_cache(
+  listApprovedProductReviewsUncached,
+  ["approved-product-reviews-v1"],
+  {
+    revalidate: REVIEW_CACHE_SECONDS,
+    tags: [PRODUCT_REVIEWS_CACHE_TAG],
+  }
+);
 
-    if (matchValues.length === 0) {
-      return NextResponse.json({ reviews: [] });
+async function createApprovedProductReview(
+  input: CreateReviewInput,
+  user: { $id: string; email: string; name: string }
+): Promise<{ product: ProductRecord; review: ReviewRecord }> {
+  const db = getAdminDb();
+  const productRef = db.collection(FIRESTORE_COLLECTIONS.products).doc(input.productId);
+  const reviewRef = db.collection(FIRESTORE_COLLECTIONS.reviews).doc();
+
+  const product = await db.runTransaction(async (transaction): Promise<ProductRecord> => {
+    const productSnapshot = await transaction.get(productRef);
+    if (!productSnapshot.exists) {
+      throw new ReviewRequestError("This product is no longer available.", 404);
     }
 
-    const databases = createDatabasesWithApiKey();
-    const databaseId = getDatabaseId();
-    const collectionId = await resolveReviewsCollectionId(databases, databaseId);
-
-    if (!collectionId) {
-      return NextResponse.json({ reviews: [] });
+    const productData = productSnapshot.data() ?? {};
+    const normalizedProduct = toProductRecord({
+      ...productData,
+      $id: productSnapshot.id,
+      $createdAt: productData.createdAt,
+    });
+    if (!normalizedProduct.isActive) {
+      throw new ReviewRequestError("This product is no longer available.", 404);
     }
 
-    let response: Models.DocumentList<ReviewDocument>;
-    try {
-      response = await databases.listDocuments(databaseId, collectionId, [
-        Query.equal("productId", matchValues),
-        Query.equal("isApproved", true),
-        Query.orderDesc("$createdAt"),
-        Query.limit(50),
-      ]);
-    } catch {
-      response = await databases.listDocuments(databaseId, collectionId, [
-        Query.equal("productId", matchValues),
-        Query.orderDesc("$createdAt"),
-        Query.limit(50),
-      ]);
-    }
+    const currentCount = Math.max(0, Math.trunc(toNumber(productData.ratingCount)));
+    const currentAverage = Math.max(0, Math.min(5, toNumber(productData.rating)));
+    const currentTotal = Math.max(0, toNumber(productData.ratingTotal, currentAverage * currentCount));
+    const nextCount = currentCount + 1;
+    const nextTotal = currentTotal + input.rating;
+    const nextAverage = nextTotal / nextCount;
+    const timestamp = FieldValue.serverTimestamp();
 
-    let records = response.documents.filter((document) => document.isApproved !== false);
-    if (records.length === 0) {
-      const fallback = await databases.listDocuments<ReviewDocument>(databaseId, collectionId, [
-        Query.orderDesc("$createdAt"),
-        Query.limit(200),
-      ]);
-      records = fallback.documents.filter(
-        (document) => document.isApproved !== false && matchesProductId(document, matchValues)
-      );
-    }
-
-    return NextResponse.json({ reviews: records.map(toReviewRecord) });
-  } catch (error) {
-    return NextResponse.json(
+    transaction.create(reviewRef, {
+      productId: productSnapshot.id,
+      userId: user.$id,
+      userName: user.name.trim() || user.email.split("@")[0] || "Customer",
+      userEmail: user.email.trim().toLowerCase(),
+      rating: input.rating,
+      title: input.title,
+      comment: input.comment,
+      imageUrls: input.imageUrls,
+      isVerifiedPurchase: false,
+      isApproved: true,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    transaction.set(
+      productRef,
       {
-        error: "Failed to load reviews.",
-        detail: error instanceof Error ? error.message : "Unknown error",
+        rating: nextAverage,
+        ratingCount: nextCount,
+        ratingTotal: nextTotal,
+        updatedAt: timestamp,
       },
-      { status: 500 }
+      { merge: true }
     );
+
+    return { ...normalizedProduct, rating: nextAverage, ratingCount: nextCount };
+  });
+
+  const reviewSnapshot = await reviewRef.get();
+  return {
+    product,
+    review: toReviewRecord(reviewSnapshot.id, reviewSnapshot.data() ?? {}),
+  };
+}
+
+export async function GET(request: Request): Promise<NextResponse> {
+  try {
+    const productId = new URL(request.url).searchParams.get("productId")?.trim() ?? "";
+    if (!productId || productId.length > 256) {
+      return NextResponse.json({ reviews: [] });
+    }
+
+    // Validate against the lightweight cached active-product index. This avoids
+    // rereading the full product document that the detail page already loaded.
+    const productExists = (await readProductSearchIndex()).some(
+      (product) => product.id === productId
+    );
+    if (!productExists) {
+      return NextResponse.json({ reviews: [] });
+    }
+
+    const reviews = await listApprovedProductReviewsCached(productId);
+    return NextResponse.json(
+      { reviews },
+      { headers: { "Cache-Control": "public, max-age=0, must-revalidate" } }
+    );
+  } catch (error) {
+    console.error("[catalog-reviews-api] Failed to load reviews:", error);
+    return NextResponse.json({ error: "Failed to load reviews." }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request): Promise<NextResponse> {
+  const token = getBearerToken(request);
+  if (!token) {
+    return NextResponse.json({ error: "Sign in to submit a review." }, { status: 401 });
+  }
+
+  try {
+    const [user, body] = await Promise.all([
+      getUserFromJwt(token),
+      request.json() as Promise<unknown>,
+    ]);
+    const input = parseCreateReviewInput(body);
+    const { product, review } = await createApprovedProductReview(input, user);
+
+    revalidateTag(PRODUCT_CATALOG_CACHE_TAG, { expire: 0 });
+    revalidateTag(PRODUCT_REVIEWS_CACHE_TAG, { expire: 0 });
+    revalidatePath("/products");
+    revalidatePath(`/products/${product.category}/${product.subCategory}/${product.slug}`);
+    revalidatePath("/api/catalog/products");
+    revalidatePath("/api/catalog/reviews");
+
+    return NextResponse.json(
+      { review },
+      {
+        status: 201,
+        headers: { "Cache-Control": "private, no-store" },
+      }
+    );
+  } catch (error) {
+    if (error instanceof ReviewRequestError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("[catalog-reviews-api] Failed to create review:", message);
+    return NextResponse.json({ error: "Could not submit your review right now." }, { status: 500 });
   }
 }

@@ -1,4 +1,6 @@
 import type { ProductRecord } from "@/lib/appwrite/products";
+import { getAvailableStockForSize } from "@/lib/product-merchandising";
+import { z } from "zod";
 
 export type CheckoutLineInput = {
   productId: string;
@@ -20,59 +22,34 @@ export type ValidatedCheckoutLine = {
 
 export type CheckoutPricingResult = {
   lines: ValidatedCheckoutLine[];
+  issues: CheckoutInventoryIssue[];
   subtotal: number;
   discount: number;
   delivery: number;
   total: number;
 };
 
+export type CheckoutInventoryIssue = {
+  productId: string;
+  code: "unavailable" | "size_required" | "color_required" | "invalid_option" | "insufficient_stock";
+  message: string;
+};
+
 export const FREE_DELIVERY_THRESHOLD = 2999;
 export const STANDARD_DELIVERY_FEE = 99;
 
-function normalizeText(value: unknown, limit = 64) {
-  if (typeof value !== "string") {
-    return "";
-  }
+const checkoutLineSchema = z.object({
+  productId: z.string().trim().min(1).max(64),
+  quantity: z.number().finite().int().min(1).max(99),
+  size: z.string().trim().max(40).optional().default(""),
+  color: z.string().trim().max(40).optional().default(""),
+});
 
-  return value.trim().slice(0, limit);
-}
+const checkoutLinesSchema = z.array(checkoutLineSchema).max(100);
 
-function normalizeQuantity(value: unknown) {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return 0;
-  }
-
-  return Math.max(0, Math.min(99, Math.trunc(value)));
-}
-
-export function normalizeCheckoutLines(payload: unknown) {
-  if (!Array.isArray(payload)) {
-    return [] as CheckoutLineInput[];
-  }
-
-  const lines: CheckoutLineInput[] = [];
-
-  for (const item of payload) {
-    if (!item || typeof item !== "object") {
-      continue;
-    }
-
-    const productId = normalizeText((item as { productId?: unknown }).productId);
-    const quantity = normalizeQuantity((item as { quantity?: unknown }).quantity);
-
-    if (!productId || quantity <= 0) {
-      continue;
-    }
-
-    lines.push({
-      productId,
-      quantity,
-      size: normalizeText((item as { size?: unknown }).size, 40),
-      color: normalizeText((item as { color?: unknown }).color, 40),
-    });
-  }
-
-  return lines;
+export function normalizeCheckoutLines(payload: unknown): CheckoutLineInput[] {
+  const result = checkoutLinesSchema.safeParse(payload);
+  return result.success ? result.data : [];
 }
 
 export function calculateCheckoutPricing(args: {
@@ -81,27 +58,66 @@ export function calculateCheckoutPricing(args: {
 }): CheckoutPricingResult {
   const productById = new Map(args.products.map((product) => [product.id, product] as const));
   const validLines: ValidatedCheckoutLine[] = [];
+  const issues: CheckoutInventoryIssue[] = [];
+  const requestedBySize = new Map<string, number>();
+
+  for (const line of args.lines) {
+    const key = `${line.productId}\u0000${line.size?.trim() ?? ""}`;
+    requestedBySize.set(key, (requestedBySize.get(key) ?? 0) + line.quantity);
+  }
 
   for (const line of args.lines) {
     const product = productById.get(line.productId);
     if (!product || !product.isActive || product.stockQty <= 0) {
+      issues.push({
+        productId: line.productId,
+        code: "unavailable",
+        message: "This product is no longer available.",
+      });
       continue;
     }
 
-    const quantity = Math.min(line.quantity, Math.max(0, product.stockQty));
-    if (quantity <= 0) {
+    const size = line.size?.trim() ?? "";
+    const color = line.color?.trim() ?? "";
+    if (product.sizeOptions.length > 0 && !size) {
+      issues.push({ productId: product.id, code: "size_required", message: `Choose a size for ${product.name}.` });
+      continue;
+    }
+    if (size && product.sizeOptions.length > 0 && !product.sizeOptions.includes(size)) {
+      issues.push({ productId: product.id, code: "invalid_option", message: `The selected size for ${product.name} is invalid.` });
+      continue;
+    }
+    if (product.colorOptions.length > 0 && !color) {
+      issues.push({ productId: product.id, code: "color_required", message: `Choose a color for ${product.name}.` });
+      continue;
+    }
+    if (color && product.colorOptions.length > 0 && !product.colorOptions.includes(color)) {
+      issues.push({ productId: product.id, code: "invalid_option", message: `The selected color for ${product.name} is invalid.` });
+      continue;
+    }
+
+    const availableStock = product.sizeInventory.length > 0
+      ? getAvailableStockForSize(product.sizeInventory, size)
+      : product.stockQty;
+    const requestedQuantity = requestedBySize.get(`${product.id}\u0000${size}`) ?? line.quantity;
+    if (requestedQuantity > availableStock) {
+      issues.push({
+        productId: product.id,
+        code: "insufficient_stock",
+        message: `Only ${availableStock} of ${product.name}${size ? ` in size ${size}` : ""} is available.`,
+      });
       continue;
     }
 
     const unitAmount = product.discountPrice > 0 ? product.discountPrice : product.originalPrice;
-    const lineAmount = unitAmount * quantity;
+    const lineAmount = unitAmount * line.quantity;
 
     validLines.push({
       productId: product.id,
       imageUrl: product.mainImageUrl,
-      quantity,
-      size: line.size?.trim() ?? "",
-      color: line.color?.trim() ?? "",
+      quantity: line.quantity,
+      size,
+      color,
       productName: product.name,
       unitAmount,
       lineAmount,
@@ -124,6 +140,7 @@ export function calculateCheckoutPricing(args: {
 
   return {
     lines: validLines,
+    issues,
     subtotal,
     discount,
     delivery,

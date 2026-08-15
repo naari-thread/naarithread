@@ -39,12 +39,15 @@ function str(value: unknown): string {
 async function collectCandidates(
   user: AuthedUser,
   databases: Databases,
-  databaseId: string
+  databaseId: string,
+  canonicalDocument?: Record<string, unknown> | null
 ): Promise<Record<string, unknown>[]> {
   const out: Record<string, unknown>[] = [];
   const seen = new Set<string>();
 
-  const canonical = await databases.getDocument(databaseId, USERS_COL, user.$id).catch(() => null);
+  const canonical = canonicalDocument === undefined
+    ? await databases.getDocument(databaseId, USERS_COL, user.$id).catch(() => null)
+    : canonicalDocument;
   if (canonical) {
     out.push(canonical as Record<string, unknown>);
     seen.add(user.$id);
@@ -90,7 +93,36 @@ export async function resolveUserProfile(user: AuthedUser, overrides?: ProfileOv
   const databaseId = getDatabaseId();
   const uid = user.$id;
 
-  const candidates = await collectCandidates(user, databases, databaseId);
+  const canonical = await databases
+    .getDocument(databaseId, USERS_COL, uid)
+    .catch(() => null);
+  const canonicalRecord: Record<string, unknown> | null = canonical;
+
+  if (canonicalRecord && !overrides) {
+    const expectedAdmin = isAllowedAdminEmail(user.email);
+    const needsRepair = str(canonicalRecord.userId) !== uid
+      || str(canonicalRecord.email) !== user.email
+      || canonicalRecord.isAdmin !== expectedAdmin;
+    const saved = needsRepair
+      ? await databases.updateDocument(databaseId, USERS_COL, uid, {
+          userId: uid,
+          email: user.email,
+          isAdmin: expectedAdmin,
+        })
+      : canonicalRecord;
+    const savedRecord: Record<string, unknown> = saved;
+    return {
+      $id: uid,
+      userId: uid,
+      fullName: str(savedRecord.fullName) || user.name || "",
+      email: user.email,
+      phone: str(savedRecord.phone),
+      address: str(savedRecord.address),
+      isAdmin: expectedAdmin,
+    };
+  }
+
+  const candidates = await collectCandidates(user, databases, databaseId, canonicalRecord);
 
   // Build the merged record. Explicit overrides win; otherwise keep the newest
   // non-empty value so a saved address on a legacy doc is never lost. fullName

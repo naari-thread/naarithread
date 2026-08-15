@@ -8,7 +8,11 @@
     "start": "next start",
     "lint": "eslint",
     "firebase:copy-firestore": "node scripts/firebase/copy-firestore-project.mjs",
-    "firebase:migrate-from-appwrite": "node scripts/firebase/migrate-appwrite-to-firestore.mjs"
+    "firebase:migrate-from-appwrite": "node scripts/firebase/migrate-appwrite-to-firestore.mjs",
+    "firebase:audit-catalog-reset": "node scripts/firebase/audit-catalog-reset.mjs",
+    "firebase:seed-demo-catalog": "node scripts/firebase/seed-ethnic-products.mjs",
+    "firebase:rebuild-review-aggregates": "node --env-file=.env scripts/firebase/rebuild-product-review-aggregates.mts",
+    "firebase:rebuild-product-index": "node scripts/firebase/rebuild-product-search-index.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.9.0",
@@ -26,7 +30,8 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "resend": "^6.12.4",
-    "sonner": "^2.0.7"
+    "sonner": "^2.0.7",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

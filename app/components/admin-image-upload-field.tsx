@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
+import { useId, useRef, useState, type ReactElement } from "react";
 
 import { uploadImageToCloudinary } from "@/lib/cloudinary-upload-client";
 import { UPLOAD_CONFIG, formatBytes } from "@/lib/uploads";
@@ -11,9 +11,11 @@ type AdminImageUploadFieldProps = {
   multiple?: boolean;
   label: string;
   required?: boolean;
+  onValueChange?: (urls: string[]) => void;
+  allowPrimarySelection?: boolean;
 };
 
-function splitUrls(value: string) {
+function splitUrls(value: string): string[] {
   return value
     .split(",")
     .map((url) => url.trim())
@@ -32,7 +34,9 @@ export function AdminImageUploadField({
   multiple = false,
   label,
   required = false,
-}: AdminImageUploadFieldProps) {
+  onValueChange,
+  allowPrimarySelection = false,
+}: AdminImageUploadFieldProps): ReactElement {
   const inputId = useId();
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [urls, setUrls] = useState<string[]>(splitUrls(defaultValue));
@@ -43,7 +47,7 @@ export function AdminImageUploadField({
   const hiddenValue = multiple ? urls.join(", ") : (urls[0] ?? "");
   const maxBytes = UPLOAD_CONFIG.product.maxBytes;
 
-  const handleFiles = async (files: FileList | null) => {
+  const handleFiles = async (files: FileList | null): Promise<void> => {
     if (!files || files.length === 0) {
       return;
     }
@@ -60,7 +64,9 @@ export function AdminImageUploadField({
         uploaded.push(url);
       }
 
-      setUrls((current) => (multiple ? [...current, ...uploaded] : uploaded));
+      const next = multiple ? [...urls, ...uploaded] : uploaded;
+      setUrls(next);
+      onValueChange?.(next);
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : "Upload failed.");
     } finally {
@@ -71,8 +77,16 @@ export function AdminImageUploadField({
     }
   };
 
-  const removeUrl = (target: string) => {
-    setUrls((current) => current.filter((url) => url !== target));
+  const removeUrl = (target: string): void => {
+    const next = urls.filter((url) => url !== target);
+    setUrls(next);
+    onValueChange?.(next);
+  };
+
+  const makePrimary = (target: string): void => {
+    const next = [target, ...urls.filter((url) => url !== target)];
+    setUrls(next);
+    onValueChange?.(next);
   };
 
   return (
@@ -95,6 +109,22 @@ export function AdminImageUploadField({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={url} alt="Uploaded preview" className="h-full w-full object-cover transition group-hover:scale-105" />
               </button>
+              {allowPrimarySelection ? (
+                url === urls[0] ? (
+                  <span className="absolute bottom-1 left-1 rounded-full bg-secondary/90 px-2 py-0.5 text-[0.5rem] font-bold uppercase tracking-[0.12em] text-primary">
+                    Primary
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => makePrimary(url)}
+                    aria-label="Make image primary"
+                    className="absolute bottom-1 left-1 rounded-full bg-primary/85 px-2 py-1 text-[0.5rem] font-bold uppercase tracking-[0.1em] text-paper opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100"
+                  >
+                    Make primary
+                  </button>
+                )
+              ) : null}
               <button
                 type="button"
                 onClick={() => removeUrl(url)}

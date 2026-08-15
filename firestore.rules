@@ -37,6 +37,14 @@ service cloud.firestore {
       allow write: if adminEmail();
     }
 
+    match /sizeCharts/{chartId} {
+      allow read, write: if adminEmail();
+    }
+
+    match /catalogMetadata/{documentId} {
+      allow read, write: if adminEmail();
+    }
+
     match /banners/{bannerId} {
       allow read: if true;
       allow write: if adminEmail();
@@ -44,24 +52,9 @@ service cloud.firestore {
 
     match /reviews/{reviewId} {
       allow read: if true;
-      allow create: if ownsUserField()
-        && request.resource.data.rating >= 1
-        && request.resource.data.rating <= 5
-        && request.resource.data.isVerifiedPurchase == false
-        && request.resource.data.imageUrls.size() <= 3;
-      allow update: if adminEmail()
-        || (
-          ownsExistingUserField()
-          && request.resource.data.userId == resource.data.userId
-          && request.resource.data.productId == resource.data.productId
-          && request.resource.data.diff(resource.data).changedKeys().hasOnly([
-            "rating", "title", "comment", "imageUrls", "updatedAt"
-          ])
-          && request.resource.data.rating >= 1
-          && request.resource.data.rating <= 5
-          && request.resource.data.imageUrls.size() <= 3
-        );
-      allow delete: if adminEmail() || ownsExistingUserField();
+      // Customer review writes go through the authenticated server route so the
+      // review and product rating aggregate are committed atomically.
+      allow create, update, delete: if adminEmail();
     }
 
     match /users/{userId} {

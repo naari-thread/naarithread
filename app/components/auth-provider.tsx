@@ -119,12 +119,30 @@ function friendlyAuthError(error: unknown): string {
   }
 }
 
+const SESSION_SYNC_TTL_MS = 15 * 60 * 1000;
+const profileSyncRequests = new Map<string, Promise<void>>();
+const shopSyncRequests = new Map<
+  string,
+  ReturnType<typeof mergeLocalAndRemoteShopState>
+>();
+const authTokenRequests = new Map<string, Promise<string>>();
+
+function hasRecentSessionSync(prefix: string, userId: string): boolean {
+  if (typeof window === "undefined") return false;
+  const stored = Number(window.sessionStorage.getItem(`${prefix}:${userId}`));
+  return Number.isFinite(stored) && Date.now() - stored < SESSION_SYNC_TTL_MS;
+}
+
+function markSessionSync(prefix: string, userId: string): void {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(`${prefix}:${userId}`, String(Date.now()));
+}
+
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [lastSyncedUserId, setLastSyncedUserId] = useState("");
   const firebaseUserRef = useRef<User | null>(null);
-  const syncingUserIdRef = useRef<string | null>(null);
 
   const createAuthJwt = useCallback(async (): Promise<string> => {
     const auth = getFirebaseAuth();
@@ -133,24 +151,51 @@ export function AuthProvider({ children }: PropsWithChildren) {
       throw new Error("Firebase auth session is not available.");
     }
 
-    return currentUser.getIdToken();
+    const existingRequest = authTokenRequests.get(currentUser.uid);
+    if (existingRequest) return existingRequest;
+
+    const request = currentUser.getIdToken().finally(() => {
+      if (authTokenRequests.get(currentUser.uid) === request) {
+        authTokenRequests.delete(currentUser.uid);
+      }
+    });
+    authTokenRequests.set(currentUser.uid, request);
+    return request;
   }, []);
 
   const syncUserProfile = useCallback(async (currentUser: AuthUser) => {
-    try {
-      // Server route (Admin SDK) creates/updates the profile row. Doing this
-      // server-side avoids client Firestore writes, which security rules block
-      // on production.
+    if (hasRecentSessionSync("nt-profile-sync", currentUser.$id)) return;
+
+    const existingRequest = profileSyncRequests.get(currentUser.$id);
+    if (existingRequest) {
+      await existingRequest;
+      return;
+    }
+
+    const request = (async (): Promise<void> => {
       const jwt = await createAuthJwt();
-      await fetch("/api/auth/sync-profile", {
+      const response = await fetch("/api/auth/sync-profile", {
         method: "POST",
         headers: { Authorization: `Bearer ${jwt}` },
       });
+      if (!response.ok) {
+        throw new Error(`Profile sync failed with status ${response.status}.`);
+      }
+      markSessionSync("nt-profile-sync", currentUser.$id);
+    })();
+    profileSyncRequests.set(currentUser.$id, request);
+
+    try {
+      await request;
     } catch (error) {
       console.warn("[firebase-auth] profile sync failed", {
         userId: currentUser.$id,
         error: formatErrorForLogging(error),
       });
+    } finally {
+      if (profileSyncRequests.get(currentUser.$id) === request) {
+        profileSyncRequests.delete(currentUser.$id);
+      }
     }
   }, [createAuthJwt]);
 
@@ -188,24 +233,33 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [syncUserProfile]);
 
   useEffect(() => {
-    if (!user?.$id || lastSyncedUserId === user.$id || syncingUserIdRef.current === user.$id) {
+    if (!user?.$id || lastSyncedUserId === user.$id) {
+      return;
+    }
+
+    if (hasRecentSessionSync("nt-shop-sync", user.$id)) {
+      setLastSyncedUserId(user.$id);
       return;
     }
 
     let alive = true;
-    syncingUserIdRef.current = user.$id;
 
     const syncLocalShopState = async (): Promise<void> => {
       try {
-        const jwt = await createAuthJwt();
-        const merged = await mergeLocalAndRemoteShopState({
-          jwt,
-          userId: user.$id,
-          localCart: readCartItems(),
-          localWishlist: readWishlistItems(),
-          localCartSelections: readCartItemSelections(),
-          localWishlistSelections: readWishlistItemSelections(),
-        });
+        let request = shopSyncRequests.get(user.$id);
+        if (!request) {
+          const jwt = await createAuthJwt();
+          request = mergeLocalAndRemoteShopState({
+            jwt,
+            userId: user.$id,
+            localCart: readCartItems(),
+            localWishlist: readWishlistItems(),
+            localCartSelections: readCartItemSelections(),
+            localWishlistSelections: readWishlistItemSelections(),
+          });
+          shopSyncRequests.set(user.$id, request);
+        }
+        const merged = await request;
 
         if (!alive) return;
 
@@ -217,13 +271,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
         for (const [productId, selection] of Object.entries(merged.wishlistSelections)) {
           writeWishlistItemSelection(productId, selection);
         }
+        markSessionSync("nt-shop-sync", user.$id);
         setLastSyncedUserId(user.$id);
       } catch {
         if (alive) setLastSyncedUserId(user.$id);
       } finally {
-        if (syncingUserIdRef.current === user.$id) {
-          syncingUserIdRef.current = null;
-        }
+        shopSyncRequests.delete(user.$id);
       }
     };
 
@@ -231,9 +284,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     return () => {
       alive = false;
-      if (syncingUserIdRef.current === user.$id) {
-        syncingUserIdRef.current = null;
-      }
     };
   }, [createAuthJwt, lastSyncedUserId, user?.$id]);
 

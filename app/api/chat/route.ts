@@ -60,10 +60,11 @@ const OPENROUTER_MODELS = [
 ];
 
 async function callGemini(messages: ChatMessage[]): Promise<string> {
+  const startTime = Date.now();
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) throw new Error("No Gemini key configured");
 
-  const model = process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash";
+  const model = process.env.GEMINI_MODEL?.trim() || "gemini-1.5-flash";
   const ai = new GoogleGenAI({ apiKey });
   const response = await ai.models.generateContent({
     model,
@@ -81,10 +82,14 @@ async function callGemini(messages: ChatMessage[]): Promise<string> {
   const text = response.text?.trim() ?? "";
   if (!text) throw new Error(`${model} returned an empty response`);
 
+  const durationMs = Date.now() - startTime;
+  console.info(`[chat] SUCCESS: Provider=Gemini | Model=${model} | Latency=${durationMs}ms | MessageCount=${messages.length}`);
+
   return text;
 }
 
 async function callOpenRouter(messages: ChatMessage[]): Promise<string> {
+  const startTime = Date.now();
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("No OpenRouter key configured");
 
@@ -100,6 +105,7 @@ async function callOpenRouter(messages: ChatMessage[]): Promise<string> {
 
   for (const model of OPENROUTER_MODELS) {
     try {
+      const modelStartTime = Date.now();
       const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -137,7 +143,9 @@ async function callOpenRouter(messages: ChatMessage[]): Promise<string> {
         continue;
       }
 
-      console.info(`[chat] OpenRouter success: ${model}`);
+      const durationMs = Date.now() - modelStartTime;
+      const totalDurationMs = Date.now() - startTime;
+      console.info(`[chat] SUCCESS: Provider=OpenRouter | Model=${model} | Latency=${durationMs}ms (Total=${totalDurationMs}ms) | MessageCount=${messages.length}`);
       return text;
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
@@ -149,10 +157,11 @@ async function callOpenRouter(messages: ChatMessage[]): Promise<string> {
 }
 
 // ─── Route handler ────────────────────────────────────────────────────────────
-export async function POST(request: Request) {
+export async function POST(request: Request): Promise<NextResponse> {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
 
   if (!checkRateLimit(ip)) {
+    console.warn(`[chat] RATE LIMIT: IP=${ip} exceeded ${RATE_LIMIT} req/min`);
     return NextResponse.json({
       reply: "You're sending messages a bit fast! Please wait a moment and try again. 🌸",
     }, { status: 429 });

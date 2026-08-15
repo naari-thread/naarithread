@@ -6,14 +6,14 @@ import { createDatabasesWithApiKey, getDatabaseId, getUserFromJwt } from "@/lib/
 import { createUserNotification } from "@/lib/appwrite/notifications";
 import { deductWalletForCheckout, getWalletBalance } from "@/lib/appwrite/wallet-server";
 import { PRODUCT_CATALOG_CACHE_TAG } from "@/lib/cache-tags";
-import { getWalletCheckout, setWalletCheckout } from "@/lib/firebase/wallet-checkouts";
+import { setWalletCheckout } from "@/lib/firebase/wallet-checkouts";
 import { errorMessage, log, newCorrelationId } from "@/lib/logger";
 import { markCouponRedeemedForPaidOrder } from "@/lib/payments/coupon-usage";
 import { sendPaidOrderConfirmationOnce } from "@/lib/payments/order-confirmation";
 import { reduceStockForPaidOrder } from "@/lib/payments/order-stock";
 import { calculateCheckoutPricing, normalizeCheckoutLines } from "@/lib/payments/checkout-pricing";
 import { getRazorpayClient, toPaise } from "@/lib/payments/razorpay-server";
-import { toProductRecord } from "@/lib/appwrite/products";
+import { getProductsByIds } from "@/lib/appwrite/products";
 
 export const runtime = "nodejs";
 
@@ -21,7 +21,6 @@ const CURRENCY = "INR";
 const SCOPE = "payments.create-order";
 
 // Hardcoded collection IDs — eliminates resolveCollectionId probe calls.
-const SKU_COL = "sku";
 const ORDERS_COL = "orders";
 const COUPONS_COL = "coupons";
 const PAYMENTS_COL = "payments";
@@ -156,12 +155,9 @@ export async function POST(request: Request) {
     const rawCouponCode = normalizeText(body.couponCode, 50).toUpperCase().replace(/\s/g, "");
     const cartProductIds = inputLines.map((l) => l.productId).filter(Boolean);
 
-    const [user, productsResult, couponResult] = await Promise.all([
+    const [user, products, couponResult] = await Promise.all([
       getUserFromJwt(token),
-      databases.listDocuments(databaseId, SKU_COL, [
-        Query.equal("$id", cartProductIds),
-        Query.limit(cartProductIds.length),
-      ]),
+      getProductsByIds(cartProductIds),
       rawCouponCode
         ? databases
             .listDocuments(databaseId, COUPONS_COL, [
@@ -173,8 +169,14 @@ export async function POST(request: Request) {
         : Promise.resolve(null),
     ]);
 
-    const products = productsResult.documents.map((doc) => toProductRecord(doc as Record<string, unknown>));
     const pricing = calculateCheckoutPricing({ products, lines: inputLines });
+
+    if (pricing.issues.length > 0) {
+      return NextResponse.json(
+        { error: pricing.issues[0].message, inventoryIssues: pricing.issues },
+        { status: 409 }
+      );
+    }
 
     if (pricing.lines.length === 0 || pricing.total <= 0) {
       return NextResponse.json({ error: "No payable products available in cart." }, { status: 400 });

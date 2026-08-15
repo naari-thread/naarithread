@@ -1,8 +1,25 @@
-import { Client, Databases, Query, type Models } from "node-appwrite";
 import { unstable_cache } from "next/cache";
 
 import { PRODUCT_CATALOG_CACHE_TAG } from "@/lib/cache-tags";
-import { normalizeProductCategory, type ProductCategorySlug, type ProductSubCategorySlug } from "@/lib/product-taxonomy";
+import { getAdminDb } from "@/lib/firebase/admin";
+import { FIRESTORE_COLLECTIONS } from "@/lib/firebase/collection-map";
+import { timestampToIso } from "@/lib/firebase/document";
+import { readProductSearchIndex } from "@/lib/firebase/product-search-index";
+import { compareProductStockPlacement } from "@/lib/product-filters";
+import {
+  getTotalSizeStock,
+  parseColorMedia,
+  parseSizeChartSnapshot,
+  parseSizeInventory,
+  type ProductColorMedia,
+  type SizeChartSnapshot,
+  type SizeInventoryItem,
+} from "@/lib/product-merchandising";
+import {
+  normalizeProductCategory,
+  type ProductCategorySlug,
+  type ProductSubCategorySlug,
+} from "@/lib/product-taxonomy";
 import { ensureSlug, toSlug } from "@/lib/slug";
 
 export type ProductRecord = {
@@ -24,6 +41,10 @@ export type ProductRecord = {
   ratingCount: number;
   colorOptions: string[];
   sizeOptions: string[];
+  sizeInventory: SizeInventoryItem[];
+  colorMedia: ProductColorMedia[];
+  sizeChartId: string;
+  sizeChart: SizeChartSnapshot | null;
   isActive: boolean;
   createdAt: string;
   badge: string;
@@ -36,10 +57,12 @@ export type PaginatedProductsResult = {
   nextOffset: number | null;
 };
 
-let resolvedDatabaseIdCache: string | null = null;
-const SKU_COLLECTION_ID = "sku";
-const REVIEWS_COLLECTION_CANDIDATES = ["reviews", "review"] as const;
-const MAX_PRODUCT_READ_LIMIT = 500;
+export type ListProductsPageOptions = {
+  limit?: number;
+  offset?: number;
+  category?: ProductCategorySlug;
+  subCategory?: ProductSubCategorySlug;
+};
 
 function toNumber(value: unknown, fallback = 0): number {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -104,13 +127,20 @@ export function toProductRecord(document: Record<string, unknown>): ProductRecor
     name,
     description,
   });
+  const sizeInventory = parseSizeInventory(document.sizeInventory);
+  const inventoryStock = getTotalSizeStock(sizeInventory);
+  const legacySizeOptions = Array.isArray(document.sizeOptions)
+    ? toStringArray(document.sizeOptions)
+    : typeof document.size === "string"
+      ? [document.size]
+      : [];
 
   return {
-    id: String(document.$id ?? ""),
-    slug: ensureSlug(String(document.slug ?? name), String(document.$id ?? "product")),
+    id: String(document.$id ?? document.id ?? ""),
+    slug: ensureSlug(String(document.slug ?? name), String(document.$id ?? document.id ?? "product")),
     name,
     description,
-    sku: String(document.sku ?? document.$id ?? ""),
+    sku: String(document.sku ?? document.$id ?? document.id ?? ""),
     category: normalizedCategory.category,
     subCategory: normalizedCategory.subCategory,
     categoryValue: categoryRaw.trim() || normalizedCategory.category,
@@ -119,372 +149,203 @@ export function toProductRecord(document: Record<string, unknown>): ProductRecor
     otherImageUrls: toStringArray(document.otherImageUrls ?? document.altImages),
     discountPrice: toNumber(document.discountPrice),
     originalPrice: toNumber(document.originalPrice),
-    stockQty: toStockQuantity(document),
+    stockQty: sizeInventory.length > 0 ? inventoryStock : toStockQuantity(document),
     rating: Math.min(
       5,
       Math.max(0, toNumber(document.rating ?? document.aggRating ?? document.averageRating ?? document.avgRating))
     ),
-    ratingCount: Math.max(0, Math.trunc(toNumber(document.ratingCount ?? document.reviewCount ?? document.reviewsCount))),
+    ratingCount: Math.max(
+      0,
+      Math.trunc(toNumber(document.ratingCount ?? document.reviewCount ?? document.reviewsCount))
+    ),
     colorOptions: toStringArray(document.colorOptions),
-    sizeOptions:
-      Array.isArray(document.sizeOptions)
-        ? toStringArray(document.sizeOptions)
-        : typeof document.size === "string"
-          ? [document.size]
-          : [],
+    sizeOptions: sizeInventory.length > 0
+      ? sizeInventory.map((item) => item.size)
+      : legacySizeOptions,
+    sizeInventory,
+    colorMedia: parseColorMedia(document.colorMedia),
+    sizeChartId: String(document.sizeChartId ?? "").trim(),
+    sizeChart: parseSizeChartSnapshot(document.sizeChart),
     isActive: typeof document.isActive === "boolean" ? document.isActive : true,
-    createdAt: String(document.$createdAt ?? ""),
+    createdAt: timestampToIso(document.$createdAt ?? document.createdAt),
     badge: String(document.badge ?? document.productBadge ?? "").trim(),
   };
 }
 
-function createReadClient(): Client | null {
-  const endpoint = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?? "naarithread.firebaseapp.com";
-  const projectId = process.env.FIREBASE_PROJECT_ID ?? process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "naarithread";
-
-  if (!projectId) {
-    return null;
-  }
-
-  return new Client().setEndpoint(endpoint).setProject(projectId);
-}
-
-function isNotFoundError(error: unknown): boolean {
-  if (typeof error !== "object" || error === null) {
-    return false;
-  }
-
-  const maybeCode = "code" in error ? Number((error as { code?: unknown }).code) : NaN;
-  const maybeMessage = "message" in error ? String((error as { message?: unknown }).message ?? "") : "";
-  return maybeCode === 404 || maybeMessage.toLowerCase().includes("database with the requested id");
-}
-
-async function resolveDatabaseId(databases: Databases, configuredDatabaseId: string): Promise<string> {
-  if (resolvedDatabaseIdCache) {
-    return resolvedDatabaseIdCache;
-  }
-
-  const list = await databases.list();
-  const normalizedConfigured = configuredDatabaseId.trim().toLowerCase();
-
-  const matched = list.databases.find((database) => {
-    const id = database.$id.toLowerCase();
-    const name = database.name.toLowerCase();
-    return id === normalizedConfigured || name === normalizedConfigured;
-  });
-
-  if (matched) {
-    resolvedDatabaseIdCache = matched.$id;
-    return matched.$id;
-  }
-
-  const byDefaultName = list.databases.find((database) => database.name.toLowerCase() === "naarithread");
-  if (byDefaultName) {
-    resolvedDatabaseIdCache = byDefaultName.$id;
-    return byDefaultName.$id;
-  }
-
-  return configuredDatabaseId;
-}
-
-async function resolveContext(): Promise<{
-  databases: Databases;
-  databaseId: string;
-  collectionId: string;
-} | null> {
-  const client = createReadClient();
-  if (!client) {
-    return null;
-  }
-
-  const databases = new Databases(client);
-  const configuredDatabaseId = process.env.FIREBASE_PROJECT_ID ?? process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "naarithread";
-
-  let databaseId = configuredDatabaseId;
+async function listProductsFromCollectionUncached(): Promise<ProductRecord[]> {
   try {
-    databaseId = await resolveDatabaseId(databases, configuredDatabaseId);
-  } catch (error) {
-    if (!isNotFoundError(error)) {
-      throw error;
-    }
-  }
+    const db = getAdminDb();
+    const snapshot = await db.collection(FIRESTORE_COLLECTIONS.products).get();
 
-  return {
-    databases,
-    databaseId,
-    collectionId: SKU_COLLECTION_ID,
-  };
-}
-
-export function sortProductsByStockAvailability(products: ProductRecord[]): ProductRecord[] {
-  return [...products].sort((first, second) => {
-    const firstOutOfStock = first.stockQty <= 0;
-    const secondOutOfStock = second.stockQty <= 0;
-
-    if (firstOutOfStock === secondOutOfStock) {
-      return toDateMs(second.createdAt) - toDateMs(first.createdAt);
+    if (snapshot.empty) {
+      return [];
     }
 
-    return firstOutOfStock ? 1 : -1;
-  });
-}
+    const seenIds = new Set<string>();
+    const products: ProductRecord[] = [];
 
-type ReviewAggregateDocument = Models.Document & {
-  productId?: unknown;
-  productID?: unknown;
-  sku?: unknown;
-  productSku?: unknown;
-  product?: unknown;
-  slug?: unknown;
-  rating?: unknown;
-  isApproved?: unknown;
-};
+    for (const doc of snapshot.docs) {
+      if (seenIds.has(doc.id)) {
+        continue;
+      }
+      seenIds.add(doc.id);
 
-function getReviewProductReferences(document: ReviewAggregateDocument): string[] {
-  return [
-    document.productId,
-    document.productID,
-    document.sku,
-    document.productSku,
-    document.product,
-    document.slug,
-  ]
-    .map((value) => String(value ?? "").trim())
-    .filter(Boolean);
-}
+      const data = doc.data();
+      const record = toProductRecord({
+        ...data,
+        $id: doc.id,
+        $createdAt: data.createdAt,
+      });
 
-async function applyApprovedReviewAggregates(
-  context: NonNullable<Awaited<ReturnType<typeof resolveContext>>>,
-  products: ProductRecord[],
-): Promise<ProductRecord[]> {
-  if (products.length === 0) {
-    return products;
-  }
-
-  let reviewDocuments: ReviewAggregateDocument[] = [];
-
-  for (const collectionId of REVIEWS_COLLECTION_CANDIDATES) {
-    try {
-      const response = await context.databases.listDocuments<ReviewAggregateDocument>(
-        context.databaseId,
-        collectionId,
-        [Query.limit(MAX_PRODUCT_READ_LIMIT)],
-      );
-      reviewDocuments = response.documents;
-      break;
-    } catch {
-      // Some migrated projects used the singular collection name.
-    }
-  }
-
-  const productIdByReference = new Map<string, string>();
-  for (const product of products) {
-    for (const reference of [product.id, product.sku, product.slug]) {
-      const normalizedReference = reference.trim();
-      if (normalizedReference) {
-        productIdByReference.set(normalizedReference, product.id);
+      // Strictly exclude inactive products from the public catalog
+      if (record.isActive !== false) {
+        products.push(record);
       }
     }
+
+    // Sort in-stock products first, followed by newest additions
+    return products.sort((a, b) => {
+      const stockCompare = compareProductStockPlacement(a, b);
+      if (stockCompare !== 0) {
+        return stockCompare;
+      }
+      return toDateMs(b.createdAt) - toDateMs(a.createdAt);
+    });
+  } catch (error) {
+    console.error("[catalog] Failed to read products from Firestore:", error);
+    throw error;
   }
-
-  const aggregates = new Map<string, { count: number; total: number }>();
-  for (const review of reviewDocuments) {
-    if (review.isApproved === false) {
-      continue;
-    }
-
-    const productId = getReviewProductReferences(review)
-      .map((reference) => productIdByReference.get(reference))
-      .find((reference): reference is string => Boolean(reference));
-    if (!productId) {
-      continue;
-    }
-
-    const rating = Math.max(1, Math.min(5, toNumber(review.rating, 5)));
-    const aggregate = aggregates.get(productId) ?? { count: 0, total: 0 };
-    aggregate.count += 1;
-    aggregate.total += rating;
-    aggregates.set(productId, aggregate);
-  }
-
-  return products.map((product) => {
-    const aggregate = aggregates.get(product.id);
-    return {
-      ...product,
-      rating: aggregate ? aggregate.total / aggregate.count : 0,
-      ratingCount: aggregate?.count ?? 0,
-    };
-  });
-}
-
-async function listProductsFromCollectionUncached(): Promise<ProductRecord[]> {
-  const context = await resolveContext();
-  if (!context) {
-    return [] as ProductRecord[];
-  }
-
-  const queries: string[] = [Query.limit(MAX_PRODUCT_READ_LIMIT)];
-
-  const response = await context.databases.listDocuments(context.databaseId, context.collectionId, queries);
-
-  const products = response.documents.map((document) =>
-    toProductRecord(document as Record<string, unknown>),
-  );
-  const productsWithReviewAggregates = await applyApprovedReviewAggregates(context, products);
-
-  return sortProductsByStockAvailability(productsWithReviewAggregates);
 }
 
 const listProductsFromCollectionCached = unstable_cache(
   listProductsFromCollectionUncached,
-  ["products-catalog-v4"],
+  ["products-catalog-v6"],
   {
-    revalidate: 900,
+    revalidate: 3600,
     tags: [PRODUCT_CATALOG_CACHE_TAG],
-  },
+  }
 );
 
+/**
+ * Returns all active products from the tagged Next.js catalog cache.
+ * In-memory response with 0 Firestore reads on cache hit.
+ */
 export async function listProductsFromCollection(): Promise<ProductRecord[]> {
   return listProductsFromCollectionCached();
 }
 
-type ListProductsPageOptions = {
-  limit?: number;
-  offset?: number;
-};
-
-async function listProductsPageFromCollectionUncached(limit: number, offset: number): Promise<PaginatedProductsResult> {
-  const context = await resolveContext();
-  if (!context) {
-    return {
-      products: [],
-      total: 0,
-      hasMore: false,
-      nextOffset: null,
-    };
-  }
-
-  const response = await context.databases.listDocuments(context.databaseId, context.collectionId, [
-    Query.limit(MAX_PRODUCT_READ_LIMIT),
-  ]);
-
-  const allProducts = response.documents.map((document) =>
-    toProductRecord(document as Record<string, unknown>),
-  );
-  const productsWithReviewAggregates = await applyApprovedReviewAggregates(context, allProducts);
-  const products = sortProductsByStockAvailability(productsWithReviewAggregates).slice(
-    offset,
-    offset + limit,
-  );
-  const nextOffset = offset + products.length;
-
-  return {
-    products,
-    total: response.total,
-    hasMore: nextOffset < response.total,
-    nextOffset: nextOffset < response.total ? nextOffset : null,
-  };
-}
-
-const listProductsPageFromCollectionCached = unstable_cache(
-  listProductsPageFromCollectionUncached,
-  ["products-page-v4"],
-  {
-    revalidate: 1800,
-    tags: [PRODUCT_CATALOG_CACHE_TAG],
-  },
-);
-
-export async function listProductsPageFromCollection(options: ListProductsPageOptions = {}): Promise<PaginatedProductsResult> {
+/**
+ * Reads only the requested page of full product documents. The single lightweight
+ * search-index document supplies IDs and taxonomy without reading the whole catalog.
+ */
+export async function listProductsPageFromCollection(
+  options: ListProductsPageOptions = {}
+): Promise<PaginatedProductsResult> {
   const limit = Math.min(100, Math.max(1, Math.trunc(options.limit ?? 12)));
   const offset = Math.max(0, Math.trunc(options.offset ?? 0));
 
-  return listProductsPageFromCollectionCached(limit, offset);
+  const index = await readProductSearchIndex();
+  const matchingEntries = index.filter((entry) =>
+    (!options.category || entry.category === options.category)
+    && (!options.subCategory || entry.subCategory === options.subCategory)
+  );
+  const pageEntries = matchingEntries.slice(offset, offset + limit);
+  const db = getAdminDb();
+  const snapshots = pageEntries.length > 0
+    ? await db.getAll(...pageEntries.map((entry) => db.collection(FIRESTORE_COLLECTIONS.products).doc(entry.id)))
+    : [];
+  const products = snapshots.flatMap((snapshot) => {
+    if (!snapshot.exists) return [];
+    const data = snapshot.data() ?? {};
+    const product = toProductRecord({ ...data, $id: snapshot.id, $createdAt: data.createdAt });
+    return product.isActive ? [product] : [];
+  });
+  const total = matchingEntries.length;
+  const nextOffset = offset + pageEntries.length;
+
+  return {
+    products,
+    total,
+    hasMore: nextOffset < total,
+    nextOffset: nextOffset < total ? nextOffset : null,
+  };
 }
 
+/**
+ * Resolves only the requested product documents. Cart and checkout never read the full catalog.
+ */
 export async function getProductsByIds(ids: string[]): Promise<ProductRecord[]> {
-  if (ids.length === 0) return [];
+  if (ids.length === 0) {
+    return [];
+  }
 
-  const context = await resolveContext();
-  if (!context) return [];
+  const uniqueIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean))).slice(0, 100);
+  if (uniqueIds.length === 0) {
+    return [];
+  }
 
-  const safeIds = ids.slice(0, 100);
-  const response = await context.databases.listDocuments(context.databaseId, context.collectionId, [
-    Query.equal("$id", safeIds),
-    Query.limit(safeIds.length),
-  ]);
-
-  return response.documents.map((doc) => toProductRecord(doc as Record<string, unknown>));
+  const db = getAdminDb();
+  const snapshots = await db.getAll(
+    ...uniqueIds.map((id) => db.collection(FIRESTORE_COLLECTIONS.products).doc(id))
+  );
+  return snapshots.flatMap((snapshot) => {
+    if (!snapshot.exists) return [];
+    const data = snapshot.data() ?? {};
+    const product = toProductRecord({ ...data, $id: snapshot.id, $createdAt: data.createdAt });
+    return product.isActive ? [product] : [];
+  });
 }
 
-export async function getProductBySlug(slug: string) {
+/**
+ * Resolves a product by slug, checking the cached catalog first.
+ */
+export async function getProductBySlug(slug: string): Promise<ProductRecord | null> {
   const normalizedSlug = toSlug(slug);
   if (!normalizedSlug) {
     return null;
   }
 
-  const context = await resolveContext();
-  if (!context) {
-    return null;
-  }
-
-  try {
-    const bySlug = await context.databases.listDocuments(context.databaseId, context.collectionId, [
-      Query.equal("slug", normalizedSlug),
-      Query.limit(1),
-    ]);
-
-    if (bySlug.documents[0]) {
-      return toProductRecord(bySlug.documents[0] as Record<string, unknown>);
-    }
-  } catch {
-    // slug field may not be indexed — fall through to name-based scan below
-  }
-
-  // Fallback: scan a limited recent batch rather than all 100 products
-  const recent = await context.databases.listDocuments(context.databaseId, context.collectionId, [
-    Query.limit(50),
-    Query.orderDesc("$createdAt"),
-  ]);
-  const match = recent.documents.find((doc) => {
-    const name = String(doc.name ?? "");
-    return ensureSlug(String(doc.slug ?? name), String(doc.$id ?? "")) === normalizedSlug;
-  });
-  return match ? toProductRecord(match as Record<string, unknown>) : null;
+  const index = await readProductSearchIndex();
+  const entry = index.find(
+    (product) => toSlug(product.slug) === normalizedSlug || toSlug(product.name) === normalizedSlug
+  );
+  if (!entry) return null;
+  return (await getProductsByIds([entry.id]))[0] ?? null;
 }
 
-export async function getRelatedProducts(product: ProductRecord, limit = 4) {
-  const allProducts = await listProductsFromCollection();
-  const available = allProducts.filter((item) => item.id !== product.id && item.isActive);
-
-  const selected: ProductRecord[] = [];
+/**
+ * Returns related products by matching subcategory, category, or random pool from cached catalog.
+ */
+export async function getRelatedProducts(product: ProductRecord, limit = 4): Promise<ProductRecord[]> {
+  const index = (await readProductSearchIndex()).filter((item) => item.id !== product.id);
+  const selectedIds: string[] = [];
   const seen = new Set<string>();
 
-  function takeMatching(predicate: (item: ProductRecord) => boolean, maxToTake: number) {
+  function takeMatching(predicate: (item: (typeof index)[number]) => boolean, maxToTake: number): void {
     if (maxToTake <= 0) {
       return;
     }
 
-    const matches = available.filter((item) => predicate(item) && !seen.has(item.id)).slice(0, maxToTake);
+    const matches = index.filter((item) => predicate(item) && !seen.has(item.id)).slice(0, maxToTake);
     for (const item of matches) {
       seen.add(item.id);
-      selected.push(item);
+      selectedIds.push(item.id);
     }
   }
 
   takeMatching((item) => item.subCategory === product.subCategory, limit);
-  takeMatching((item) => item.category === product.category, limit - selected.length);
+  takeMatching((item) => item.category === product.category, limit - selectedIds.length);
 
-  if (selected.length < limit) {
-    const randomPool = available.filter((item) => !seen.has(item.id)).sort(() => Math.random() - 0.5);
-    for (const item of randomPool) {
+  if (selectedIds.length < limit) {
+    const remainingPool = index.filter((item) => !seen.has(item.id));
+    for (const item of remainingPool) {
       seen.add(item.id);
-      selected.push(item);
-      if (selected.length >= limit) {
+      selectedIds.push(item.id);
+      if (selectedIds.length >= limit) {
         break;
       }
     }
   }
 
-  return selected.slice(0, limit);
+  return getProductsByIds(selectedIds.slice(0, limit));
 }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Script from "next/script";
+import { cache } from "react";
 
 import { ProductDetailsClient } from "@/app/components/product-details-client";
 import { getProductBySlug, getRelatedProducts } from "@/lib/appwrite/products";
@@ -14,6 +15,8 @@ import {
 
 export const revalidate = 900;
 
+const getProductForRoute = cache(getProductBySlug);
+
 type ProductDetailsPageProps = {
   params: Promise<{
     category: string;
@@ -26,7 +29,7 @@ export async function generateMetadata({
   params,
 }: ProductDetailsPageProps): Promise<Metadata> {
   const { productSlug } = await params;
-  const product = await getProductBySlug(productSlug);
+  const product = await getProductForRoute(productSlug);
 
   if (!product) {
     return {};
@@ -64,7 +67,7 @@ export default async function ProductDetailsPage({
     notFound();
   }
 
-  const product = await getProductBySlug(productSlug);
+  const product = await getProductForRoute(productSlug);
   if (
     !product ||
     product.category !== category ||

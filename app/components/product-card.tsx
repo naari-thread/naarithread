@@ -7,7 +7,7 @@ import { CloudinaryImage } from "@/app/components/cloudinary-image";
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
 import { SizeColorPickerModal } from "@/app/components/size-color-picker-modal";
 import type { ProductRecord } from "@/lib/appwrite/products";
-import { writeCartItemSelection } from "@/lib/cart-state";
+import { createCartLineId, writeCartItemSelection } from "@/lib/cart-state";
 import { getProductBadgeLabel } from "@/lib/product-badges";
 import { writeWishlistItemSelection } from "@/lib/wishlist-state";
 
@@ -130,7 +130,7 @@ function ProductCardInternal({
     if (hasOptions) {
       setPickerAction("cart");
     } else {
-      onAddToCart(product.id);
+      onAddToCart(createCartLineId(product.id));
     }
   };
 
@@ -146,8 +146,9 @@ function ProductCardInternal({
   const handlePickerConfirm = ({ size, color }: { size: string; color: string }) => {
     setPickerAction(null);
     if (pickerAction === "cart") {
-      writeCartItemSelection(product.id, { size, color });
-      onAddToCart(product.id);
+      const lineId = createCartLineId(product.id, size, color);
+      writeCartItemSelection(lineId, { size, color });
+      onAddToCart(lineId);
     } else if (pickerAction === "wishlist") {
       writeWishlistItemSelection(product.id, { size, color });
       onToggleWishlist(product.id);

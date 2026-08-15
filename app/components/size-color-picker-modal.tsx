@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
 import type { ProductRecord } from "@/lib/appwrite/products";
+import { getAvailableStockForSize } from "@/lib/product-merchandising";
 
 type Props = {
   product: ProductRecord;
@@ -71,22 +72,30 @@ export function SizeColorPickerModal({ product, actionLabel = "Confirm", onConfi
               Size <span className="ml-0.5 text-red-500">*</span>
             </p>
             <div className="mt-2.5 flex flex-wrap gap-2">
-              {product.sizeOptions.map((size) => (
-                <button
-                  key={size}
-                  type="button"
-                  aria-label={`Select size ${size}`}
-                  aria-pressed={selectedSize === size}
-                  onClick={() => setSelectedSize(size)}
-                  className={`h-9 min-w-[2.5rem] rounded-lg border px-3 text-xs font-semibold transition ${
-                    selectedSize === size
-                      ? "border-primary bg-primary text-secondary"
-                      : "border-primary/20 text-primary hover:border-primary/45"
-                  }`}
-                >
-                  {size}
-                </button>
-              ))}
+              {product.sizeOptions.map((size) => {
+                const unavailable = product.sizeInventory.length > 0
+                  ? getAvailableStockForSize(product.sizeInventory, size) <= 0
+                  : product.stockQty <= 0;
+                return (
+                  <button
+                    key={size}
+                    type="button"
+                    disabled={unavailable}
+                    aria-label={unavailable ? `Size ${size} unavailable` : `Select size ${size}`}
+                    aria-pressed={selectedSize === size}
+                    onClick={() => setSelectedSize(size)}
+                    className={`h-9 min-w-[2.5rem] rounded-lg border px-3 text-xs font-semibold transition ${
+                      unavailable
+                        ? "cursor-not-allowed border-primary/10 text-primary/30 line-through"
+                        : selectedSize === size
+                          ? "border-primary bg-primary text-secondary"
+                          : "border-primary/20 text-primary hover:border-primary/45"
+                    }`}
+                  >
+                    {size}
+                  </button>
+                );
+              })}
             </div>
             {!selectedSize && (
               <p className="mt-1.5 text-[0.65rem] text-primary/50">Please select a size to continue.</p>

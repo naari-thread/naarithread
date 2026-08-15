@@ -1,156 +1,108 @@
+import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
-import { ID, Query } from "node-appwrite";
+import { z } from "zod";
 
-import { createDatabasesWithApiKey, getDatabaseId } from "@/lib/appwrite/admin-server";
+import { toProductRecord } from "@/lib/appwrite/products";
+import { PRODUCT_CATALOG_CACHE_TAG, PRODUCT_SEARCH_INDEX_CACHE_TAG } from "@/lib/cache-tags";
+import { getAdminDb } from "@/lib/firebase/admin";
 import { hasVerifiedAdminSession } from "@/lib/firebase/admin-session";
+import { FIRESTORE_COLLECTIONS } from "@/lib/firebase/collection-map";
+import { upsertProductSearchEntry } from "@/lib/firebase/product-search-index";
+import { getTotalSizeStock, parseColorMedia, parseSizeChartSnapshot, parseSizeInventory } from "@/lib/product-merchandising";
+import { normalizeProductCategory } from "@/lib/product-taxonomy";
 import { ensureSlug } from "@/lib/slug";
 
 export const runtime = "nodejs";
 
-type ProductPayload = {
-  name?: string;
-  description?: string;
-  sku?: string;
-  slug?: string;
-  category?: string;
-  mainImageUrl?: string;
-  discountPrice?: number;
-  originalPrice?: number;
-  stockQty?: number;
-  inStock?: boolean;
-  colorOptions?: string[];
-  sizeOptions?: string[];
-  otherImageUrls?: string[];
-};
+const productPayloadSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  description: z.string().trim().min(1).max(10_000),
+  sku: z.string().trim().min(1).max(100),
+  slug: z.string().trim().max(180).optional(),
+  category: z.string().trim().min(1).max(80),
+  subCategory: z.string().trim().max(80).optional().default(""),
+  mainImageUrl: z.string().trim().url(),
+  discountPrice: z.number().finite().nonnegative(),
+  originalPrice: z.number().finite().nonnegative(),
+  stockQty: z.number().finite().int().nonnegative().optional().default(0),
+  colorOptions: z.array(z.string().trim().min(1).max(60)).max(30).optional().default([]),
+  sizeOptions: z.array(z.string().trim().min(1).max(24)).max(30).optional().default([]),
+  otherImageUrls: z.array(z.string().trim().url()).max(20).optional().default([]),
+  sizeInventory: z.unknown().optional(),
+  colorMedia: z.unknown().optional(),
+  sizeChartId: z.string().trim().max(120).optional().default(""),
+  sizeChart: z.unknown().optional(),
+});
 
-function normalizeStringArray(value: unknown) {
-  if (!Array.isArray(value)) {
-    return [] as string[];
-  }
-
-  const seen = new Set<string>();
-  const normalized: string[] = [];
-
-  for (const item of value) {
-    if (typeof item !== "string") {
-      continue;
-    }
-
-    const trimmed = item.trim();
-    if (!trimmed) {
-      continue;
-    }
-
-    const dedupeKey = trimmed.toLowerCase();
-    if (seen.has(dedupeKey)) {
-      continue;
-    }
-
-    seen.add(dedupeKey);
-    normalized.push(trimmed);
-  }
-
-  return normalized;
-}
-
-function badRequest(message: string) {
-  return NextResponse.json({ error: message }, { status: 400 });
+function refreshCatalog(): void {
+  revalidateTag(PRODUCT_CATALOG_CACHE_TAG, { expire: 0 });
+  revalidateTag(PRODUCT_SEARCH_INDEX_CACHE_TAG, { expire: 0 });
 }
 
 export async function GET(request: Request): Promise<NextResponse> {
-  if (!(await hasVerifiedAdminSession())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  if (!(await hasVerifiedAdminSession())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
     const { searchParams } = new URL(request.url);
-    const limitParam = Number(searchParams.get("limit") ?? 40);
-    const offsetParam = Number(searchParams.get("offset") ?? 0);
-    const limit = Number.isFinite(limitParam) ? Math.min(100, Math.max(1, Math.trunc(limitParam))) : 40;
-    const offset = Number.isFinite(offsetParam) ? Math.max(0, Math.trunc(offsetParam)) : 0;
-
-    const databases = createDatabasesWithApiKey();
-    const databaseId = getDatabaseId();
-
-    const response = await databases.listDocuments(databaseId, "sku", [
-      Query.limit(limit),
-      Query.offset(offset),
-      Query.orderDesc("$createdAt"),
-    ]);
-
-    const products = response.documents.map((document) => ({
-      id: document.$id,
-      slug: document.slug ?? "",
-      name: document.name ?? "Untitled Product",
-      category: document.category ?? "",
-      subCategory: document.subCategory ?? document.subcategory ?? "",
-      sizeOptions: normalizeStringArray(document.sizeOptions),
-      discountPrice: Number(document.discountPrice ?? 0),
-      originalPrice: Number(document.originalPrice ?? 0),
-      stockQty: Number(document.stockQty ?? 0),
-      inStock: typeof document.inStock === "boolean" ? document.inStock : Number(document.stockQty ?? 0) > 0,
-      isActive: typeof document.isActive === "boolean" ? document.isActive : true,
-    }));
-
-    return NextResponse.json({ ok: true, products, total: response.total });
+    const limit = Math.min(100, Math.max(1, Math.trunc(Number(searchParams.get("limit") ?? 40) || 40)));
+    const offset = Math.max(0, Math.trunc(Number(searchParams.get("offset") ?? 0) || 0));
+    const snapshot = await getAdminDb().collection(FIRESTORE_COLLECTIONS.products).limit(500).get();
+    const products = snapshot.docs
+      .map((document) => toProductRecord({ ...document.data(), $id: document.id }))
+      .sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt));
+    return NextResponse.json({ ok: true, products: products.slice(offset, offset + limit), total: products.length });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: "Failed to list products.",
-        detail: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to list products.", detail: error instanceof Error ? error.message : "Unknown error" }, { status: 500 });
   }
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
-  if (!(await hasVerifiedAdminSession())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  if (!(await hasVerifiedAdminSession())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = (await request.json()) as ProductPayload;
-
-  if (!body.name || !body.description || !body.sku || !body.category || !body.mainImageUrl) {
-    return badRequest("Missing required product fields.");
-  }
-
-  if (typeof body.discountPrice !== "number" || typeof body.originalPrice !== "number") {
-    return badRequest("discountPrice and originalPrice must be numbers.");
-  }
+  const result = productPayloadSchema.safeParse(await request.json());
+  if (!result.success) return NextResponse.json({ error: "Invalid product fields.", issues: result.error.flatten() }, { status: 400 });
 
   try {
-    const databases = createDatabasesWithApiKey();
-    const databaseId = getDatabaseId();
-
-    const document = await databases.createDocument(databaseId, "sku", ID.unique(), {
-      name: body.name,
-      description: body.description,
-      sku: body.sku,
-      slug: ensureSlug(body.slug ?? body.name, body.sku),
-      category: body.category,
-      mainImageUrl: body.mainImageUrl,
-      discountPrice: body.discountPrice,
-      originalPrice: body.originalPrice,
-      stockQty: body.stockQty ?? 0,
-      inStock: typeof body.inStock === "boolean" ? body.inStock : (body.stockQty ?? 0) > 0,
+    const input = result.data;
+    const taxonomy = normalizeProductCategory({
+      categoryRaw: input.category,
+      subCategoryRaw: input.subCategory,
+      name: input.name,
+      description: input.description,
+    });
+    const sizeInventory = parseSizeInventory(input.sizeInventory);
+    const stockQty = sizeInventory.length > 0 ? getTotalSizeStock(sizeInventory) : input.stockQty;
+    const reference = getAdminDb().collection(FIRESTORE_COLLECTIONS.products).doc();
+    const nowIso = new Date().toISOString();
+    const payload = {
+      ...input,
+      category: taxonomy.category,
+      subCategory: taxonomy.subCategory,
+      subcategory: taxonomy.subCategory,
+      slug: ensureSlug(input.slug ?? input.name, input.sku),
+      stockQty,
+      inStock: stockQty > 0,
+      sizeOptions: sizeInventory.length > 0 ? sizeInventory.map((item) => item.size) : input.sizeOptions,
+      sizeInventory,
+      colorMedia: parseColorMedia(input.colorMedia),
+      sizeChart: parseSizeChartSnapshot(input.sizeChart),
       rating: 0,
       ratingCount: 0,
-      reviewIds: [],
-      colorOptions: normalizeStringArray(body.colorOptions),
-      sizeOptions: normalizeStringArray(body.sizeOptions),
-      otherImageUrls: normalizeStringArray(body.otherImageUrls),
       isActive: true,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+    await reference.set(payload);
+    await upsertProductSearchEntry({
+      id: reference.id,
+      name: input.name,
+      slug: payload.slug,
+      category: taxonomy.category,
+      subCategory: taxonomy.subCategory,
     });
-
-    return NextResponse.json({ ok: true, product: document }, { status: 201 });
+    refreshCatalog();
+    return NextResponse.json({ ok: true, product: toProductRecord({ ...payload, $id: reference.id }) }, { status: 201 });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: "Failed to create product.",
-        detail: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to create product.", detail: error instanceof Error ? error.message : "Unknown error" }, { status: 500 });
   }
 }
