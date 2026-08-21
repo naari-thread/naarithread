@@ -3,6 +3,7 @@ import { Query } from "node-appwrite";
 
 import { createDatabasesWithApiKey, getDatabaseId, getUserFromJwt } from "@/lib/appwrite/admin-server";
 import { getRazorpayClient, toPaise } from "@/lib/payments/razorpay-server";
+import { invalidateAdminTransactionCaches } from "@/lib/firebase/admin-cache";
 
 export const runtime = "nodejs";
 
@@ -96,6 +97,7 @@ export async function POST(request: Request) {
       databases.updateDocument(databaseId, ORDERS_COL, orderId, { paymentStatus: "created", status: "initiated", paymentId: razorpayOrder.id }),
     ]);
 
+    invalidateAdminTransactionCaches();
     return NextResponse.json({
       keyId: razorpay.keyId,
       currency: "INR",

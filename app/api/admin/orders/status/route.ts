@@ -5,6 +5,7 @@ import { createDatabasesWithApiKey, getDatabaseId } from "@/lib/appwrite/admin-s
 import { errorMessage, log, newCorrelationId } from "@/lib/logger";
 import { sendOrderStatusEmail } from "@/lib/email/send";
 import { hasVerifiedAdminSession } from "@/lib/firebase/admin-session";
+import { invalidateAdminTransactionCaches } from "@/lib/firebase/admin-cache";
 
 export const runtime = "nodejs";
 
@@ -136,6 +137,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       }
     }
 
+    invalidateAdminTransactionCaches();
     log("info", SCOPE, "updated", { correlationId, orderId, from: currentStatus, to: target });
     return NextResponse.redirect(new URL(addStatusToReturnUrl(returnTo, "success"), request.url), 303);
   } catch (error) {

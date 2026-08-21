@@ -14,6 +14,7 @@ import { reduceStockForPaidOrder } from "@/lib/payments/order-stock";
 import { calculateCheckoutPricing, normalizeCheckoutLines } from "@/lib/payments/checkout-pricing";
 import { getRazorpayClient, toPaise } from "@/lib/payments/razorpay-server";
 import { getProductsByIds } from "@/lib/appwrite/products";
+import { invalidateAdminTransactionCaches } from "@/lib/firebase/admin-cache";
 
 export const runtime = "nodejs";
 
@@ -111,6 +112,7 @@ async function runPostPaymentActions(
   revalidatePath("/products");
   revalidatePath("/products", "layout");
   revalidatePath("/api/catalog/products");
+  invalidateAdminTransactionCaches();
   createUserNotification({
     userId,
     title: "Order Confirmed",
@@ -364,6 +366,8 @@ export async function POST(request: Request) {
     await databases.updateDocument(databaseId, ORDERS_COL, order.$id, {
       paymentId: razorpayOrder.id,
     });
+
+    invalidateAdminTransactionCaches();
 
     log("info", SCOPE, "created", {
       correlationId,

@@ -35,6 +35,115 @@ export type CheckoutInventoryIssue = {
   message: string;
 };
 
+/**
+ * Why a single cart line cannot be checked out, or null when it is fine.
+ *
+ * The same rules run again on the server inside `calculateCheckoutPricing()`;
+ * this exists so the cart page can flag a broken line while the shopper is still
+ * looking at it, instead of failing at the moment they try to pay.
+ */
+export type CartLineAvailabilityIssue = {
+  code: "unavailable" | "size_required" | "size_removed" | "color_required" | "color_removed" | "out_of_stock" | "reduce_quantity";
+  message: string;
+  /** Units the shopper can actually buy right now; 0 when nothing is left. */
+  availableStock: number;
+  /**
+   * Quantity this specific line can be set to, which is lower than
+   * `availableStock` when another cart line already claims part of that stock.
+   * 0 means the line has to be removed or changed rather than reduced.
+   */
+  suggestedQuantity: number;
+  /** True when the product is still sellable in some other size or colour. */
+  canChooseAnother: boolean;
+};
+
+export function getCartLineAvailabilityIssue(args: {
+  product: ProductRecord;
+  size: string;
+  color: string;
+  quantity: number;
+  /**
+   * Total units of this product/size across every cart line, which can exceed
+   * `quantity` when the same size sits in the cart twice in different colours.
+   * The server checks stock against this combined figure, so the cart must too.
+   * Defaults to `quantity`.
+   */
+  requestedQuantity?: number;
+}): CartLineAvailabilityIssue | null {
+  const { product, quantity } = args;
+  const requestedQuantity = args.requestedQuantity ?? quantity;
+  const size = args.size.trim();
+  const color = args.color.trim();
+
+  if (!product.isActive || product.stockQty <= 0) {
+    return {
+      code: "unavailable",
+      message: "This product is no longer available.",
+      availableStock: 0,
+      suggestedQuantity: 0,
+      canChooseAnother: false,
+    };
+  }
+
+  if (product.sizeOptions.length > 0 && !size) {
+    return { code: "size_required", message: "Choose a size to continue.", availableStock: 0, suggestedQuantity: 0, canChooseAnother: true };
+  }
+
+  if (size && product.sizeOptions.length > 0 && !product.sizeOptions.includes(size)) {
+    return {
+      code: "size_removed",
+      message: `Size ${size} is no longer offered. Pick another size to continue.`,
+      availableStock: 0,
+      suggestedQuantity: 0,
+      canChooseAnother: true,
+    };
+  }
+
+  if (product.colorOptions.length > 0 && !color) {
+    return { code: "color_required", message: "Choose a colour to continue.", availableStock: 0, suggestedQuantity: 0, canChooseAnother: true };
+  }
+
+  if (color && product.colorOptions.length > 0 && !product.colorOptions.includes(color)) {
+    return {
+      code: "color_removed",
+      message: `The colour ${color} is no longer offered. Pick another colour to continue.`,
+      availableStock: 0,
+      suggestedQuantity: 0,
+      canChooseAnother: true,
+    };
+  }
+
+  const availableStock = product.sizeInventory.length > 0
+    ? getAvailableStockForSize(product.sizeInventory, size)
+    : product.stockQty;
+
+  if (availableStock <= 0) {
+    return {
+      code: "out_of_stock",
+      message: size ? `Size ${size} is out of stock.` : "This product is out of stock.",
+      availableStock: 0,
+      suggestedQuantity: 0,
+      canChooseAnother: product.stockQty > 0,
+    };
+  }
+
+  if (requestedQuantity > availableStock) {
+    const sharedWithOtherLines = requestedQuantity > quantity;
+    const claimedByOtherLines = requestedQuantity - quantity;
+    return {
+      suggestedQuantity: Math.max(0, availableStock - claimedByOtherLines),
+      code: "reduce_quantity",
+      message: sharedWithOtherLines
+        ? `Only ${availableStock} left${size ? ` in size ${size}` : ""} across the items in your cart. Reduce the quantity to continue.`
+        : `Only ${availableStock} left${size ? ` in size ${size}` : ""}. Reduce the quantity to continue.`,
+      availableStock,
+      canChooseAnother: true,
+    };
+  }
+
+  return null;
+}
+
 export const FREE_DELIVERY_THRESHOLD = 2999;
 export const STANDARD_DELIVERY_FEE = 99;
 

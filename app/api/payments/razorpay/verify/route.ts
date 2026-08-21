@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { revalidatePath, revalidateTag } from "next/cache";
+import { invalidateAdminTransactionCaches } from "@/lib/firebase/admin-cache";
 import { Permission, Query, Role, type Models } from "node-appwrite";
 
 import { createDatabasesWithApiKey, getDatabaseId, getUserFromJwt } from "@/lib/appwrite/admin-server";
@@ -240,6 +241,8 @@ export async function POST(request: Request): Promise<NextResponse> {
       duplicateCapture: Boolean(duplicateCapture),
     });
 
+    // Every branch above may have written the order and/or its payment row.
+    invalidateAdminTransactionCaches();
     return NextResponse.json({ ok: true, internalOrderId, paymentState: nextPaymentStatus, orderStatus });
   } catch (error) {
     log("error", SCOPE, "failed", { correlationId, message: errorMessage(error) });

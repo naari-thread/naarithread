@@ -23,6 +23,10 @@ import {
   type CartItemsMap,
 } from "@/lib/cart-state";
 import { getAvailableStockForSize } from "@/lib/product-merchandising";
+import {
+  getCartLineAvailabilityIssue,
+  type CartLineAvailabilityIssue,
+} from "@/lib/payments/checkout-pricing";
 import { readUserCartMap, upsertUserCartMap } from "@/lib/appwrite/shop-sync";
 import { fetchUserProfileViaApi, saveUserProfileViaApi } from "@/lib/appwrite/profiles";
 import {
@@ -861,6 +865,39 @@ export function CartPageClient() {
     };
   }, [cartItems, cartSelections, products]);
 
+  /**
+   * Same availability rules the server enforces at payment time, applied here so a
+   * line the shopper can no longer buy — a size the owner removed, stock that ran
+   * out — is flagged in the cart instead of failing when they press pay.
+   */
+  const lineIssues = useMemo(() => {
+    // The same product/size can sit in the cart twice under different colours,
+    // and the server checks stock against their combined quantity.
+    const quantityByProductSize = new Map<string, number>();
+    for (const line of lines) {
+      const key = `${line.product.id} ${line.size.trim()}`;
+      quantityByProductSize.set(key, (quantityByProductSize.get(key) ?? 0) + line.quantity);
+    }
+
+    const issues = new Map<string, CartLineAvailabilityIssue>();
+    for (const line of lines) {
+      const issue = getCartLineAvailabilityIssue({
+        product: line.product,
+        size: line.size,
+        color: line.color,
+        quantity: line.quantity,
+        requestedQuantity: quantityByProductSize.get(`${line.product.id} ${line.size.trim()}`) ?? line.quantity,
+      });
+      if (issue) {
+        issues.set(line.lineId, issue);
+      }
+    }
+    return issues;
+  }, [lines]);
+
+  const blockedLineCount = lineIssues.size;
+  const hasBlockedLines = blockedLineCount > 0;
+
   const subtotal = lines.reduce((total, line) => {
     const sellingPrice = line.product.discountPrice > 0 ? line.product.discountPrice : line.product.originalPrice;
     return total + sellingPrice * line.quantity;
@@ -1092,6 +1129,15 @@ export function CartPageClient() {
     if (lineNeedingSelection) {
       toast.error(`Please choose a size for "${lineNeedingSelection.product.name}".`);
       setPickerLine({ lineId: lineNeedingSelection.lineId, product: lineNeedingSelection.product });
+      return;
+    }
+
+    if (hasBlockedLines) {
+      toast.error(
+        blockedLineCount === 1
+          ? "One item in your cart is no longer available. Update it to continue."
+          : `${blockedLineCount} items in your cart are no longer available. Update them to continue.`
+      );
       return;
     }
 
@@ -1405,11 +1451,16 @@ export function CartPageClient() {
               {lines.map((line) => {
                 const sellingPrice =
                   line.product.discountPrice > 0 ? line.product.discountPrice : line.product.originalPrice;
+                const issue = lineIssues.get(line.lineId) ?? null;
+                // "Select size" already has its own prompt further down the card.
+                const showIssueNotice = issue !== null && issue.code !== "size_required";
 
                 return (
                   <article
                     key={line.lineId}
-                    className="flex flex-col gap-6 border-b border-primary/10 py-6 first:pt-0 sm:flex-row sm:items-center sm:justify-between"
+                    className={`flex flex-col gap-6 border-b border-primary/10 py-6 first:pt-0 sm:flex-row sm:items-center sm:justify-between ${
+                      showIssueNotice ? "rounded-xl bg-amber-50/50 px-3 ring-1 ring-amber-300" : ""
+                    }`}
                   >
                     <div className="flex flex-1 items-start sm:items-center gap-5">
                       <Link
@@ -1477,6 +1528,48 @@ export function CartPageClient() {
 
                           return null;
                         })()}
+
+                        {showIssueNotice && issue ? (
+                          <div
+                            role="alert"
+                            className="mt-2.5 rounded-lg border border-amber-300 bg-amber-50 p-2.5"
+                          >
+                            <p className="flex items-start gap-1.5 text-[0.72rem] font-semibold leading-snug text-amber-800">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                              {issue.message}
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {issue.code === "reduce_quantity" && issue.suggestedQuantity > 0 ? (
+                                <button
+                                  type="button"
+                                  aria-label={`Reduce ${line.product.name} to ${issue.suggestedQuantity}`}
+                                  onClick={() => void updateQuantity(line.lineId, issue.suggestedQuantity)}
+                                  className="inline-flex h-8 items-center justify-center rounded-lg bg-amber-500 px-3 text-[0.62rem] font-bold uppercase tracking-[0.12em] text-white transition hover:bg-amber-600"
+                                >
+                                  Set to {issue.suggestedQuantity}
+                                </button>
+                              ) : null}
+                              {issue.canChooseAnother && (issue.code !== "reduce_quantity" || issue.suggestedQuantity === 0) ? (
+                                <button
+                                  type="button"
+                                  aria-label={`Choose a different size or colour for ${line.product.name}`}
+                                  onClick={() => setPickerLine({ lineId: line.lineId, product: line.product })}
+                                  className="inline-flex h-8 items-center justify-center rounded-lg bg-amber-500 px-3 text-[0.62rem] font-bold uppercase tracking-[0.12em] text-white transition hover:bg-amber-600"
+                                >
+                                  Choose another
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                aria-label={`Remove ${line.product.name} from cart`}
+                                onClick={() => void updateQuantity(line.lineId, 0)}
+                                className="inline-flex h-8 items-center justify-center rounded-lg border border-amber-400 px-3 text-[0.62rem] font-bold uppercase tracking-[0.12em] text-amber-800 transition hover:bg-amber-100"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
 
                         <div className="mt-3 flex items-baseline gap-2">
                           <span className="text-base font-semibold">₹{sellingPrice.toLocaleString("en-IN")}</span>
@@ -2162,15 +2255,24 @@ export function CartPageClient() {
                   Contact on WhatsApp for COD
                 </a>
               ) : (
-                <button
+                <>
+                  {hasBlockedLines ? (
+                    <p role="alert" className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[0.7rem] font-semibold leading-snug text-amber-800">
+                      {blockedLineCount === 1
+                        ? "1 item above needs updating before you can check out."
+                        : `${blockedLineCount} items above need updating before you can check out.`}
+                    </p>
+                  ) : null}
+                  <button
                   type="button"
                   aria-label="Proceed to buy"
                   onClick={() => void handleProceedToBuy()}
-                  disabled={lines.length === 0 || isProcessingCheckout}
+                  disabled={lines.length === 0 || hasBlockedLines || isProcessingCheckout}
                   className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-xl border border-primary bg-primary px-4 text-xs font-semibold uppercase tracking-[0.2em] text-secondary transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isProcessingCheckout ? "Processing..." : total === 0 ? "Place Order (Free)" : "Proceed to Buy"}
                 </button>
+                </>
               )}
 
               {delivery > 0 ? (
@@ -2785,15 +2887,24 @@ export function CartPageClient() {
                     Contact on WhatsApp for COD
                   </a>
                 ) : (
-                  <button
+                  <>
+                    {hasBlockedLines ? (
+                      <p role="alert" className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[0.7rem] font-semibold leading-snug text-amber-800">
+                        {blockedLineCount === 1
+                          ? "1 item above needs updating before you can check out."
+                          : `${blockedLineCount} items above need updating before you can check out.`}
+                      </p>
+                    ) : null}
+                    <button
                     type="button"
                     aria-label="Proceed to buy"
                     onClick={() => void handleProceedToBuy()}
-                    disabled={lines.length === 0 || isProcessingCheckout}
+                    disabled={lines.length === 0 || hasBlockedLines || isProcessingCheckout}
                     className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-xl border border-primary bg-primary px-4 text-xs font-semibold uppercase tracking-[0.2em] text-secondary transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {isProcessingCheckout ? "Processing..." : total === 0 ? "Place Order (Free)" : "Proceed to Buy"}
                   </button>
+                  </>
                 )}
 
                 {delivery > 0 ? (

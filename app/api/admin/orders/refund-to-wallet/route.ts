@@ -6,6 +6,7 @@ import { createUserNotification } from "@/lib/appwrite/notifications";
 import { creditRefundToWallet } from "@/lib/appwrite/wallet-server";
 import { sendOrderStatusEmail } from "@/lib/email/send";
 import { hasVerifiedAdminSession } from "@/lib/firebase/admin-session";
+import { invalidateAdminTransactionCaches } from "@/lib/firebase/admin-cache";
 
 export const runtime = "nodejs";
 
@@ -121,6 +122,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         : Promise.resolve(),
     ]);
 
+    invalidateAdminTransactionCaches();
     return NextResponse.redirect(
       new URL(addStatusToReturnUrl(returnTo, creditResult.alreadyCredited ? "duplicate" : "success"), request.url),
       303,

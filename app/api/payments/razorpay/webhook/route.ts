@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { revalidatePath, revalidateTag } from "next/cache";
+import { invalidateAdminTransactionCaches } from "@/lib/firebase/admin-cache";
 import { type Models } from "node-appwrite";
 
 import { createDatabasesWithApiKey, getDatabaseId } from "@/lib/appwrite/admin-server";
@@ -210,6 +211,10 @@ export async function POST(request: Request): Promise<NextResponse> {
         duplicateCapture,
       });
     }
+
+    // The admin dashboard caches recent orders/payments; this webhook is the main
+    // way they change without an admin action, so refresh them here.
+    invalidateAdminTransactionCaches();
 
     log("info", SCOPE, "processed", {
       correlationId,

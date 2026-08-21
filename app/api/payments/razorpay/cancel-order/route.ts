@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createDatabasesWithApiKey, getDatabaseId, getUserFromJwt } from "@/lib/appwrite/admin-server";
+import { invalidateAdminTransactionCaches } from "@/lib/firebase/admin-cache";
 
 export const runtime = "nodejs";
 
@@ -45,6 +46,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       cancelledAt: new Date().toISOString(),
     });
 
+    invalidateAdminTransactionCaches();
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ error: "Could not close the payment attempt." }, { status: 500 });

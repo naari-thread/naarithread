@@ -24,11 +24,16 @@ import {
   SIZE_CHARTS_CACHE_TAG,
 } from "@/lib/cache-tags";
 import { getAdminDb } from "@/lib/firebase/admin";
+import {
+  getCachedAdminOrders,
+  getCachedAdminPayments,
+  getCachedAdminProducts,
+} from "@/lib/firebase/admin-cache";
 import { timestampToIso } from "@/lib/firebase/document";
 import { hasVerifiedAdminSession } from "@/lib/firebase/admin-session";
 import { listCustomBadges } from "@/lib/firebase/product-badges-server";
 import { FIRESTORE_COLLECTIONS } from "@/lib/firebase/collection-map";
-import { upsertProductSearchEntry } from "@/lib/firebase/product-search-index";
+import { removeProductSearchEntry, upsertProductSearchEntry } from "@/lib/firebase/product-search-index";
 import { listSizeChartDocuments } from "@/lib/firebase/size-charts";
 import { PRODUCT_BADGES, getProductBadgeLabel } from "@/lib/product-badges";
 import {
@@ -433,8 +438,8 @@ const PRODUCT_COLOR_PALETTE = [
 ];
 
 async function getProductFormOptions() {
-  const snapshot = await getAdminDb().collection(FIRESTORE_COLLECTIONS.products).limit(500).get();
-  const documents = snapshot.docs.map((document) => document.data());
+  // Reuses the cached catalog the product grid already loaded — no extra reads.
+  const documents = await getCachedAdminProducts();
 
   const colors = new Set<string>(PRODUCT_COLOR_PALETTE);
   const sizes = new Set<string>(["XS", "S", "M", "L", "XL", "XXL", "3XL", "Free Size"]);
@@ -664,6 +669,58 @@ function getActiveAddon(value: string): AddonType {
   }
 
   return "banners";
+}
+
+/**
+ * Archive hides a product from the storefront without deleting it; restoring puts
+ * it back. This is the reversible alternative to deletion — the catalog only ever
+ * renders products with `isActive !== false`, and the search index is kept in step.
+ */
+async function toggleProductArchiveAction(formData: FormData) {
+  "use server";
+
+  const productId = String(formData.get("productId") ?? "").trim();
+  const returnTo = String(formData.get("returnTo") ?? "/admin").trim() || "/admin";
+  const currentlyActive = toBoolean(formData.get("isActive"), true);
+
+  if (!productId) {
+    redirect(returnTo);
+  }
+
+  const nextIsActive = !currentlyActive;
+  const reference = getAdminDb().collection(FIRESTORE_COLLECTIONS.products).doc(productId);
+  const snapshot = await reference.get();
+
+  if (!snapshot.exists) {
+    redirect(withAdminNotice(returnTo, "That product could not be found."));
+  }
+
+  const existing = snapshot.data() ?? {};
+  const product = mapProduct({ ...existing, $id: productId, $createdAt: timestampToIso(existing.createdAt) });
+
+  await reference.set({ isActive: nextIsActive, updatedAt: new Date().toISOString() }, { merge: true });
+
+  // Storefront search must not surface an archived product.
+  if (nextIsActive) {
+    const taxonomy = normalizeProductCategory({
+      categoryRaw: product.category,
+      subCategoryRaw: product.subCategory,
+      name: product.name,
+      description: product.description,
+    });
+    await upsertProductSearchEntry({
+      id: productId,
+      name: product.name,
+      slug: product.slug,
+      category: taxonomy.category,
+      subCategory: taxonomy.subCategory,
+    });
+  } else {
+    await removeProductSearchEntry(productId);
+  }
+
+  revalidateProductSurfaces(product.category, product.subCategory, product.slug);
+  redirect(withAdminNotice(returnTo, nextIsActive ? "Product restored to the shop." : "Product archived and hidden from the shop."));
 }
 
 async function toggleProductStockAction(formData: FormData) {
@@ -1087,15 +1144,8 @@ export default async function AdminPage({
   let products: AdminProduct[] = [];
   let productsTotal = 0;
   if (activeTab === "products") {
-    const snapshot = await getAdminDb().collection(FIRESTORE_COLLECTIONS.products).limit(500).get();
-    const mapped = snapshot.docs.map((document) => {
-      const data = document.data();
-      return mapProduct({
-        ...data,
-        $id: document.id,
-        $createdAt: timestampToIso(data.createdAt),
-      });
-    });
+    const documents = await getCachedAdminProducts();
+    const mapped = documents.map((document) => mapProduct(document));
     const filtered = sortAdminProductsByRecency(mapped).filter((product) => {
       if (!productQuery) return true;
       const haystack = `${product.name} ${product.sku} ${product.category} ${product.subCategory}`.toLowerCase();
@@ -1127,12 +1177,9 @@ export default async function AdminPage({
   };
 
   if (activeTab === "orders") {
-    const ordersResult = await listDocumentsFromCandidates(["orders"], [
-      Query.limit(100),
-      Query.orderDesc("$createdAt"),
-    ]);
+    const orderDocuments = await getCachedAdminOrders();
 
-    orderItems = ordersResult.documents
+    orderItems = orderDocuments
       .filter(
         (document) => {
           const docStatus = String(document.status ?? "").toLowerCase();
@@ -1149,15 +1196,9 @@ export default async function AdminPage({
   }
 
   if (activeTab === "payments") {
-    const [paymentsResult, paidCount, failedCount, createdCount, refundedToWalletCount] = await Promise.all([
-      listDocumentsFromCandidates(["payments"], [Query.limit(100), Query.orderDesc("$createdAt")]),
-      listDocumentsFromCandidates(["payments"], [Query.equal("status", "paid"), Query.limit(1)]).then((result) => result.total).catch(() => 0),
-      listDocumentsFromCandidates(["payments"], [Query.equal("status", "failed"), Query.limit(1)]).then((result) => result.total).catch(() => 0),
-      listDocumentsFromCandidates(["payments"], [Query.equal("status", "created"), Query.limit(1)]).then((result) => result.total).catch(() => 0),
-      listDocumentsFromCandidates(["payments"], [Query.equal("status", "refunded_to_wallet"), Query.limit(1)]).then((result) => result.total).catch(() => 0),
-    ]);
+    const cachedPayments = await getCachedAdminPayments();
 
-    paymentItems = paymentsResult.documents
+    paymentItems = cachedPayments.documents
       .filter(
         (document) =>
           matchesTransactionQuery(document, txnQuery) &&
@@ -1165,12 +1206,7 @@ export default async function AdminPage({
       )
       .map((document) => mapTransaction(document, "Payment"))
       .sort((a, b) => toDateMs(b.createdAt) - toDateMs(a.createdAt));
-    paymentStatusSummary = {
-      paid: paidCount,
-      failed: failedCount,
-      created: createdCount,
-      refundedToWallet: refundedToWalletCount,
-    };
+    paymentStatusSummary = cachedPayments.summary;
   }
 
   if (activeTab === "refund-wallet") {
@@ -1309,9 +1345,15 @@ export default async function AdminPage({
                 const price = product.discountPrice > 0 ? product.discountPrice : product.originalPrice;
                 const imageSrc = product.mainImageUrl || product.otherImageUrls[0] || "/logo4.png";
                 const isInStock = product.inStock;
+                const isArchived = !product.isActive;
 
                 return (
-                  <article key={product.id} className="rounded-2xl border border-primary/12 bg-[#fbf5e6] p-2.5 hover:shadow-lg transition ">
+                  <article
+                    key={product.id}
+                    className={`rounded-2xl border bg-[#fbf5e6] p-2.5 transition hover:shadow-lg ${
+                      isArchived ? "border-amber-400 ring-2 ring-amber-300/60" : "border-primary/12"
+                    }`}
+                  >
                     <div className="relative mb-2.5 overflow-hidden rounded-xl border border-primary/10 bg-paper/60">
                       <div className="relative aspect-[4/3] w-full">
                         <CloudinaryImage
@@ -1327,6 +1369,12 @@ export default async function AdminPage({
                           className="pointer-events-none absolute inset-0 z-[2] bg-[#fbf5e6]/40 backdrop-grayscale-[0.5]"
                           aria-hidden={true}
                         />
+                      ) : null}
+                      {isArchived ? (
+                        <span className="pointer-events-none absolute left-1.5 top-1.5 z-[3] inline-flex items-center gap-1 rounded-full bg-amber-500 px-2 py-0.5 text-[0.55rem] font-bold uppercase tracking-[0.12em] text-white shadow-sm">
+                          <span aria-hidden={true} className="inline-block h-1.5 w-1.5 rounded-full bg-white" />
+                          Hidden
+                        </span>
                       ) : null}
                     </div>
                     <p className="line-clamp-2 text-sm font-semibold leading-tight text-primary">{product.name}</p>
@@ -1371,6 +1419,28 @@ export default async function AdminPage({
                         </button>
                       </form>
                     </div>
+
+                    <form action={toggleProductArchiveAction} className="mt-1.5">
+                      <input type="hidden" name="productId" value={product.id} />
+                      <input type="hidden" name="isActive" value={String(product.isActive)} />
+                      <input type="hidden" name="returnTo" value={buildAdminHref(resolvedSearchParams, {})} />
+                      <button
+                        type="submit"
+                        aria-label={
+                          isArchived
+                            ? `Restore ${product.name} to the shop`
+                            : `Archive ${product.name} and hide it from the shop`
+                        }
+                        className={`inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-[0.62rem] font-bold uppercase tracking-[0.1em] text-white shadow-sm transition ${
+                          isArchived
+                            ? "bg-emerald-600 hover:bg-emerald-700"
+                            : "bg-amber-500 hover:bg-amber-600"
+                        }`}
+                      >
+                        <span aria-hidden={true} className="inline-block h-1.5 w-1.5 rounded-full bg-white/90" />
+                        {isArchived ? "Restore" : "Archive"}
+                      </button>
+                    </form>
                   </article>
                 );
               })}
