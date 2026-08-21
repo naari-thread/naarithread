@@ -51,3 +51,6 @@ public/implementation_plan.md
 .claude/
 .codex/
 .codex-remote-attachments/
+
+# firestore backups (contain customer PII — never commit)
+/backups

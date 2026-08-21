@@ -12,7 +12,10 @@
     "firebase:audit-catalog-reset": "node scripts/firebase/audit-catalog-reset.mjs",
     "firebase:seed-demo-catalog": "node scripts/firebase/seed-ethnic-products.mjs",
     "firebase:rebuild-review-aggregates": "node --env-file=.env scripts/firebase/rebuild-product-review-aggregates.mts",
-    "firebase:rebuild-product-index": "node scripts/firebase/rebuild-product-search-index.mjs"
+    "firebase:rebuild-product-index": "node scripts/firebase/rebuild-product-search-index.mjs",
+    "firebase:backup": "node scripts/firebase/backup-firestore.mjs",
+    "firebase:restore": "node scripts/firebase/restore-firestore.mjs",
+    "firebase:purge-catalog": "node scripts/firebase/purge-catalog.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.9.0",
