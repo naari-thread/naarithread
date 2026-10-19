@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AuthModal } from "@/app/components/auth-modal";
 import { useAuth } from "@/app/components/auth-provider";
 import { CloudinaryImage } from "@/app/components/cloudinary-image";
+import { ProductImageBackdrop } from "@/app/components/product-image-backdrop";
 import { SizeColorPickerModal } from "@/app/components/size-color-picker-modal";
 import type { ProductRecord } from "@/lib/appwrite/products";
 import { readWishlistItems, readWishlistItemSelections, toggleWishlistItem, writeWishlistItemSelection, writeWishlistItems, type WishlistItemsMap, type WishlistItemSelectionsMap } from "@/lib/wishlist-state";
@@ -263,16 +264,19 @@ export function WishlistPageClient() {
                     <div className="flex flex-1 items-start sm:items-center gap-5">
                       <Link
                         href={`/products/${product.category}/${product.subCategory}/${product.slug}`}
-                        className="relative h-28 w-24 sm:h-32 sm:w-28 shrink-0 overflow-hidden rounded-xl bg-primary/5 transition hover:opacity-90"
+                        className="relative aspect-[2/3] w-24 sm:w-28 shrink-0 overflow-hidden rounded-xl bg-primary/5 transition hover:opacity-90"
                       >
                         {product.mainImageUrl ? (
-                          <CloudinaryImage
-                            src={product.mainImageUrl}
-                            alt={product.name}
-                            fill
-                            sizes="(max-width: 768px) 112px, 112px"
-                            className="object-cover object-top"
-                          />
+                          <>
+                            <ProductImageBackdrop src={product.mainImageUrl} sizes="(max-width: 768px) 112px, 112px" />
+                            <CloudinaryImage
+                              src={product.mainImageUrl}
+                              alt={product.name}
+                              fill
+                              sizes="(max-width: 768px) 112px, 112px"
+                              className="object-contain"
+                            />
+                          </>
                         ) : null}
                       </Link>
 

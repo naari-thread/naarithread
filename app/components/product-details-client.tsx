@@ -18,6 +18,7 @@ import {
 import { AuthModal } from "@/app/components/auth-modal";
 import { useAuth } from "@/app/components/auth-provider";
 import { CloudinaryImage } from "@/app/components/cloudinary-image";
+import { ProductImageBackdrop } from "@/app/components/product-image-backdrop";
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
 import { ProductSizeGuide } from "@/app/components/product-size-guide";
 import { showActionToast } from "@/lib/action-toast";
@@ -843,9 +844,9 @@ export function ProductDetailsClient({
             <div className="relative">
 
               {/* Desktop Main Image & Thumbnails */}
-              <div className="hidden md:flex max-w-[31rem] flex-col gap-3">
+              <div className="hidden md:flex max-w-[28rem] flex-col gap-3">
                 <div
-                  className="relative aspect-[4/5] w-full overflow-hidden rounded-3xl border border-primary/10 bg-secondary cursor-zoom-in"
+                  className="relative aspect-[2/3] w-full overflow-hidden rounded-3xl border border-primary/10 bg-secondary cursor-zoom-in"
                   onMouseMove={(e) => {
                     const rect = e.currentTarget.getBoundingClientRect();
                     setZoomPos({
@@ -861,13 +862,17 @@ export function ProductDetailsClient({
                     setLightboxOpen(true);
                   }}
                 >
+                  <ProductImageBackdrop
+                    src={activeImage}
+                    sizes="(max-width: 767px) 1px, (max-width: 1024px) 42vw, 34vw"
+                  />
                   <CloudinaryImage
                     key={activeImage}
                     src={activeImage}
                     alt={`${product.name} main view`}
                     fill
                     sizes="(max-width: 767px) 1px, (max-width: 1024px) 42vw, 34vw"
-                    className="object-cover w-full h-full"
+                    className="object-contain w-full h-full"
                     loading="eager"
                     style={{
                       transformOrigin: `${zoomPos.x}% ${zoomPos.y}%`,
@@ -892,18 +897,19 @@ export function ProductDetailsClient({
                       onClick={() => {
                         selectGalleryImage(src);
                       }}
-                      className={`relative aspect-square w-18 shrink-0 overflow-hidden rounded-2xl border transition-all ${
+                      className={`relative aspect-[2/3] w-14 shrink-0 overflow-hidden rounded-2xl border transition-all ${
                         activeImage === src
                           ? "border-primary opacity-100"
                           : "border-primary/10 opacity-60 hover:opacity-100"
                       }`}
                     >
+                      <ProductImageBackdrop src={src} sizes="80px" />
                       <CloudinaryImage
                         src={src}
                         alt={`Thumbnail ${index + 1}`}
                         fill
                         sizes="80px"
-                        className="object-cover"
+                        className="object-contain"
                       />
                     </button>
                   ))}
@@ -916,18 +922,19 @@ export function ProductDetailsClient({
                   {galleryImages.map((src, index) => (
                     <div
                       key={src}
-                      className="relative min-h-[82vw] w-full shrink-0 snap-start overflow-hidden border-y border-primary/10 bg-secondary cursor-pointer"
+                      className="relative aspect-[2/3] w-full shrink-0 snap-start overflow-hidden border-y border-primary/10 bg-secondary cursor-pointer"
                       onClick={() => {
                         selectGalleryImage(src);
                         setLightboxOpen(true);
                       }}
                     >
+                      <ProductImageBackdrop src={src} sizes="(max-width: 767px) 100vw, 1px" />
                       <CloudinaryImage
                         src={src}
                         alt={`${product.name} image ${index + 1}`}
                         fill
                         sizes="(max-width: 767px) 100vw, 1px"
-                        className="object-cover object-center"
+                        className="object-contain object-center"
                         loading="lazy"
                       />
                     </div>
@@ -1004,18 +1011,19 @@ export function ProductDetailsClient({
                       onClick={() => {
                         selectGalleryImage(src, true);
                       }}
-                      className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border ${
+                      className={`relative h-[4.5rem] w-12 shrink-0 overflow-hidden rounded-xl border ${
                         activeImage === src
                           ? "border-primary ring-1 ring-primary/35"
                           : "border-primary/20"
                       }`}
                     >
+                      <ProductImageBackdrop src={src} sizes="64px" />
                       <CloudinaryImage
                         src={src}
                         alt={`${product.name} thumbnail ${index + 1}`}
                         fill
                         sizes="64px"
-                        className="object-cover"
+                        className="object-contain"
                       />
                     </button>
                   ))}
@@ -1512,13 +1520,17 @@ export function ProductDetailsClient({
                       aria-label={`Open ${related.name}`}
                       className="group flex flex-col gap-3"
                     >
-                      <div className="relative aspect-[3/4] w-full overflow-hidden bg-secondary">
+                      <div className="relative aspect-[2/3] w-full overflow-hidden bg-secondary">
+                        <ProductImageBackdrop
+                          src={relatedImage}
+                          sizes="(max-width: 640px) 50vw, 25vw"
+                        />
                         <CloudinaryImage
                           src={relatedImage}
                           alt={related.name}
                           fill
                           sizes="(max-width: 640px) 50vw, 25vw"
-                          className="object-cover transition-transform duration-700 group-hover:scale-105"
+                          className="object-contain transition-transform duration-700 group-hover:scale-105"
                         />
                       </div>
                       <div>

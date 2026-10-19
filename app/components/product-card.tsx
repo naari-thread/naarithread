@@ -4,6 +4,7 @@ import Link from "next/link";
 import { memo, useMemo, useState, type ReactNode } from "react";
 
 import { CloudinaryImage } from "@/app/components/cloudinary-image";
+import { ProductImageBackdrop } from "@/app/components/product-image-backdrop";
 import { DynamicHugeIcon } from "@/app/components/dynamic-huge-icon";
 import { SizeColorPickerModal } from "@/app/components/size-color-picker-modal";
 import type { ProductRecord } from "@/lib/appwrite/products";
@@ -192,14 +193,18 @@ function ProductCardInternal({
         />
       ) : null}
 
-      <div className="relative h-full w-[42%] shrink-0 overflow-hidden bg-paper/50 sm:h-auto sm:w-full lg:aspect-[4/4.5] sm:aspect-[4/5]">
+      <div className="relative h-full w-[42%] shrink-0 overflow-hidden bg-paper/50 sm:h-auto sm:w-full sm:aspect-[2/3]">
         <Link href={productHref} aria-label={`Open ${product.name}`} className="absolute inset-0 z-[1]">
+          <ProductImageBackdrop
+            src={mainImage}
+            sizes="(max-width: 640px) 45vw, (max-width: 1024px) 50vw, 25vw"
+          />
           <CloudinaryImage
             src={mainImage}
             alt={product.name}
             fill
             sizes="(max-width: 640px) 45vw, (max-width: 1024px) 50vw, 25vw"
-            className="object-cover transition duration-500 sm:group-hover:scale-105"
+            className="object-contain transition duration-500 sm:group-hover:scale-105"
           />
         </Link>
 
